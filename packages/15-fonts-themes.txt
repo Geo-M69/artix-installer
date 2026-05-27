@@ -1,0 +1,7 @@
+fontconfig
+noto-fonts
+noto-fonts-cjk
+noto-fonts-emoji
+ttf-jetbrains-mono-nerd
+woff2-font-awesome
+gnome-themes-extra

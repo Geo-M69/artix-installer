@@ -1,0 +1,11 @@
+nautilus
+sushi
+yazi
+ffmpegthumbnailer
+webp-pixbuf-loader
+gvfs
+gvfs-mtp
+gvfs-nfs
+gvfs-smb
+gnome-disk-utility
+file-roller

@@ -1,0 +1,5 @@
+neovim
+helix
+tree-sitter-cli
+python-pynvim
+luarocks

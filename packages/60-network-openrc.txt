@@ -1,0 +1,6 @@
+networkmanager
+networkmanager-openrc
+iwd
+bluez
+bluez-openrc
+blueman

@@ -1,0 +1,14 @@
+foot
+zsh
+starship
+tmux
+fastfetch
+btop
+bat
+eza
+fd
+fzf
+ripgrep
+zoxide
+plocate
+tldr
