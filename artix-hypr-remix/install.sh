@@ -10,13 +10,15 @@ LIB_DIR="$SCRIPT_DIR/lib"
 source "$LIB_DIR/common.sh"
 source "$LIB_DIR/checks.sh"
 source "$LIB_DIR/pacman.sh"
+source "$LIB_DIR/aur.sh"
 source "$LIB_DIR/openrc.sh"
 source "$LIB_DIR/dotfiles.sh"
 source "$LIB_DIR/tty.sh"
 
-TARGET_PHASE=5
+TARGET_PHASE=6
 ASSUME_YES=false
 DRY_RUN=false
+SKIP_AUR=false
 TARGET_USER="${SUDO_USER:-}"
 TARGET_HOME=""
 
@@ -30,10 +32,12 @@ Phases:
 	3. Enable safe OpenRC services from services/openrc-default.txt
 	4. Deploy repo config/ into target user's ~/.config (copy + backup)
 	5. Configure tty1 login to start Hyprland for target user
+	6. Install AUR packages from packages/90-*.txt with safe paru bootstrap
 
 Options:
-	--phase N     Run phases up to N (1-5). Default: 5
-	--user NAME   Target non-root desktop user for phases 4-5
+	--phase N     Run phases up to N (1-6). Default: 6
+	--user NAME   Target non-root desktop user for phases 4-6
+	--skip-aur    Skip phase 6 AUR install even when phase includes it
 	--dry-run     Print planned actions without changing the system
 	-y, --yes     Do not ask for confirmation
 	-h, --help    Show this help
@@ -66,6 +70,10 @@ collect_package_files() {
 	find "$PACKAGES_DIR" -maxdepth 1 -type f -name '[0-8][0-9]-*.txt' | sort
 }
 
+collect_aur_package_files() {
+	find "$PACKAGES_DIR" -maxdepth 1 -type f -name '9[0-9]-*.txt' | sort
+}
+
 collect_packages() {
 	local file pkg
 	while IFS= read -r file; do
@@ -75,12 +83,23 @@ collect_packages() {
 	done < <(collect_package_files) | awk '!seen[$0]++'
 }
 
+collect_aur_packages() {
+	local file pkg
+	while IFS= read -r file; do
+		while IFS= read -r pkg; do
+			[[ -z "$pkg" ]] && continue
+			[[ "$pkg" == "paru" ]] && continue
+			printf '%s\n' "$pkg"
+		done < <(parse_list_file "$file")
+	done < <(collect_aur_package_files) | awk '!seen[$0]++'
+}
+
 collect_services() {
 	parse_list_file "$SERVICES_DIR/openrc-default.txt"
 }
 
 run_preflight() {
-	info "[Phase 1/5] Running preflight checks"
+	info "[Phase 1/6] Running preflight checks"
 
 	if [[ "$EUID" -ne 0 ]]; then
 		if [[ "$DRY_RUN" == true ]]; then
@@ -107,7 +126,7 @@ run_package_phase() {
 	local -a packages=()
 	mapfile -t packages < <(collect_packages)
 
-	info "[Phase 2/5] Installing packages"
+	info "[Phase 2/6] Installing packages"
 
 	if [[ "${#packages[@]}" -eq 0 ]]; then
 		warn "No packages found under $PACKAGES_DIR"
@@ -130,7 +149,7 @@ run_service_phase() {
 
 	mapfile -t services < <(collect_services)
 
-	info "[Phase 3/5] Enabling safe OpenRC services"
+	info "[Phase 3/6] Enabling safe OpenRC services"
 
 	if [[ "${#services[@]}" -eq 0 ]]; then
 		warn "No services found in $SERVICES_DIR/openrc-default.txt"
@@ -148,6 +167,28 @@ run_service_phase() {
 	done
 }
 
+run_aur_phase() {
+	local -a packages=()
+
+	if [[ "$SKIP_AUR" == true ]]; then
+		info "[Phase 6/6] Skipping AUR phase due to --skip-aur"
+		return 0
+	fi
+
+	mapfile -t packages < <(collect_aur_packages)
+
+	info "[Phase 6/6] Installing AUR packages"
+
+	if [[ "${#packages[@]}" -eq 0 ]]; then
+		warn "No AUR packages found under $PACKAGES_DIR/90-*.txt"
+		return 0
+	fi
+
+	resolve_target_user
+	ensure_paru_bootstrap "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
+	install_aur_packages "$TARGET_USER" "$DRY_RUN" "${packages[@]}"
+}
+
 resolve_target_user() {
 	if [[ -z "$TARGET_USER" || "$TARGET_USER" == "root" ]]; then
 		if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
@@ -156,7 +197,7 @@ resolve_target_user() {
 	fi
 
 	if [[ -z "$TARGET_USER" || "$TARGET_USER" == "root" ]]; then
-		error "Phases 4-5 require a non-root desktop user. Re-run with --user <name>."
+		error "Phases 4-6 require a non-root desktop user. Re-run with --user <name>."
 	fi
 
 	if ! id "$TARGET_USER" >/dev/null 2>&1; then
@@ -170,13 +211,13 @@ resolve_target_user() {
 }
 
 run_dotfiles_phase() {
-	info "[Phase 4/5] Deploying dotfiles to target user"
+	info "[Phase 4/6] Deploying dotfiles to target user"
 	resolve_target_user
 	deploy_config_tree "$CONFIG_DIR" "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }
 
 run_tty_phase() {
-	info "[Phase 5/5] Configuring tty1 Hyprland startup"
+	info "[Phase 5/6] Configuring tty1 Hyprland startup"
 	resolve_target_user
 	configure_tty_hyprland_autostart "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }
@@ -185,9 +226,12 @@ while [[ "$#" -gt 0 ]]; do
 	case "$1" in
 		--phase)
 			shift
-			[[ "$#" -gt 0 ]] || error "--phase requires a value (1-5)"
-			[[ "$1" =~ ^[1-5]$ ]] || error "Invalid phase '$1'. Use 1, 2, 3, 4, or 5."
+			[[ "$#" -gt 0 ]] || error "--phase requires a value (1-6)"
+			[[ "$1" =~ ^[1-6]$ ]] || error "Invalid phase '$1'. Use 1, 2, 3, 4, 5, or 6."
 			TARGET_PHASE="$1"
+			;;
+		--skip-aur)
+			SKIP_AUR=true
 			;;
 		--user)
 			shift
@@ -214,7 +258,10 @@ done
 if [[ "$ASSUME_YES" == false ]]; then
 	info "Installer will run up to phase $TARGET_PHASE"
 	if (( TARGET_PHASE >= 4 )); then
-		info "Target desktop user for phases 4-5: ${TARGET_USER:-<unset>}"
+		info "Target desktop user for phases 4-6: ${TARGET_USER:-<unset>}"
+	fi
+	if (( TARGET_PHASE >= 6 )) && [[ "$SKIP_AUR" == true ]]; then
+		info "AUR phase will be skipped (--skip-aur)"
 	fi
 	read -r -p "Continue? [y/N]: " response
 	case "${response,,}" in
@@ -237,6 +284,9 @@ if (( TARGET_PHASE >= 4 )); then
 fi
 if (( TARGET_PHASE >= 5 )); then
 	run_tty_phase
+fi
+if (( TARGET_PHASE >= 6 )); then
+	run_aur_phase
 fi
 
 info "Completed requested phases (1..$TARGET_PHASE)"

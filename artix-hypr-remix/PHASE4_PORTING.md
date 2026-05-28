@@ -54,6 +54,12 @@ Mako:
 - Ported into:
   - `config/mako/config`
 
+Fontconfig:
+- Source reference:
+  - `omarchy/config/fontconfig/fonts.conf`
+- Ported into:
+  - `config/fontconfig/fonts.conf`
+
 ## Intentional Omissions
 
 The following were intentionally removed to avoid dependency lock-in or OpenRC incompatibilities:

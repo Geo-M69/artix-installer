@@ -20,6 +20,7 @@ Current installer milestone:
 3. Enable safe OpenRC services from `services/openrc-default.txt`.
 4. Deploy `config/` into the target user's `~/.config` using copy + timestamp backups.
 5. Configure tty1 login to start Hyprland for the target user.
+6. Install AUR packages from `packages/90-*.txt` with safe `paru` bootstrap.
 
 Phase 4 configuration strategy:
 - Use Omarchy as a reference and rewrite configs for Artix OpenRC portability.
@@ -38,6 +39,8 @@ Useful options:
     ./install.sh --phase 3 -y
     ./install.sh --phase 4 --user <username>
     ./install.sh --phase 5 --user <username>
+    ./install.sh --phase 6 --user <username>
+    ./install.sh --phase 6 --user <username> --skip-aur
 
 Config dependency validation:
 
@@ -57,10 +60,11 @@ Emergency recovery (if keybinds do not load):
     sudo ./install.sh --phase 4 --user <username> -y
 
 Notes:
-- `packages/90-aur.txt` is not part of the current phase set.
+- `packages/90-aur.txt` is consumed by phase 6.
 - `services/openrc-boot.txt` is not managed by the desktop installer.
 - Phase 4 always replaces existing target config paths with timestamp backups.
 - Phase 5 manages a startup block in `~/.bash_profile` and `~/.zprofile` and launches Hyprland with `--config ~/.config/hypr/hyprland.conf`.
+- Phase 6 bootstraps `paru` if missing, then installs AUR packages as the target non-root user.
 
 Package policy:
 1. Prefer Artix/pacman packages.
