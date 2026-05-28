@@ -9,28 +9,13 @@ default = { input = "Search...", list = "No results" }
 [keybinds]
 quick_activate = []
 
-[columns]
-symbols = 1
-
 [providers]
 max_results = 256
 default = ["desktopapplications", "websearch", "files"]
 
 [[providers.prefixes]]
-prefix = "/"
-provider = "providerlist"
-
-[[providers.prefixes]]
 prefix = "."
 provider = "files"
-
-[[providers.prefixes]]
-prefix = ":"
-provider = "symbols"
-
-[[providers.prefixes]]
-prefix = "="
-provider = "calc"
 
 [[providers.prefixes]]
 prefix = "@"

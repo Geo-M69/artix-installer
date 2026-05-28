@@ -17,6 +17,9 @@ Hyprland:
   - `config/hypr/autostart.lua`
   - `config/hypr/env.lua`
   - `config/hypr/keybinds.lua`
+  - `config/hypr/input.lua`
+  - `config/hypr/looknfeel.lua`
+  - `config/hypr/monitors.lua`
 
 Important runtime note:
 - Hyprland reads `config/hypr/hyprland.conf` at runtime.

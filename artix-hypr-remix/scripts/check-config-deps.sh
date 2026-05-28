@@ -67,8 +67,11 @@ while IFS= read -r package_file; do
 done < <(find "$PACKAGES_DIR" -maxdepth 1 -type f -name '*.txt' | sort)
 
 declare -A cmd_package_map=(
+  [brightnessctl]=brightnessctl
   [gnome-keyring-daemon]=gnome-keyring
   [hx]=helix
+  [makoctl]=mako
+  [playerctl]=playerctl
   [swww-daemon]=swww
   [wl-paste]=wl-clipboard
   [wl-copy]=wl-clipboard
