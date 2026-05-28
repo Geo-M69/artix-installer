@@ -37,7 +37,7 @@ done
 overall_status=0
 
 echo "Running quick environment checks"
-for cmd in pacman paru slurp grim hyprctl; do
+for cmd in pacman slurp grim hyprctl; do
   if command -v "$cmd" >/dev/null 2>&1; then
     echo "OK: $cmd"
   else
@@ -45,6 +45,13 @@ for cmd in pacman paru slurp grim hyprctl; do
     overall_status=1
   fi
 done
+
+# AUR helper is optional for runtime health checks.
+if command -v paru >/dev/null 2>&1; then
+  echo "OK: paru"
+else
+  echo "WARN: paru (optional)"
+fi
 
 echo
 echo "Running config dependency validation"

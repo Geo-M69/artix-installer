@@ -49,6 +49,9 @@ Combined health check:
     ./scripts/doctor.sh
     ./scripts/doctor.sh --no-aur
 
+Doctor note:
+- `paru` is reported as optional and does not fail doctor checks by itself.
+
 Emergency recovery (if keybinds do not load):
 
     sudo ./install.sh --phase 4 --user <username> -y
