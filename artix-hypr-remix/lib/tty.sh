@@ -9,10 +9,11 @@ tty_hyprland_block() {
   cat <<'EOF'
 # >>> artix-hypr-remix tty hyprland >>>
 if [[ -z "${DISPLAY:-}" ]] && [[ -z "${WAYLAND_DISPLAY:-}" ]] && [[ -z "${SSH_TTY:-}" ]] && [[ "${XDG_VTNR:-0}" -eq 1 ]]; then
+  hypr_config="$HOME/.config/hypr/hyprland.conf"
   if command -v dbus-run-session >/dev/null 2>&1; then
-    exec dbus-run-session Hyprland
+    exec dbus-run-session Hyprland --config "$hypr_config"
   else
-    exec Hyprland
+    exec Hyprland --config "$hypr_config"
   fi
 fi
 # <<< artix-hypr-remix tty hyprland <<<

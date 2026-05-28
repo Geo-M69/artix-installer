@@ -57,7 +57,7 @@ Notes:
 - `packages/90-aur.txt` is not part of the current phase set.
 - `services/openrc-boot.txt` is not managed by the desktop installer.
 - Phase 4 always replaces existing target config paths with timestamp backups.
-- Phase 5 manages a startup block in `~/.bash_profile` and `~/.zprofile`.
+- Phase 5 manages a startup block in `~/.bash_profile` and `~/.zprofile` and launches Hyprland with `--config ~/.config/hypr/hyprland.conf`.
 
 Package policy:
 1. Prefer Artix/pacman packages.
