@@ -125,6 +125,19 @@ if [[ -f "$REPO_ROOT/config/hypr/autostart.lua" ]]; then
   done < <(grep -E '^\s*".+"\s*,?\s*$' "$REPO_ROOT/config/hypr/autostart.lua" || true)
 fi
 
+# Runtime Hyprland config: exec-once and exec binds.
+if [[ -f "$REPO_ROOT/config/hypr/hyprland.conf" ]]; then
+  while IFS= read -r line; do
+    cmd="$(sed -E 's/^\s*exec-once\s*=\s*(.*)\s*$/\1/' <<< "$line")"
+    track_command_line "$cmd"
+  done < <(grep -E '^\s*exec-once\s*=\s*.+$' "$REPO_ROOT/config/hypr/hyprland.conf" || true)
+
+  while IFS= read -r line; do
+    cmd="$(sed -E 's/^.*\bexec\s*,\s*(.*)\s*$/\1/' <<< "$line")"
+    track_command_line "$cmd"
+  done < <(grep -E '^\s*bind[a-z]*\s*=\s*.*\bexec\s*,\s*.+$' "$REPO_ROOT/config/hypr/hyprland.conf" || true)
+fi
+
 # Hyprland keybinds: command = "..."
 if [[ -f "$REPO_ROOT/config/hypr/keybinds.lua" ]]; then
   while IFS= read -r line; do

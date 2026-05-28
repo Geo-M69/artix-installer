@@ -12,10 +12,15 @@ Hyprland:
   - `omarchy/config/hypr/*.lua`
   - `omarchy/default/hypr/envs.lua`
 - Ported into:
+  - `config/hypr/hyprland.conf` (runtime)
   - `config/hypr/hyprland.lua`
   - `config/hypr/autostart.lua`
   - `config/hypr/env.lua`
   - `config/hypr/keybinds.lua`
+
+Important runtime note:
+- Hyprland reads `config/hypr/hyprland.conf` at runtime.
+- Lua files are currently design/source artifacts for future config generation.
 
 Waybar:
 - Source references:

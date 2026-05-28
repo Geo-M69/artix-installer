@@ -11,8 +11,8 @@ Structure:
 - `scripts/` - small helper scripts
 
 Hypr config source:
-- `config/hypr/*.lua` is the canonical source for Hypr session settings.
-- Hyprlang files are not source-of-truth in this repository.
+- `config/hypr/hyprland.conf` is the runtime config consumed directly by Hyprland.
+- `config/hypr/*.lua` are staging/source notes for future generation tooling.
 
 Current installer milestone:
 1. Run `./install.sh` on fresh Artix OpenRC.
@@ -48,6 +48,10 @@ Combined health check:
 
     ./scripts/doctor.sh
     ./scripts/doctor.sh --no-aur
+
+Emergency recovery (if keybinds do not load):
+
+    sudo ./install.sh --phase 4 --user <username> -y
 
 Notes:
 - `packages/90-aur.txt` is not part of the current phase set.
