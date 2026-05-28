@@ -4,16 +4,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGES_DIR="$SCRIPT_DIR/packages"
 SERVICES_DIR="$SCRIPT_DIR/services"
+CONFIG_DIR="$SCRIPT_DIR/config"
 LIB_DIR="$SCRIPT_DIR/lib"
 
 source "$LIB_DIR/common.sh"
 source "$LIB_DIR/checks.sh"
 source "$LIB_DIR/pacman.sh"
 source "$LIB_DIR/openrc.sh"
+source "$LIB_DIR/dotfiles.sh"
+source "$LIB_DIR/tty.sh"
 
-TARGET_PHASE=3
+TARGET_PHASE=5
 ASSUME_YES=false
 DRY_RUN=false
+TARGET_USER="${SUDO_USER:-}"
+TARGET_HOME=""
 
 usage() {
 	cat <<EOF
@@ -23,9 +28,12 @@ Phases:
 	1. Preflight checks (Artix/OpenRC + required commands)
 	2. Install packages from packages/[0-8]0-*.txt
 	3. Enable safe OpenRC services from services/openrc-default.txt
+	4. Deploy repo config/ into target user's ~/.config (copy + backup)
+	5. Configure tty1 login to start Hyprland for target user
 
 Options:
-	--phase N     Run phases up to N (1-3). Default: 3
+	--phase N     Run phases up to N (1-5). Default: 5
+	--user NAME   Target non-root desktop user for phases 4-5
 	--dry-run     Print planned actions without changing the system
 	-y, --yes     Do not ask for confirmation
 	-h, --help    Show this help
@@ -72,7 +80,7 @@ collect_services() {
 }
 
 run_preflight() {
-	info "[Phase 1/3] Running preflight checks"
+	info "[Phase 1/5] Running preflight checks"
 
 	if [[ "$EUID" -ne 0 ]]; then
 		if [[ "$DRY_RUN" == true ]]; then
@@ -89,6 +97,8 @@ run_preflight() {
 	require_command pacman
 	require_command rc-update
 	require_command rc-service
+	require_command id
+	require_command getent
 
 	info "Preflight checks passed"
 }
@@ -97,7 +107,7 @@ run_package_phase() {
 	local -a packages=()
 	mapfile -t packages < <(collect_packages)
 
-	info "[Phase 2/3] Installing packages"
+	info "[Phase 2/5] Installing packages"
 
 	if [[ "${#packages[@]}" -eq 0 ]]; then
 		warn "No packages found under $PACKAGES_DIR"
@@ -120,7 +130,7 @@ run_service_phase() {
 
 	mapfile -t services < <(collect_services)
 
-	info "[Phase 3/3] Enabling safe OpenRC services"
+	info "[Phase 3/5] Enabling safe OpenRC services"
 
 	if [[ "${#services[@]}" -eq 0 ]]; then
 		warn "No services found in $SERVICES_DIR/openrc-default.txt"
@@ -138,13 +148,51 @@ run_service_phase() {
 	done
 }
 
+resolve_target_user() {
+	if [[ -z "$TARGET_USER" || "$TARGET_USER" == "root" ]]; then
+		if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+			TARGET_USER="$SUDO_USER"
+		fi
+	fi
+
+	if [[ -z "$TARGET_USER" || "$TARGET_USER" == "root" ]]; then
+		error "Phases 4-5 require a non-root desktop user. Re-run with --user <name>."
+	fi
+
+	if ! id "$TARGET_USER" >/dev/null 2>&1; then
+		error "Target user '$TARGET_USER' does not exist"
+	fi
+
+	TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
+	if [[ -z "$TARGET_HOME" || ! -d "$TARGET_HOME" ]]; then
+		error "Could not resolve home directory for user '$TARGET_USER'"
+	fi
+}
+
+run_dotfiles_phase() {
+	info "[Phase 4/5] Deploying dotfiles to target user"
+	resolve_target_user
+	deploy_config_tree "$CONFIG_DIR" "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
+}
+
+run_tty_phase() {
+	info "[Phase 5/5] Configuring tty1 Hyprland startup"
+	resolve_target_user
+	configure_tty_hyprland_autostart "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
+}
+
 while [[ "$#" -gt 0 ]]; do
 	case "$1" in
 		--phase)
 			shift
-			[[ "$#" -gt 0 ]] || error "--phase requires a value (1-3)"
-			[[ "$1" =~ ^[1-3]$ ]] || error "Invalid phase '$1'. Use 1, 2, or 3."
+			[[ "$#" -gt 0 ]] || error "--phase requires a value (1-5)"
+			[[ "$1" =~ ^[1-5]$ ]] || error "Invalid phase '$1'. Use 1, 2, 3, 4, or 5."
 			TARGET_PHASE="$1"
+			;;
+		--user)
+			shift
+			[[ "$#" -gt 0 ]] || error "--user requires a username"
+			TARGET_USER="$1"
 			;;
 		--dry-run)
 			DRY_RUN=true
@@ -165,7 +213,9 @@ done
 
 if [[ "$ASSUME_YES" == false ]]; then
 	info "Installer will run up to phase $TARGET_PHASE"
-	info "Dotfiles and Hyprland session bootstrap are intentionally out of scope for this run"
+	if (( TARGET_PHASE >= 4 )); then
+		info "Target desktop user for phases 4-5: ${TARGET_USER:-<unset>}"
+	fi
 	read -r -p "Continue? [y/N]: " response
 	case "${response,,}" in
 		y|yes) ;;
@@ -182,6 +232,12 @@ fi
 if (( TARGET_PHASE >= 3 )); then
 	run_service_phase
 fi
+if (( TARGET_PHASE >= 4 )); then
+	run_dotfiles_phase
+fi
+if (( TARGET_PHASE >= 5 )); then
+	run_tty_phase
+fi
 
 info "Completed requested phases (1..$TARGET_PHASE)"
-info "Next phases (dotfiles + Hyprland start from TTY) are intentionally left for manual development"
+info "Installer phase run finished"

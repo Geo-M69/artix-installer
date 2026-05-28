@@ -1,6 +1,74 @@
 {
+  "reload_style_on_change": true,
   "layer": "top",
-  "modules-left": ["workspaces"],
-  "modules-center": [],
-  "modules-right": ["pulseaudio", "clock"]
+  "position": "top",
+  "height": 28,
+  "spacing": 0,
+  "modules-left": ["hyprland/workspaces"],
+  "modules-center": ["clock"],
+  "modules-right": ["network", "pulseaudio", "battery", "tray"],
+
+  "hyprland/workspaces": {
+    "on-click": "activate",
+    "format": "{icon}",
+    "format-icons": {
+      "default": "o",
+      "active": "*"
+    },
+    "persistent-workspaces": {
+      "1": [],
+      "2": [],
+      "3": [],
+      "4": [],
+      "5": []
+    }
+  },
+
+  "clock": {
+    "format": "{:%a %H:%M}",
+    "format-alt": "{:%Y-%m-%d %H:%M:%S}",
+    "tooltip": false
+  },
+
+  "network": {
+    "format-icons": [".", ":", "::", ":::", "::::"],
+    "format": "{icon}",
+    "format-wifi": "{icon}",
+    "format-ethernet": "eth",
+    "format-disconnected": "off",
+    "tooltip-format-wifi": "{essid} ({signalStrength}%)",
+    "tooltip-format-ethernet": "Wired",
+    "tooltip-format-disconnected": "Disconnected",
+    "interval": 3
+  },
+
+  "pulseaudio": {
+    "format": "{icon}",
+    "on-click-right": "pamixer -t",
+    "tooltip-format": "Volume {volume}%",
+    "scroll-step": 5,
+    "format-muted": "M",
+    "format-icons": {
+      "headphone": "H",
+      "headset": "H",
+      "default": ["L", "M", "H"]
+    }
+  },
+
+  "battery": {
+    "format": "{capacity}% {icon}",
+    "format-charging": "+{capacity}%",
+    "format-plugged": "AC",
+    "format-icons": ["_", "-", "=", "#"],
+    "interval": 5,
+    "states": {
+      "warning": 20,
+      "critical": 10
+    }
+  },
+
+  "tray": {
+    "icon-size": 14,
+    "spacing": 10
+  }
 }

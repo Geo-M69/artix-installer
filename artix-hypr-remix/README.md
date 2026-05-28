@@ -18,7 +18,13 @@ Current installer milestone:
 1. Run `./install.sh` on fresh Artix OpenRC.
 2. Install package sets from `packages/00-*.txt` through `packages/80-*.txt`.
 3. Enable safe OpenRC services from `services/openrc-default.txt`.
-4. Dotfiles linking and Hyprland TTY bootstrap are intentionally deferred.
+4. Deploy `config/` into the target user's `~/.config` using copy + timestamp backups.
+5. Configure tty1 login to start Hyprland for the target user.
+
+Phase 4 configuration strategy:
+- Use Omarchy as a reference and rewrite configs for Artix OpenRC portability.
+- Keep repo configs independent from Omarchy helper commands and systemd-only workflows.
+- See `PHASE4_PORTING.md` for source mapping and adaptation rules.
 
 Usage:
 
@@ -30,10 +36,24 @@ Useful options:
     ./install.sh --phase 1
     ./install.sh --phase 2
     ./install.sh --phase 3 -y
+    ./install.sh --phase 4 --user <username>
+    ./install.sh --phase 5 --user <username>
+
+Config dependency validation:
+
+    ./scripts/check-config-deps.sh
+    ./scripts/check-config-deps.sh --no-aur
+
+Combined health check:
+
+    ./scripts/doctor.sh
+    ./scripts/doctor.sh --no-aur
 
 Notes:
 - `packages/90-aur.txt` is not part of the current phase set.
 - `services/openrc-boot.txt` is not managed by the desktop installer.
+- Phase 4 always replaces existing target config paths with timestamp backups.
+- Phase 5 manages a startup block in `~/.bash_profile` and `~/.zprofile`.
 
 Package policy:
 1. Prefer Artix/pacman packages.

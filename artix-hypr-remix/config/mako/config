@@ -1,3 +1,17 @@
-# Mako notification daemon config (placeholder)
-font=Inter 11
-format=%s
+font=JetBrainsMono Nerd Font 10
+background-color=#111318
+text-color=#d7dae0
+border-color=#5ec4ff
+progress-color=over #5ec4ff
+
+default-timeout=5000
+ignore-timeout=1
+max-visible=5
+
+anchor=top-right
+margin=16,16,0
+padding=12
+border-size=2
+border-radius=8
+
+format=<b>%s</b>\n%b

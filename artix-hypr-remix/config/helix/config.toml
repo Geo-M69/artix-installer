@@ -1,3 +1,17 @@
-# Helix editor configuration (placeholder)
 [editor]
-theme = "ayu"
+line-number = "relative"
+cursorline = true
+color-modes = true
+true-color = true
+bufferline = "multiple"
+auto-save = true
+
+[editor.statusline]
+left = ["mode", "spinner", "file-name", "read-only-indicator", "file-modification-indicator"]
+center = ["version-control"]
+right = ["diagnostics", "position", "file-encoding"]
+
+[editor.cursor-shape]
+insert = "bar"
+normal = "block"
+select = "underline"
