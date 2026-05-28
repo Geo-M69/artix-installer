@@ -1,2 +1,7 @@
 walker-bin
+elephant
+elephant-clipboard
+elephant-desktopapplications
+elephant-files
+elephant-websearch
 paru (should be handled in lib/aur.sh)

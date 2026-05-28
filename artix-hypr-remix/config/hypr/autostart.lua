@@ -2,6 +2,8 @@
 return {
   "waybar",
   "mako",
+  "elephant",
+  "walker --gapplication-service",
   "swww-daemon",
   "wl-paste --type text --watch cliphist store",
   "wl-paste --type image --watch cliphist store",
