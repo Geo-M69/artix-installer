@@ -1,0 +1,3 @@
+# Minimal starship config
+[prompt]
+add_newline = false

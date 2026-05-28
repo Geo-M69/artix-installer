@@ -1,0 +1,9 @@
+com.obsproject.Studio
+com.discordapp.Discord
+dev.vencord.Vesktop
+md.obsidian.Obsidian
+com.spotify.Client
+org.signal.Signal
+org.onlyoffice.desktopeditors
+com.github.wwmm.easyeffects
+io.missioncenter.MissionCenter

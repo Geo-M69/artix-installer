@@ -1,0 +1,7 @@
+# Intentionally empty for v0.1.
+# Do not manage base boot runlevel services from the desktop installer.
+dev
+sysfs
+hwdrivers
+consolefont
+local

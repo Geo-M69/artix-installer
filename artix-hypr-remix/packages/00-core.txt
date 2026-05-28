@@ -10,6 +10,8 @@ man-db
 bash-completion
 jq
 gum
+lua
+flatpak
 polkit-gnome
 gnome-keyring
 libsecret

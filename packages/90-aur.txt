@@ -1,3 +1,0 @@
-ghostty
-walker-bin
-paru

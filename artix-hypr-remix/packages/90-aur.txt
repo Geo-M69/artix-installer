@@ -1,0 +1,2 @@
+walker-bin
+paru (should be handled in lib/aur.sh)

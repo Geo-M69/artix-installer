@@ -1,4 +1,6 @@
-foot
+ghostty
+ghostty-shell-integration
+ghostty-terminfo
 zsh
 starship
 tmux

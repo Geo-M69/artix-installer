@@ -1,3 +1,0 @@
-greetd
-greetd-openrc
-tuigreet
