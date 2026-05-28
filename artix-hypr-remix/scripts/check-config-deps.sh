@@ -70,6 +70,7 @@ declare -A cmd_package_map=(
   [brightnessctl]=brightnessctl
   [gnome-keyring-daemon]=gnome-keyring
   [hx]=helix
+  [hyprctl]=hyprland
   [makoctl]=mako
   [playerctl]=playerctl
   [swww-daemon]=swww

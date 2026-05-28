@@ -1,4 +1,5 @@
 nautilus
+firefox
 sushi
 yazi
 ffmpegthumbnailer
