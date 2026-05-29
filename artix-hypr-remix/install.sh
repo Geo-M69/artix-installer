@@ -34,7 +34,7 @@ Phases:
 	4. Deploy repo config/ into target user's ~/.config (copy + backup)
 	5. Configure tty1 login to start Hyprland for target user
 	6. Install AUR packages from packages/90-*.txt with safe paru bootstrap
-	7. Prepare first-run + post-install framework for target user session
+	7. Prepare first-run + post-install framework and migration state
 
 Options:
 	--phase N     Run phases up to N (1-7). Default: 7
@@ -229,6 +229,7 @@ run_post_install_phase() {
 	info "[Phase 7/7] Preparing first-run + post-install framework"
 	resolve_target_user
 	prepare_post_install_framework "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
+	finish_post_install "$TARGET_USER" "$DRY_RUN" "$ASSUME_YES"
 }
 
 while [[ "$#" -gt 0 ]]; do

@@ -21,7 +21,7 @@ Current installer milestone:
 4. Deploy `config/` into the target user's `~/.config` using copy + timestamp backups, then initialize XDG user directories.
 5. Configure tty1 login to start Hyprland for the target user.
 6. Install AUR packages from `packages/90-*.txt` with safe `paru` bootstrap.
-7. Prepare first-run and post-install framework state/hooks for the target user.
+7. Prepare first-run/post-install framework, initialize migration state, and offer reboot prompt.
 
 Phase 4 configuration strategy:
 - Use Omarchy as a reference and rewrite configs for Artix OpenRC portability.
@@ -68,8 +68,14 @@ Notes:
 - Phase 4 runs `xdg-user-dirs-update` for the target user when available.
 - Phase 5 manages a startup block in `~/.bash_profile` and `~/.zprofile` and launches Hyprland with `--config ~/.config/hypr/hyprland.conf`.
 - Phase 6 bootstraps `paru` if missing, then installs AUR packages as the target non-root user.
-- Phase 7 creates first-run state at `~/.local/state/artix-hypr-remix/first-run.mode` and installs scoped installer sudoers files for cleanup/firewall tasks.
+- Phase 7 creates first-run state at `~/.local/state/artix-hypr-remix/first-run.mode`, installs scoped installer sudoers files, and initializes migration state under `~/.local/state/artix-hypr-remix/migrations`.
+- Phase 7 offers a reboot prompt (skipped when `--yes` is used) so first-run can execute immediately on next login.
 - First user login runs `~/.config/artix-hypr-remix/bin/first-run.sh` from Hyprland autostart and then removes first-run marker state.
+- Post-boot hook execution runs `~/.config/artix-hypr-remix/bin/hook.sh post-boot`, which includes automatic migration runner execution.
+
+Framework maintenance:
+
+    ~/.config/artix-hypr-remix/bin/migrate.sh
 
 Package policy:
 1. Prefer Artix/pacman packages.
