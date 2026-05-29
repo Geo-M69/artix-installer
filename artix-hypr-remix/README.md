@@ -18,7 +18,7 @@ Current installer milestone:
 1. Run `./install.sh` on fresh Artix OpenRC.
 2. Install package sets from `packages/00-*.txt` through `packages/80-*.txt`.
 3. Enable safe OpenRC services from `services/openrc-default.txt`.
-4. Deploy `config/` into the target user's `~/.config` using copy + timestamp backups.
+4. Deploy `config/` into the target user's `~/.config` using copy + timestamp backups, then initialize XDG user directories.
 5. Configure tty1 login to start Hyprland for the target user.
 6. Install AUR packages from `packages/90-*.txt` with safe `paru` bootstrap.
 
@@ -63,6 +63,7 @@ Notes:
 - `packages/90-aur.txt` is consumed by phase 6.
 - `services/openrc-boot.txt` is not managed by the desktop installer.
 - Phase 4 always replaces existing target config paths with timestamp backups.
+- Phase 4 runs `xdg-user-dirs-update` for the target user when available.
 - Phase 5 manages a startup block in `~/.bash_profile` and `~/.zprofile` and launches Hyprland with `--config ~/.config/hypr/hyprland.conf`.
 - Phase 6 bootstraps `paru` if missing, then installs AUR packages as the target non-root user.
 

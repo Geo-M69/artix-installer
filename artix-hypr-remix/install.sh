@@ -214,6 +214,7 @@ run_dotfiles_phase() {
 	info "[Phase 4/6] Deploying dotfiles to target user"
 	resolve_target_user
 	deploy_config_tree "$CONFIG_DIR" "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
+	initialize_xdg_user_dirs "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }
 
 run_tty_phase() {

@@ -63,3 +63,39 @@ deploy_config_tree() {
     chown "$target_user:$target_user" "$target_config_dir"
   fi
 }
+
+run_as_user() {
+  local target_user="$1"
+  shift
+
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -H -u "$target_user" "$@"
+    return
+  fi
+
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u "$target_user" -- "$@"
+    return
+  fi
+
+  error "Neither sudo nor runuser is available to run commands as '$target_user'"
+}
+
+initialize_xdg_user_dirs() {
+  local target_user="$1"
+  local target_home="$2"
+  local dry_run="${3:-false}"
+
+  if ! command -v xdg-user-dirs-update >/dev/null 2>&1; then
+    warn "xdg-user-dirs-update is not available; skipping user directory initialization"
+    return 0
+  fi
+
+  if [[ "$dry_run" == "true" ]]; then
+    info "Dry-run: would initialize XDG user directories for '$target_user'"
+    return 0
+  fi
+
+  info "Initializing XDG user directories for '$target_user'"
+  run_as_user "$target_user" env HOME="$target_home" xdg-user-dirs-update
+}
