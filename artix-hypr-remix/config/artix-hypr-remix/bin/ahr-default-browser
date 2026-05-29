@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if (($# == 0)); then
+  case "$(xdg-settings get default-web-browser)" in
+  chromium.desktop) echo "chromium" ;;
+  google-chrome.desktop) echo "chrome" ;;
+  brave-browser.desktop) echo "brave" ;;
+  brave-origin-beta.desktop) echo "brave-origin" ;;
+  microsoft-edge.desktop) echo "edge" ;;
+  firefox.desktop) echo "firefox" ;;
+  zen.desktop) echo "zen" ;;
+  *) xdg-settings get default-web-browser ;;
+  esac
+  exit 0
+fi
+
+case "$1" in
+chromium) desktop_id="chromium.desktop"; name="Chromium" ;;
+chrome) desktop_id="google-chrome.desktop"; name="Chrome" ;;
+brave) desktop_id="brave-browser.desktop"; name="Brave" ;;
+brave-origin) desktop_id="brave-origin-beta.desktop"; name="Brave Origin" ;;
+edge) desktop_id="microsoft-edge.desktop"; name="Edge" ;;
+firefox) desktop_id="firefox.desktop"; name="Firefox" ;;
+zen) desktop_id="zen.desktop"; name="Zen" ;;
+*)
+  echo "Usage: ahr-default-browser <chromium|chrome|brave|brave-origin|edge|firefox|zen>" >&2
+  exit 1
+  ;;
+esac
+
+xdg-settings set default-web-browser "$desktop_id"
+xdg-mime default "$desktop_id" x-scheme-handler/http
+xdg-mime default "$desktop_id" x-scheme-handler/https
+xdg-mime default "$desktop_id" text/html
+
+ahr_notify "Default Browser" "$name is now the default browser"
+
+exit 0

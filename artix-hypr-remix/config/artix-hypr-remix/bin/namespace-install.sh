@@ -24,6 +24,10 @@ declare -a commands=(
   ahr-launch-files
   ahr-launch-audio
   ahr-launch-wifi
+  ahr-default-browser
+  ahr-default-terminal
+  ahr-update
+  ahr-update-available
   ahr-system-lock
   ahr-system-reboot
   ahr-capture-screenshot
@@ -39,6 +43,10 @@ declare -a aliases=(
   "omarchy-system-lock:ahr-system-lock"
   "omarchy-system-reboot:ahr-system-reboot"
   "omarchy-capture-screenshot:ahr-capture-screenshot"
+  "omarchy-default-browser:ahr-default-browser"
+  "omarchy-default-terminal:ahr-default-terminal"
+  "omarchy-update:ahr-update"
+  "omarchy-update-available:ahr-update-available"
 )
 
 log() {

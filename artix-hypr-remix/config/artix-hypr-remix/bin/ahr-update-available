@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+json=false
+while (( $# > 0 )); do
+  case "$1" in
+    --json) json=true ;;
+    -h|--help) echo "Usage: ahr-update-available [--json]"; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+system_count=0
+aur_count=0
+
+# system updates
+if ahr_has_cmd checkupdates; then
+  system_count=$(checkupdates 2>/dev/null | wc -l || true)
+elif ahr_has_cmd pacman; then
+  system_count=$(pacman -Qu 2>/dev/null | wc -l || true)
+fi
+
+# AUR updates
+if ahr_has_cmd paru; then
+  aur_count=$(paru -Qua 2>/dev/null | wc -l || true)
+elif ahr_has_cmd yay; then
+  aur_count=$(yay -Qua 2>/dev/null | wc -l || true)
+fi
+
+total=$((system_count + aur_count))
+
+if [[ "$json" == "true" ]]; then
+  printf '{"system": %s, "aur": %s, "total": %s}\n' "$system_count" "$aur_count" "$total"
+else
+  if (( total > 0 )); then
+    printf 'Updates available (system=%s aur=%s total=%s)\n' "$system_count" "$aur_count" "$total"
+  else
+    printf 'Up to date\n'
+  fi
+fi
+
+if (( total > 0 )); then
+  exit 0
+else
+  exit 1
+fi

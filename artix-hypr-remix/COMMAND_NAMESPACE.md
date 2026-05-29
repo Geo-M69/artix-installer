@@ -23,6 +23,12 @@ Categories:
 - `ahr-menu` - open the application launcher
 - `ahr-launch-terminal` - open preferred terminal
 - `ahr-launch-browser` - open default browser/homepage
+ - `ahr-launch-browser` - open default browser/homepage
+ - `ahr-default-browser` - inspect or set the user's default browser (xdg)
+ - `ahr-default-terminal` - inspect or set the user's preferred terminal (xdg-terminals.list)
+ - `ahr-update` - perform system and AUR updates (pacman/paru)
+ - `ahr-update` - perform system and AUR updates (pacman/paru)
+ - `ahr-update-available` - quick check used by status bars to report available updates
 - `ahr-launch-files` - open file manager in a target path
 - `ahr-launch-audio` - open audio control UI (or terminal fallback)
 - `ahr-launch-wifi` - open Wi-Fi/network UI (or terminal fallback)

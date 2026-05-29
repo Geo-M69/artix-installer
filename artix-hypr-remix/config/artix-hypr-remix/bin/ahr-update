@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr-update [options]
+
+Options:
+  --no-aur         Skip AUR updates
+  --no-system      Skip system (pacman) updates
+  --flatpak        Also update Flatpak applications
+  --quiet          Suppress non-error output
+  -h, --help       Show this help
+EOF
+}
+
+quiet=false
+do_system=true
+do_aur=true
+do_flatpak=false
+
+while (( $# > 0 )); do
+  case "$1" in
+    --no-aur) do_aur=false ;;
+    --no-system) do_system=false ;;
+    --flatpak) do_flatpak=true ;;
+    --quiet) quiet=true ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
+  esac
+  shift
+done
+
+log() { [[ "$quiet" == "false" ]] && printf '%s\n' "$1"; }
+
+if [[ "$do_system" == "true" ]]; then
+  if ahr_has_cmd sudo; then
+    log "Running system update (pacman)..."
+    ahr_notify "Update" "Starting system update"
+    sudo pacman -Syu --noconfirm
+  else
+    ahr_fail "sudo is required to run system updates (pacman)"
+  fi
+fi
+
+if [[ "$do_aur" == "true" ]]; then
+  if ahr_has_cmd paru; then
+    log "Running AUR update via paru..."
+    paru -Syu --noconfirm --skipreview
+  elif ahr_has_cmd yay; then
+    log "Running AUR update via yay..."
+    yay -Syu --noconfirm
+  else
+    log "No AUR helper found; skipping AUR updates."
+  fi
+fi
+
+if [[ "$do_flatpak" == "true" ]]; then
+  if ahr_has_cmd flatpak; then
+    log "Running flatpak update..."
+    flatpak update -y
+  else
+    log "flatpak not available; skipping flatpak updates."
+  fi
+fi
+
+ahr_notify "Update" "Update complete"
+
+exit 0

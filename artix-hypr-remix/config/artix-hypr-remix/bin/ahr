@@ -12,6 +12,10 @@ Commands:
   launch-files        Open file manager
   launch-audio        Open audio control
   launch-wifi         Open network control
+  default-browser     Inspect or set default browser
+  default-terminal    Inspect or set default terminal
+  update              System + AUR update helper
+  update-available    Check whether updates are available (for status bars)
   system-lock         Lock session
   system-reboot       Reboot system
   capture-screenshot  Interactive area screenshot
@@ -31,6 +35,10 @@ dispatch() {
     launch-files) exec ahr-launch-files "$@" ;;
     launch-audio) exec ahr-launch-audio "$@" ;;
     launch-wifi) exec ahr-launch-wifi "$@" ;;
+    default-browser) exec ahr-default-browser "$@" ;;
+    default-terminal) exec ahr-default-terminal "$@" ;;
+    update) exec ahr-update "$@" ;;
+    update-available) exec ahr-update-available "$@" ;;
     system-lock) exec ahr-system-lock "$@" ;;
     system-reboot) exec ahr-system-reboot "$@" ;;
     capture-screenshot) exec ahr-capture-screenshot "$@" ;;
@@ -42,6 +50,10 @@ dispatch() {
         "ahr-launch-files" \
         "ahr-launch-audio" \
         "ahr-launch-wifi" \
+        "ahr-default-browser" \
+        "ahr-default-terminal" \
+        "ahr-update" \
+        "ahr-update-available" \
         "ahr-system-lock" \
         "ahr-system-reboot" \
         "ahr-capture-screenshot"

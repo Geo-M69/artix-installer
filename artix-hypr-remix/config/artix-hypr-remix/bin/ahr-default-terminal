@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+cfg_dir="$HOME/.config"
+term_file="$cfg_dir/xdg-terminals.list"
+
+if (($# == 0)); then
+  desktop_id=$(grep -vE '^($|#)' "$term_file" 2>/dev/null | head -n 1 || true)
+  case "$desktop_id" in
+  Alacritty.desktop) echo "alacritty" ;;
+  foot.desktop) echo "foot" ;;
+  com.mitchellh.ghostty.desktop) echo "ghostty" ;;
+  kitty.desktop) echo "kitty" ;;
+  *) echo "$desktop_id" ;;
+  esac
+  exit 0
+fi
+
+case "$1" in
+alacritty) desktop_id="Alacritty.desktop"; name="Alacritty" ;;
+foot) desktop_id="foot.desktop"; name="Foot" ;;
+ghostty) desktop_id="com.mitchellh.ghostty.desktop"; name="Ghostty" ;;
+kitty) desktop_id="kitty.desktop"; name="Kitty" ;;
+*)
+  echo "Usage: ahr-default-terminal <alacritty|foot|ghostty|kitty>" >&2
+  exit 1
+  ;;
+esac
+
+mkdir -p "$cfg_dir"
+cat >"$term_file" <<EOF
+# Terminal emulator preference order for xdg-terminal-exec
+# The first found and valid terminal will be used
+$desktop_id
+EOF
+
+ahr_notify "Default Terminal" "$name is now the default terminal"
+
+exit 0
