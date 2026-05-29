@@ -14,8 +14,9 @@ source "$LIB_DIR/aur.sh"
 source "$LIB_DIR/openrc.sh"
 source "$LIB_DIR/dotfiles.sh"
 source "$LIB_DIR/tty.sh"
+source "$LIB_DIR/post_install.sh"
 
-TARGET_PHASE=6
+TARGET_PHASE=7
 ASSUME_YES=false
 DRY_RUN=false
 SKIP_AUR=false
@@ -33,10 +34,11 @@ Phases:
 	4. Deploy repo config/ into target user's ~/.config (copy + backup)
 	5. Configure tty1 login to start Hyprland for target user
 	6. Install AUR packages from packages/90-*.txt with safe paru bootstrap
+	7. Prepare first-run + post-install framework for target user session
 
 Options:
-	--phase N     Run phases up to N (1-6). Default: 6
-	--user NAME   Target non-root desktop user for phases 4-6
+	--phase N     Run phases up to N (1-7). Default: 7
+	--user NAME   Target non-root desktop user for phases 4-7
 	--skip-aur    Skip phase 6 AUR install even when phase includes it
 	--dry-run     Print planned actions without changing the system
 	-y, --yes     Do not ask for confirmation
@@ -99,7 +101,7 @@ collect_services() {
 }
 
 run_preflight() {
-	info "[Phase 1/6] Running preflight checks"
+	info "[Phase 1/7] Running preflight checks"
 
 	if [[ "$EUID" -ne 0 ]]; then
 		if [[ "$DRY_RUN" == true ]]; then
@@ -126,7 +128,7 @@ run_package_phase() {
 	local -a packages=()
 	mapfile -t packages < <(collect_packages)
 
-	info "[Phase 2/6] Installing packages"
+	info "[Phase 2/7] Installing packages"
 
 	if [[ "${#packages[@]}" -eq 0 ]]; then
 		warn "No packages found under $PACKAGES_DIR"
@@ -149,7 +151,7 @@ run_service_phase() {
 
 	mapfile -t services < <(collect_services)
 
-	info "[Phase 3/6] Enabling safe OpenRC services"
+	info "[Phase 3/7] Enabling safe OpenRC services"
 
 	if [[ "${#services[@]}" -eq 0 ]]; then
 		warn "No services found in $SERVICES_DIR/openrc-default.txt"
@@ -171,13 +173,13 @@ run_aur_phase() {
 	local -a packages=()
 
 	if [[ "$SKIP_AUR" == true ]]; then
-		info "[Phase 6/6] Skipping AUR phase due to --skip-aur"
+		info "[Phase 6/7] Skipping AUR phase due to --skip-aur"
 		return 0
 	fi
 
 	mapfile -t packages < <(collect_aur_packages)
 
-	info "[Phase 6/6] Installing AUR packages"
+	info "[Phase 6/7] Installing AUR packages"
 
 	if [[ "${#packages[@]}" -eq 0 ]]; then
 		warn "No AUR packages found under $PACKAGES_DIR/90-*.txt"
@@ -197,7 +199,7 @@ resolve_target_user() {
 	fi
 
 	if [[ -z "$TARGET_USER" || "$TARGET_USER" == "root" ]]; then
-		error "Phases 4-6 require a non-root desktop user. Re-run with --user <name>."
+		error "Phases 4-7 require a non-root desktop user. Re-run with --user <name>."
 	fi
 
 	if ! id "$TARGET_USER" >/dev/null 2>&1; then
@@ -211,24 +213,30 @@ resolve_target_user() {
 }
 
 run_dotfiles_phase() {
-	info "[Phase 4/6] Deploying dotfiles to target user"
+	info "[Phase 4/7] Deploying dotfiles to target user"
 	resolve_target_user
 	deploy_config_tree "$CONFIG_DIR" "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 	initialize_xdg_user_dirs "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }
 
 run_tty_phase() {
-	info "[Phase 5/6] Configuring tty1 Hyprland startup"
+	info "[Phase 5/7] Configuring tty1 Hyprland startup"
 	resolve_target_user
 	configure_tty_hyprland_autostart "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
+}
+
+run_post_install_phase() {
+	info "[Phase 7/7] Preparing first-run + post-install framework"
+	resolve_target_user
+	prepare_post_install_framework "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }
 
 while [[ "$#" -gt 0 ]]; do
 	case "$1" in
 		--phase)
 			shift
-			[[ "$#" -gt 0 ]] || error "--phase requires a value (1-6)"
-			[[ "$1" =~ ^[1-6]$ ]] || error "Invalid phase '$1'. Use 1, 2, 3, 4, 5, or 6."
+			[[ "$#" -gt 0 ]] || error "--phase requires a value (1-7)"
+			[[ "$1" =~ ^[1-7]$ ]] || error "Invalid phase '$1'. Use 1, 2, 3, 4, 5, 6, or 7."
 			TARGET_PHASE="$1"
 			;;
 		--skip-aur)
@@ -259,7 +267,7 @@ done
 if [[ "$ASSUME_YES" == false ]]; then
 	info "Installer will run up to phase $TARGET_PHASE"
 	if (( TARGET_PHASE >= 4 )); then
-		info "Target desktop user for phases 4-6: ${TARGET_USER:-<unset>}"
+		info "Target desktop user for phases 4-7: ${TARGET_USER:-<unset>}"
 	fi
 	if (( TARGET_PHASE >= 6 )) && [[ "$SKIP_AUR" == true ]]; then
 		info "AUR phase will be skipped (--skip-aur)"
@@ -288,6 +296,9 @@ if (( TARGET_PHASE >= 5 )); then
 fi
 if (( TARGET_PHASE >= 6 )); then
 	run_aur_phase
+fi
+if (( TARGET_PHASE >= 7 )); then
+	run_post_install_phase
 fi
 
 info "Completed requested phases (1..$TARGET_PHASE)"

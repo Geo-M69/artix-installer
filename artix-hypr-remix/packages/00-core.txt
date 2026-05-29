@@ -7,11 +7,15 @@ unzip
 zip
 less
 man-db
+bash
 bash-completion
 jq
 gum
 lua
 flatpak
+libnotify
+power-profiles-daemon
+ufw
 polkit-gnome
 gnome-keyring
 libsecret

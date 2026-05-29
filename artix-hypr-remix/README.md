@@ -21,6 +21,7 @@ Current installer milestone:
 4. Deploy `config/` into the target user's `~/.config` using copy + timestamp backups, then initialize XDG user directories.
 5. Configure tty1 login to start Hyprland for the target user.
 6. Install AUR packages from `packages/90-*.txt` with safe `paru` bootstrap.
+7. Prepare first-run and post-install framework state/hooks for the target user.
 
 Phase 4 configuration strategy:
 - Use Omarchy as a reference and rewrite configs for Artix OpenRC portability.
@@ -41,6 +42,7 @@ Useful options:
     ./install.sh --phase 5 --user <username>
     ./install.sh --phase 6 --user <username>
     ./install.sh --phase 6 --user <username> --skip-aur
+    ./install.sh --phase 7 --user <username>
 
 Config dependency validation:
 
@@ -66,6 +68,8 @@ Notes:
 - Phase 4 runs `xdg-user-dirs-update` for the target user when available.
 - Phase 5 manages a startup block in `~/.bash_profile` and `~/.zprofile` and launches Hyprland with `--config ~/.config/hypr/hyprland.conf`.
 - Phase 6 bootstraps `paru` if missing, then installs AUR packages as the target non-root user.
+- Phase 7 creates first-run state at `~/.local/state/artix-hypr-remix/first-run.mode` and installs scoped installer sudoers files for cleanup/firewall tasks.
+- First user login runs `~/.config/artix-hypr-remix/bin/first-run.sh` from Hyprland autostart and then removes first-run marker state.
 
 Package policy:
 1. Prefer Artix/pacman packages.
