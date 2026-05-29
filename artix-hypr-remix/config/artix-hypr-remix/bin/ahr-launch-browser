@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+target_url="${1:-https://duckduckgo.com}"
+
+if ahr_has_cmd xdg-open; then
+  exec xdg-open "$target_url"
+fi
+
+if ahr_has_cmd firefox; then
+  exec firefox "$target_url"
+fi
+
+if ahr_has_cmd chromium; then
+  exec chromium "$target_url"
+fi
+
+ahr_fail "No browser launcher found"

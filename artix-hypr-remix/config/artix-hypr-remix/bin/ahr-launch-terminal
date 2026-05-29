@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if ahr_has_cmd ghostty; then
+  exec ghostty "$@"
+fi
+
+if ahr_has_cmd foot; then
+  exec foot "$@"
+fi
+
+if ahr_has_cmd kitty; then
+  exec kitty "$@"
+fi
+
+if ahr_has_cmd alacritty; then
+  exec alacritty "$@"
+fi
+
+if ahr_has_cmd xterm; then
+  exec xterm "$@"
+fi
+
+ahr_fail "No terminal emulator found"

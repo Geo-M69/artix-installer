@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if ahr_has_cmd nm-connection-editor; then
+  exec nm-connection-editor
+fi
+
+if ahr_has_cmd nmtui; then
+  if ahr_exec_terminal_app nmtui; then
+    exit 0
+  fi
+fi
+
+if ahr_has_cmd nmcli; then
+  if ahr_exec_terminal_app nmcli device wifi list; then
+    exit 0
+  fi
+fi
+
+ahr_fail "No network control app found"

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if ahr_has_cmd systemctl; then
+  exec systemctl reboot
+fi
+
+if ahr_has_cmd loginctl; then
+  exec loginctl reboot
+fi
+
+if ahr_has_cmd reboot; then
+  exec reboot
+fi
+
+ahr_fail "No reboot command found"

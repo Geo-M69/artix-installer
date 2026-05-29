@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if ahr_has_cmd walker; then
+  exec walker
+fi
+
+if ahr_has_cmd wofi; then
+  exec wofi --show drun
+fi
+
+if ahr_has_cmd rofi; then
+  exec rofi -show drun
+fi
+
+ahr_fail "No application launcher found (walker/wofi/rofi)"

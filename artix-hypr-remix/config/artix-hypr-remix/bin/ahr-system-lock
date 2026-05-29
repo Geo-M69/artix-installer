@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if ahr_has_cmd hyprlock; then
+  exec hyprlock
+fi
+
+if ahr_has_cmd swaylock; then
+  exec swaylock
+fi
+
+ahr_fail "No screen locker found"

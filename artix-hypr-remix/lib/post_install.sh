@@ -119,6 +119,28 @@ initialize_migration_state() {
   info "Initialized migration state: $migration_state_dir"
 }
 
+install_command_namespace() {
+  local target_user="$1"
+  local target_home="$2"
+  local dry_run="${3:-false}"
+  local namespace_installer
+
+  namespace_installer="$target_home/.config/artix-hypr-remix/bin/namespace-install.sh"
+
+  if [[ ! -f "$namespace_installer" ]]; then
+    warn "Command namespace installer not found: $namespace_installer"
+    return 0
+  fi
+
+  if [[ "$dry_run" == "true" ]]; then
+    info "Dry-run: would install command namespace links via $namespace_installer"
+    return 0
+  fi
+
+  post_install_run_as_user "$target_user" bash "$namespace_installer" --quiet
+  info "Installed command namespace links into $target_home/.local/bin"
+}
+
 finish_post_install() {
   local target_user="$1"
   local dry_run="${2:-false}"
@@ -172,4 +194,5 @@ prepare_post_install_framework() {
   write_first_run_sudoers "$target_user" "$dry_run"
   write_reboot_sudoers "$target_user" "$dry_run"
   initialize_migration_state "$target_user" "$target_home" "$dry_run"
+  install_command_namespace "$target_user" "$target_home" "$dry_run"
 }

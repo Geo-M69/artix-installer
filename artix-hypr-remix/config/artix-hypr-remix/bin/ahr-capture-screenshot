@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+target_dir="${XDG_PICTURES_DIR:-$HOME/Pictures}"
+target_file="$target_dir/screenshot-$(date +%s).png"
+
+mkdir -p "$target_dir"
+
+if ahr_has_cmd slurp && ahr_has_cmd grim; then
+  grim -g "$(slurp)" "$target_file"
+  ahr_notify "Screenshot saved" "$target_file"
+  exit 0
+fi
+
+ahr_fail "slurp and grim are required for area screenshots"

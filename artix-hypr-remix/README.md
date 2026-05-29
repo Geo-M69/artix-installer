@@ -69,13 +69,20 @@ Notes:
 - Phase 5 manages a startup block in `~/.bash_profile` and `~/.zprofile` and launches Hyprland with `--config ~/.config/hypr/hyprland.conf`.
 - Phase 6 bootstraps `paru` if missing, then installs AUR packages as the target non-root user.
 - Phase 7 creates first-run state at `~/.local/state/artix-hypr-remix/first-run.mode`, installs scoped installer sudoers files, and initializes migration state under `~/.local/state/artix-hypr-remix/migrations`.
+- Phase 7 installs native command namespace links into `~/.local/bin` and writes a small Omarchy-compatible alias layer.
 - Phase 7 offers a reboot prompt (skipped when `--yes` is used) so first-run can execute immediately on next login.
 - First user login runs `~/.config/artix-hypr-remix/bin/first-run.sh` from Hyprland autostart and then removes first-run marker state.
 - Post-boot hook execution runs `~/.config/artix-hypr-remix/bin/hook.sh post-boot`, which includes automatic migration runner execution.
+- Namespace specification and command inventory are documented in `COMMAND_NAMESPACE.md`.
 
 Framework maintenance:
 
     ~/.config/artix-hypr-remix/bin/migrate.sh
+
+Command namespace:
+
+    ~/.config/artix-hypr-remix/bin/namespace-install.sh
+    ahr help
 
 Package policy:
 1. Prefer Artix/pacman packages.

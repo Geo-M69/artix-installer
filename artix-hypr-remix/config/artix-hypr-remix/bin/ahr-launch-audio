@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if ahr_has_cmd pavucontrol; then
+  exec pavucontrol
+fi
+
+if ahr_has_cmd pwvucontrol; then
+  exec pwvucontrol
+fi
+
+if ahr_has_cmd alsamixer; then
+  if ahr_exec_terminal_app alsamixer; then
+    exit 0
+  fi
+fi
+
+ahr_fail "No audio control app found"

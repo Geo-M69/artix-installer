@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: ahr <command> [args]
+
+Commands:
+  menu                Open application launcher
+  launch-terminal     Open terminal
+  launch-browser      Open browser
+  launch-files        Open file manager
+  launch-audio        Open audio control
+  launch-wifi         Open network control
+  system-lock         Lock session
+  system-reboot       Reboot system
+  capture-screenshot  Interactive area screenshot
+  list                Show command list
+  help                Show this help
+EOF
+}
+
+dispatch() {
+  local subcommand="$1"
+  shift || true
+
+  case "$subcommand" in
+    menu) exec ahr-menu "$@" ;;
+    launch-terminal) exec ahr-launch-terminal "$@" ;;
+    launch-browser) exec ahr-launch-browser "$@" ;;
+    launch-files) exec ahr-launch-files "$@" ;;
+    launch-audio) exec ahr-launch-audio "$@" ;;
+    launch-wifi) exec ahr-launch-wifi "$@" ;;
+    system-lock) exec ahr-system-lock "$@" ;;
+    system-reboot) exec ahr-system-reboot "$@" ;;
+    capture-screenshot) exec ahr-capture-screenshot "$@" ;;
+    list)
+      printf '%s\n' \
+        "ahr-menu" \
+        "ahr-launch-terminal" \
+        "ahr-launch-browser" \
+        "ahr-launch-files" \
+        "ahr-launch-audio" \
+        "ahr-launch-wifi" \
+        "ahr-system-lock" \
+        "ahr-system-reboot" \
+        "ahr-capture-screenshot"
+      ;;
+    help|-h|--help|"")
+      usage
+      ;;
+    *)
+      printf 'Unknown command: %s\n\n' "$subcommand" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+dispatch "${1:-help}" "${@:2}"
