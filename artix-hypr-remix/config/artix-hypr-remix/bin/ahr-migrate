@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+runner="$HOME/.config/artix-hypr-remix/bin/migrate.sh"
+
+if [[ ! -f "$runner" ]]; then
+  ahr_fail "Migration runner not found: $runner"
+fi
+
+exec bash "$runner" "$@"

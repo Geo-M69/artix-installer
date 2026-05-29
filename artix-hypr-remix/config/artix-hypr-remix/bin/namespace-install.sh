@@ -28,6 +28,7 @@ declare -a commands=(
   ahr-default-terminal
   ahr-update
   ahr-update-available
+  ahr-migrate
   ahr-system-lock
   ahr-system-reboot
   ahr-capture-screenshot
@@ -47,6 +48,7 @@ declare -a aliases=(
   "omarchy-default-terminal:ahr-default-terminal"
   "omarchy-update:ahr-update"
   "omarchy-update-available:ahr-update-available"
+  "omarchy-migrate:ahr-migrate"
 )
 
 log() {

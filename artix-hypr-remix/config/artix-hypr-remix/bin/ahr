@@ -16,6 +16,7 @@ Commands:
   default-terminal    Inspect or set default terminal
   update              System + AUR update helper
   update-available    Check whether updates are available (for status bars)
+  migrate             Run or inspect pending framework migrations
   system-lock         Lock session
   system-reboot       Reboot system
   capture-screenshot  Interactive area screenshot
@@ -39,6 +40,7 @@ dispatch() {
     default-terminal) exec ahr-default-terminal "$@" ;;
     update) exec ahr-update "$@" ;;
     update-available) exec ahr-update-available "$@" ;;
+    migrate) exec ahr-migrate "$@" ;;
     system-lock) exec ahr-system-lock "$@" ;;
     system-reboot) exec ahr-system-reboot "$@" ;;
     capture-screenshot) exec ahr-capture-screenshot "$@" ;;
@@ -54,6 +56,7 @@ dispatch() {
         "ahr-default-terminal" \
         "ahr-update" \
         "ahr-update-available" \
+        "ahr-migrate" \
         "ahr-system-lock" \
         "ahr-system-reboot" \
         "ahr-capture-screenshot"

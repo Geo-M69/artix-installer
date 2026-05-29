@@ -77,7 +77,22 @@ Notes:
 
 Framework maintenance:
 
-    ~/.config/artix-hypr-remix/bin/migrate.sh
+    ahr migrate --status
+    ahr migrate --dry-run
+    ahr migrate --retry-skipped
+
+Upgrade workflow:
+
+    ahr update
+    ahr update --no-aur
+    ahr update --flatpak
+    ahr update --migrations-only
+    ahr update --dry-run
+
+Update status helper:
+
+    ahr update-available
+    ahr update-available --json
 
 Command namespace:
 

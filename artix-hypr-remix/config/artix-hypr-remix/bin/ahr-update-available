@@ -3,6 +3,11 @@ set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
+FRAMEWORK_ROOT="$HOME/.config/artix-hypr-remix"
+MIGRATION_DIR="$FRAMEWORK_ROOT/migrations"
+MIGRATION_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/migrations"
+MIGRATION_SKIPPED_DIR="$MIGRATION_STATE_DIR/skipped"
+
 json=false
 while (( $# > 0 )); do
   case "$1" in
@@ -15,6 +20,8 @@ done
 
 system_count=0
 aur_count=0
+migration_pending_count=0
+migration_skipped_count=0
 
 # system updates
 if ahr_has_cmd checkupdates; then
@@ -30,13 +37,30 @@ elif ahr_has_cmd yay; then
   aur_count=$(yay -Qua 2>/dev/null | wc -l || true)
 fi
 
-total=$((system_count + aur_count))
+# pending or skipped migrations
+if [[ -d "$MIGRATION_DIR" ]]; then
+  shopt -s nullglob
+  for migration_file in "$MIGRATION_DIR"/*.sh; do
+    migration_name="$(basename "$migration_file")"
+    if [[ -f "$MIGRATION_STATE_DIR/$migration_name" ]]; then
+      continue
+    fi
+    if [[ -f "$MIGRATION_SKIPPED_DIR/$migration_name" ]]; then
+      ((migration_skipped_count+=1))
+      continue
+    fi
+    ((migration_pending_count+=1))
+  done
+  shopt -u nullglob
+fi
+
+total=$((system_count + aur_count + migration_pending_count + migration_skipped_count))
 
 if [[ "$json" == "true" ]]; then
-  printf '{"system": %s, "aur": %s, "total": %s}\n' "$system_count" "$aur_count" "$total"
+  printf '{"system": %s, "aur": %s, "migrations": %s, "skipped_migrations": %s, "total": %s}\n' "$system_count" "$aur_count" "$migration_pending_count" "$migration_skipped_count" "$total"
 else
   if (( total > 0 )); then
-    printf 'Updates available (system=%s aur=%s total=%s)\n' "$system_count" "$aur_count" "$total"
+    printf 'Updates available (system=%s aur=%s migrations=%s skipped=%s total=%s)\n' "$system_count" "$aur_count" "$migration_pending_count" "$migration_skipped_count" "$total"
   else
     printf 'Up to date\n'
   fi

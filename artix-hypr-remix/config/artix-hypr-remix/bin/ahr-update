@@ -3,14 +3,25 @@ set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
+FRAMEWORK_ROOT="$HOME/.config/artix-hypr-remix"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
+LOCK_FILE="$STATE_DIR/update.lock"
+LOCK_DIR="$STATE_DIR/.update.lock"
+LOG_FILE="$STATE_DIR/update.log"
+lock_mode=""
+
 usage() {
   cat <<'EOF'
 Usage: ahr-update [options]
 
 Options:
+  --migrations-only  Run migrations and post-update hooks only
   --no-aur         Skip AUR updates
   --no-system      Skip system (pacman) updates
+  --no-migrate     Skip migration run
   --flatpak        Also update Flatpak applications
+  --dry-run        Show what would run without making changes
+  -y, --yes        Run non-interactively when supported
   --quiet          Suppress non-error output
   -h, --help       Show this help
 EOF
@@ -20,12 +31,24 @@ quiet=false
 do_system=true
 do_aur=true
 do_flatpak=false
+do_migrate=true
+dry_run=false
+assume_yes=false
 
 while (( $# > 0 )); do
   case "$1" in
+    --migrations-only)
+      do_system=false
+      do_aur=false
+      do_flatpak=false
+      do_migrate=true
+      ;;
     --no-aur) do_aur=false ;;
     --no-system) do_system=false ;;
+    --no-migrate) do_migrate=false ;;
     --flatpak) do_flatpak=true ;;
+    --dry-run) dry_run=true ;;
+    -y|--yes) assume_yes=true ;;
     --quiet) quiet=true ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
@@ -33,39 +56,171 @@ while (( $# > 0 )); do
   shift
 done
 
+if [[ "$do_system" == "false" && "$do_aur" == "false" && "$do_flatpak" == "false" && "$do_migrate" == "false" ]]; then
+  ahr_fail "Nothing to do: all update actions are disabled"
+fi
+
+mkdir -p "$STATE_DIR"
+touch "$LOG_FILE"
+
 log() { [[ "$quiet" == "false" ]] && printf '%s\n' "$1"; }
 
+log_line() {
+  local message="$1"
+  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$message" >> "$LOG_FILE"
+}
+
+log_and_print() {
+  local message="$1"
+  log_line "$message"
+  log "$message"
+}
+
+cleanup_lock() {
+  if [[ "$lock_mode" == "mkdir" ]]; then
+    rmdir "$LOCK_DIR" >/dev/null 2>&1 || true
+  fi
+}
+
+acquire_lock() {
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$LOCK_FILE"
+    if ! flock -n 9; then
+      ahr_fail "Another update process is already running"
+    fi
+    lock_mode="flock"
+    return 0
+  fi
+
+  if mkdir "$LOCK_DIR" >/dev/null 2>&1; then
+    lock_mode="mkdir"
+    return 0
+  fi
+
+  ahr_fail "Another update process is already running"
+}
+
+run_cmd() {
+  local message="$1"
+  shift
+
+  log_and_print "$message"
+
+  if [[ "$dry_run" == "true" ]]; then
+    log_and_print "Dry-run: $*"
+    return 0
+  fi
+
+  "$@"
+}
+
+finalize() {
+  local exit_code=$?
+  cleanup_lock
+
+  if (( exit_code == 0 )); then
+    log_line "Update run completed successfully"
+    if [[ "$dry_run" == "false" ]]; then
+      ahr_notify "Update" "Update complete"
+    fi
+    return
+  fi
+
+  log_line "Update run failed with exit code $exit_code"
+  if [[ "$dry_run" == "false" ]]; then
+    ahr_notify "Update" "Update failed"
+  fi
+}
+
+trap finalize EXIT
+
+acquire_lock
+
+log_line "Starting update run: system=$do_system aur=$do_aur flatpak=$do_flatpak migrate=$do_migrate dry_run=$dry_run assume_yes=$assume_yes"
+
 if [[ "$do_system" == "true" ]]; then
-  if ahr_has_cmd sudo; then
-    log "Running system update (pacman)..."
-    ahr_notify "Update" "Starting system update"
-    sudo pacman -Syu --noconfirm
-  else
+  if ! ahr_has_cmd sudo; then
     ahr_fail "sudo is required to run system updates (pacman)"
   fi
+
+  pacman_cmd=(sudo pacman -Syu)
+  if [[ "$assume_yes" == "true" ]]; then
+    pacman_cmd+=(--noconfirm)
+  fi
+
+  run_cmd "Running system update (pacman)" "${pacman_cmd[@]}"
 fi
 
 if [[ "$do_aur" == "true" ]]; then
   if ahr_has_cmd paru; then
-    log "Running AUR update via paru..."
-    paru -Syu --noconfirm --skipreview
+    if [[ "$do_system" == "true" ]]; then
+      aur_cmd=(paru -Sua)
+    else
+      aur_cmd=(paru -Syu)
+    fi
+
+    if [[ "$assume_yes" == "true" ]]; then
+      aur_cmd+=(--noconfirm --skipreview)
+    fi
+
+    run_cmd "Running AUR update via paru" "${aur_cmd[@]}"
   elif ahr_has_cmd yay; then
-    log "Running AUR update via yay..."
-    yay -Syu --noconfirm
+    if [[ "$do_system" == "true" ]]; then
+      aur_cmd=(yay -Sua)
+    else
+      aur_cmd=(yay -Syu)
+    fi
+
+    if [[ "$assume_yes" == "true" ]]; then
+      aur_cmd+=(--noconfirm)
+    fi
+
+    run_cmd "Running AUR update via yay" "${aur_cmd[@]}"
   else
-    log "No AUR helper found; skipping AUR updates."
+    log_and_print "No AUR helper found; skipping AUR updates"
   fi
 fi
 
 if [[ "$do_flatpak" == "true" ]]; then
   if ahr_has_cmd flatpak; then
-    log "Running flatpak update..."
-    flatpak update -y
+    flatpak_cmd=(flatpak update)
+    if [[ "$assume_yes" == "true" ]]; then
+      flatpak_cmd+=(-y)
+    fi
+
+    run_cmd "Running flatpak update" "${flatpak_cmd[@]}"
   else
-    log "flatpak not available; skipping flatpak updates."
+    log_and_print "flatpak not available; skipping flatpak updates"
   fi
 fi
 
-ahr_notify "Update" "Update complete"
+if [[ "$do_migrate" == "true" ]]; then
+  migration_runner="$FRAMEWORK_ROOT/bin/migrate.sh"
+  if [[ ! -f "$migration_runner" ]]; then
+    ahr_fail "Migration runner not found: $migration_runner"
+  fi
+
+  if [[ "$dry_run" == "true" ]]; then
+    log_and_print "Inspecting framework migrations (dry-run)"
+    migration_cmd=(bash "$migration_runner" --dry-run)
+    if [[ "$quiet" == "true" ]]; then
+      migration_cmd+=(--quiet)
+    fi
+    "${migration_cmd[@]}"
+  else
+    migration_cmd=(bash "$migration_runner" --non-interactive)
+    if [[ "$quiet" == "true" ]]; then
+      migration_cmd+=(--quiet)
+    fi
+    run_cmd "Running framework migrations" "${migration_cmd[@]}"
+  fi
+fi
+
+hook_runner="$FRAMEWORK_ROOT/bin/hook.sh"
+if [[ -f "$hook_runner" ]]; then
+  run_cmd "Running post-update hooks" bash "$hook_runner" post-update
+else
+  log_and_print "No hook runner found at $hook_runner; skipping post-update hooks"
+fi
 
 exit 0
