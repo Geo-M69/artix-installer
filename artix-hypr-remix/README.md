@@ -77,7 +77,7 @@ Notes:
 - Phase 5 runs startup preflight checks before making mode changes; missing greetd prerequisites fail early on non-dry-run.
 - In `--startup-mode greetd`, phase 5 attempts to install `greetd`, `greetd-openrc`, and the available tuigreet package variant (`greetd-tuigreet` or `tuigreet`).
 - In `--startup-mode greetd`, phase 5 enables greetd for the next boot and does not start it immediately during installer execution.
-- Phase 6 bootstraps `paru` if missing, then installs AUR packages as the target non-root user.
+- Phase 6 bootstraps `paru` if missing, repairs AUR cache/state directory ownership, and installs AUR packages as the target non-root user.
 - Phase 7 creates first-run state at `~/.local/state/artix-hypr-remix/first-run.mode`, installs scoped installer sudoers files, and initializes migration state under `~/.local/state/artix-hypr-remix/migrations`.
 - Phase 7 installs native command namespace links into `~/.local/bin` and writes a small Omarchy-compatible alias layer.
 - Phase 7 offers a reboot prompt (skipped when `--yes` is used) so first-run can execute immediately on next login.

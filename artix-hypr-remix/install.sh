@@ -199,7 +199,7 @@ run_aur_phase() {
 
 	resolve_target_user
 	ensure_paru_bootstrap "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
-	install_aur_packages "$TARGET_USER" "$DRY_RUN" "${packages[@]}"
+	install_aur_packages "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN" "${packages[@]}"
 }
 
 resolve_target_user() {
