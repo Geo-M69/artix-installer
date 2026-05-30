@@ -24,7 +24,6 @@ SKIP_AUR=false
 STARTUP_MODE="tty"
 GREETD_MODE="greeter"
 HARDWARE_MODE="recommend"
-DEV_SIMULATE_ARTIX=false
 TARGET_USER="${SUDO_USER:-}"
 TARGET_HOME=""
 
@@ -47,7 +46,6 @@ Options:
 	--startup-mode MODE  Startup mode for phase 5: tty (default) or greetd
 	--greetd-mode MODE   greetd session policy: autologin or greeter (default)
 	--hardware-mode MODE Hardware package mode for phase 2: recommend (default), auto, or off
-	--dev-simulate-artix Dev-only: allow dry-run execution on non-Artix hosts without pacman/OpenRC checks
 	--skip-aur    Skip phase 6 AUR install even when phase includes it
 	--dry-run     Print planned actions without changing the system
 	-y, --yes     Do not ask for confirmation
@@ -260,10 +258,6 @@ collect_hardware_recommended_packages() {
 run_preflight() {
 	info "[Phase 1/7] Running preflight checks"
 
-	if [[ "$DEV_SIMULATE_ARTIX" == "true" && "$DRY_RUN" != "true" ]]; then
-		error "--dev-simulate-artix is only allowed with --dry-run"
-	fi
-
 	if [[ "$EUID" -ne 0 ]]; then
 		if [[ "$DRY_RUN" == true ]]; then
 			warn "Dry-run without root: system-changing steps are not executed"
@@ -273,20 +267,12 @@ run_preflight() {
 	fi
 
 	if [[ ! -f /etc/artix-release ]]; then
-		if [[ "$DEV_SIMULATE_ARTIX" == "true" ]]; then
-			warn "Dev simulation enabled: skipping Artix host check (/etc/artix-release missing)."
-		else
-			warn "This does not look like Artix Linux (/etc/artix-release missing)."
-		fi
+		warn "This does not look like Artix Linux (/etc/artix-release missing)."
 	fi
 
-	if [[ "$DEV_SIMULATE_ARTIX" != "true" ]]; then
-		require_command pacman
-		require_command rc-update
-		require_command rc-service
-	else
-		warn "Dev simulation enabled: skipping pacman/OpenRC command checks"
-	fi
+	require_command pacman
+	require_command rc-update
+	require_command rc-service
 	require_command id
 	require_command getent
 
@@ -490,9 +476,6 @@ while [[ "$#" -gt 0 ]]; do
 			validate_hardware_mode "$1"
 			HARDWARE_MODE="$1"
 			;;
-		--dev-simulate-artix)
-			DEV_SIMULATE_ARTIX=true
-			;;
 		--dry-run)
 			DRY_RUN=true
 			;;
@@ -530,9 +513,6 @@ if [[ "$ASSUME_YES" == false ]]; then
 	fi
 	if (( TARGET_PHASE >= 2 )); then
 		info "Hardware package mode for phase 2: $HARDWARE_MODE"
-	fi
-	if [[ "$DEV_SIMULATE_ARTIX" == "true" ]]; then
-		info "Dev simulation mode: enabled"
 	fi
 	read -r -p "Continue? [y/N]: " response
 	case "${response,,}" in

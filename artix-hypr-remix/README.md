@@ -29,10 +29,6 @@ Hardware detection v1:
 - Use `--hardware-mode auto` to install detected profile packages without a prompt.
 - Use `--hardware-mode off` to disable hardware profile package handling.
 
-Dev-host simulation:
-- Use `--dev-simulate-artix` only with `--dry-run` when validating installer flow on non-Artix hosts.
-- This mode skips strict pacman/OpenRC preflight command checks while keeping phase logic intact.
-
 Phase 4 configuration strategy:
 - Use Omarchy as a reference and rewrite configs for Artix OpenRC portability.
 - Keep repo configs independent from Omarchy helper commands and systemd-only workflows.
@@ -57,7 +53,6 @@ Useful options:
     ./install.sh --phase 2 --hardware-mode recommend
     ./install.sh --phase 2 --hardware-mode auto
     ./install.sh --phase 2 --hardware-mode off
-    ./install.sh --phase 2 --dry-run --dev-simulate-artix -y
     ./install.sh --phase 6 --user <username>
     ./install.sh --phase 6 --user <username> --skip-aur
     ./install.sh --phase 7 --user <username>
@@ -81,12 +76,6 @@ Framework smoke test (works on non-Artix hosts):
 
     ./scripts/smoke-framework.sh
     ./scripts/smoke-framework.sh --keep-sandbox
-
-Installer smoke test with command shims (works on non-Artix hosts):
-
-    ./scripts/smoke-installer.sh
-    ./scripts/smoke-installer.sh -- --phase 2 --hardware-mode recommend
-    ./scripts/smoke-installer.sh -- --phase 5 --user <username> --startup-mode greetd
 
 Doctor note:
 - `paru` is reported as optional and does not fail doctor checks by itself.
