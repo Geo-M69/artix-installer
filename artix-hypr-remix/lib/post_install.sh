@@ -24,6 +24,29 @@ post_install_run_as_user() {
   error "Neither sudo nor runuser is available to run commands as '$target_user'"
 }
 
+ensure_user_runtime_paths() {
+  local target_user="$1"
+  local target_home="$2"
+  local dry_run="${3:-false}"
+  local state_root namespace_state user_bin
+
+  state_root="$target_home/.local/state"
+  namespace_state="$state_root/artix-hypr-remix"
+  user_bin="$target_home/.local/bin"
+
+  if [[ "$dry_run" == "true" ]]; then
+    info "Dry-run: would ensure user runtime paths and ownership"
+    info "  - $state_root"
+    info "  - $namespace_state"
+    info "  - $user_bin"
+    return 0
+  fi
+
+  install -d -m 0755 "$state_root" "$namespace_state" "$user_bin"
+  chown "$target_user:$target_user" "$state_root" "$user_bin"
+  chown -R "$target_user:$target_user" "$namespace_state"
+}
+
 create_first_run_mode_marker() {
   local target_user="$1"
   local target_home="$2"
@@ -190,6 +213,7 @@ prepare_post_install_framework() {
   local target_home="$2"
   local dry_run="${3:-false}"
 
+  ensure_user_runtime_paths "$target_user" "$target_home" "$dry_run"
   create_first_run_mode_marker "$target_user" "$target_home" "$dry_run"
   write_first_run_sudoers "$target_user" "$dry_run"
   write_reboot_sudoers "$target_user" "$dry_run"
