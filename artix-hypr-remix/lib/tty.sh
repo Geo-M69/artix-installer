@@ -266,9 +266,10 @@ EOF
   fi
 
   if [[ "$dry_run" == "true" ]]; then
-    info "Dry-run: would enable and start greetd OpenRC service"
+    info "Dry-run: would enable greetd OpenRC service (start deferred until reboot)"
   else
-    enable_service greetd default true
+    enable_service greetd default false
+    info "Enabled greetd service for next boot (not started during installer run)"
   fi
 }
 

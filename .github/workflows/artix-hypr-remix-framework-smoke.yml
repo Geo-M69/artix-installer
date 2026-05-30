@@ -1,0 +1,23 @@
+name: artix-hypr-remix framework smoke
+
+on:
+  push:
+    paths:
+      - "artix-hypr-remix/**"
+      - ".github/workflows/artix-hypr-remix-framework-smoke.yml"
+  pull_request:
+    paths:
+      - "artix-hypr-remix/**"
+      - ".github/workflows/artix-hypr-remix-framework-smoke.yml"
+
+jobs:
+  smoke-framework:
+    name: smoke framework (non-artix)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: run framework smoke test
+        run: bash artix-hypr-remix/scripts/smoke-framework.sh
