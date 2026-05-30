@@ -42,6 +42,8 @@ Useful options:
     ./install.sh --phase 5 --user <username>
     ./install.sh --phase 5 --user <username> --startup-mode tty
     ./install.sh --phase 5 --user <username> --startup-mode greetd
+    ./install.sh --phase 5 --user <username> --startup-mode greetd --greetd-mode autologin
+    ./install.sh --phase 5 --user <username> --startup-mode greetd --greetd-mode greeter
     ./install.sh --phase 6 --user <username>
     ./install.sh --phase 6 --user <username> --skip-aur
     ./install.sh --phase 7 --user <username>
@@ -74,6 +76,7 @@ Notes:
 - Phase 4 always replaces existing target config paths with timestamp backups.
 - Phase 4 runs `xdg-user-dirs-update` for the target user when available.
 - Phase 5 supports `--startup-mode tty|greetd` and uses `~/.config/artix-hypr-remix/bin/start-hyprland-session.sh` as the shared session launcher.
+- When `--startup-mode greetd` is selected, `--greetd-mode autologin|greeter` controls immediate session launch vs greeter prompt (default: `greeter`).
 - Phase 5 runs startup preflight checks before making mode changes; missing greetd prerequisites fail early on non-dry-run.
 - In `--startup-mode greetd`, phase 5 attempts to install `greetd`, `greetd-openrc`, and the available tuigreet package variant (`greetd-tuigreet` or `tuigreet`).
 - In `--startup-mode greetd`, phase 5 enables greetd for the next boot and does not start it immediately during installer execution.

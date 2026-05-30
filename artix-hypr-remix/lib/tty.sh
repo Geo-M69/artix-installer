@@ -230,6 +230,7 @@ configure_greetd_hyprland_autostart() {
   local target_user="$1"
   local target_home="$2"
   local dry_run="${3:-false}"
+  local greetd_mode="${4:-greeter}"
   local launcher_path
   local greetd_config
 
@@ -244,11 +245,13 @@ configure_greetd_hyprland_autostart() {
 
   if [[ "$dry_run" == "true" ]]; then
     info "Dry-run: would write greetd config to $greetd_config"
-    info "Dry-run: would set greetd autologin session to $launcher_path"
+    info "Dry-run: would set greetd session policy '$greetd_mode' with launcher $launcher_path"
   else
     install -d -m 0755 /etc/greetd
 
-    cat > "$greetd_config" <<EOF
+    case "$greetd_mode" in
+      autologin)
+        cat > "$greetd_config" <<EOF
 [terminal]
 vt = 1
 
@@ -260,9 +263,24 @@ user = "$target_user"
 command = "tuigreet --time --remember --remember-session --cmd 'bash $launcher_path'"
 user = "greeter"
 EOF
+        ;;
+      greeter)
+        cat > "$greetd_config" <<EOF
+[terminal]
+vt = 1
+
+[default_session]
+command = "tuigreet --time --remember --remember-session --cmd 'bash $launcher_path'"
+user = "greeter"
+EOF
+        ;;
+      *)
+        error "Unknown greetd mode: $greetd_mode"
+        ;;
+    esac
 
     chmod 0644 "$greetd_config"
-    info "Configured greetd startup at $greetd_config"
+    info "Configured greetd startup at $greetd_config (mode=$greetd_mode)"
   fi
 
   if [[ "$dry_run" == "true" ]]; then
@@ -297,6 +315,7 @@ configure_startup_mode() {
   local target_user="$2"
   local target_home="$3"
   local dry_run="${4:-false}"
+  local greetd_mode="${5:-greeter}"
 
   case "$mode" in
     tty)
@@ -306,7 +325,7 @@ configure_startup_mode() {
       write_startup_mode_state "$target_user" "$target_home" "$mode" "$dry_run"
       ;;
     greetd)
-      configure_greetd_hyprland_autostart "$target_user" "$target_home" "$dry_run"
+      configure_greetd_hyprland_autostart "$target_user" "$target_home" "$dry_run" "$greetd_mode"
       remove_tty_hyprland_autostart "$target_user" "$target_home" "$dry_run"
       write_startup_mode_state "$target_user" "$target_home" "$mode" "$dry_run"
       ;;

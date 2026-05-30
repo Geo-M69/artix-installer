@@ -26,6 +26,8 @@ Phase 5 is startup configuration.
 
 - `./install.sh --startup-mode tty`
 - `./install.sh --startup-mode greetd`
+- `./install.sh --startup-mode greetd --greetd-mode autologin`
+- `./install.sh --startup-mode greetd --greetd-mode greeter`
 
 Behavior:
 
@@ -34,7 +36,9 @@ Behavior:
   - Removes greetd from OpenRC runlevel (best effort).
 - `greetd` mode:
   - Removes managed tty startup block from `~/.bash_profile` and `~/.zprofile`.
-  - Writes `/etc/greetd/config.toml` for autologin + tuigreet fallback.
+  - Writes `/etc/greetd/config.toml` using the selected greetd policy:
+    - `autologin`: boot directly into Hyprland and keep tuigreet as fallback.
+    - `greeter` (default): show tuigreet login prompt on boot.
   - Enables greetd in OpenRC default runlevel.
 
 Mode state is written to:
@@ -59,7 +63,8 @@ We mirror the user experience goal (a polished DM path) but keep OpenRC-native i
 Minimum checks before release:
 
 1. Fresh install with `--startup-mode tty`.
-2. Fresh install with `--startup-mode greetd`.
-3. Run phase 5 to switch from `tty` to `greetd`.
-4. Run phase 5 to switch from `greetd` to `tty`.
-5. Verify first-run and post-boot hooks still execute.
+2. Fresh install with `--startup-mode greetd --greetd-mode autologin`.
+3. Fresh install with `--startup-mode greetd --greetd-mode greeter`.
+4. Run phase 5 to switch from `tty` to `greetd`.
+5. Run phase 5 to switch from `greetd` to `tty`.
+6. Verify first-run and post-boot hooks still execute.

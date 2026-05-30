@@ -21,6 +21,7 @@ ASSUME_YES=false
 DRY_RUN=false
 SKIP_AUR=false
 STARTUP_MODE="tty"
+GREETD_MODE="greeter"
 TARGET_USER="${SUDO_USER:-}"
 TARGET_HOME=""
 
@@ -41,6 +42,7 @@ Options:
 	--phase N     Run phases up to N (1-7). Default: 7
 	--user NAME   Target non-root desktop user for phases 4-7
 	--startup-mode MODE  Startup mode for phase 5: tty (default) or greetd
+	--greetd-mode MODE   greetd session policy: autologin or greeter (default)
 	--skip-aur    Skip phase 6 AUR install even when phase includes it
 	--dry-run     Print planned actions without changing the system
 	-y, --yes     Do not ask for confirmation
@@ -54,6 +56,15 @@ validate_startup_mode() {
 	case "$mode" in
 		tty|greetd) return 0 ;;
 		*) error "Invalid startup mode '$mode'. Use tty or greetd." ;;
+	esac
+}
+
+validate_greetd_mode() {
+	local mode="$1"
+
+	case "$mode" in
+		autologin|greeter) return 0 ;;
+		*) error "Invalid greetd mode '$mode'. Use autologin or greeter." ;;
 	esac
 }
 
@@ -281,7 +292,7 @@ run_startup_phase() {
 	resolve_target_user
 	ensure_startup_mode_packages
 	startup_mode_preflight "$STARTUP_MODE" "$TARGET_HOME" "$DRY_RUN"
-	configure_startup_mode "$STARTUP_MODE" "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
+	configure_startup_mode "$STARTUP_MODE" "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN" "$GREETD_MODE"
 }
 
 run_post_install_phase() {
@@ -313,6 +324,12 @@ while [[ "$#" -gt 0 ]]; do
 			validate_startup_mode "$1"
 			STARTUP_MODE="$1"
 			;;
+		--greetd-mode)
+			shift
+			[[ "$#" -gt 0 ]] || error "--greetd-mode requires a value (autologin|greeter)"
+			validate_greetd_mode "$1"
+			GREETD_MODE="$1"
+			;;
 		--dry-run)
 			DRY_RUN=true
 			;;
@@ -330,6 +347,10 @@ while [[ "$#" -gt 0 ]]; do
 	shift
 done
 
+if [[ "$STARTUP_MODE" != "greetd" && "$GREETD_MODE" != "greeter" ]]; then
+	warn "Ignoring --greetd-mode '$GREETD_MODE' because startup mode is '$STARTUP_MODE'"
+fi
+
 if [[ "$ASSUME_YES" == false ]]; then
 	info "Installer will run up to phase $TARGET_PHASE"
 	if (( TARGET_PHASE >= 4 )); then
@@ -340,6 +361,9 @@ if [[ "$ASSUME_YES" == false ]]; then
 	fi
 	if (( TARGET_PHASE >= 5 )); then
 		info "Startup mode for phase 5: $STARTUP_MODE"
+		if [[ "$STARTUP_MODE" == "greetd" ]]; then
+			info "greetd session policy: $GREETD_MODE"
+		fi
 	fi
 	read -r -p "Continue? [y/N]: " response
 	case "${response,,}" in
