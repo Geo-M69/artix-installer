@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+exec_ahr_command() {
+  local command_name="$1"
+  shift || true
+
+  if [[ -x "$SCRIPT_DIR/$command_name" ]]; then
+    exec "$SCRIPT_DIR/$command_name" "$@"
+  fi
+
+  if command -v "$command_name" >/dev/null 2>&1; then
+    exec "$command_name" "$@"
+  fi
+
+  printf 'Command not found: %s\n' "$command_name" >&2
+  exit 127
+}
+
 usage() {
   cat <<'EOF'
 Usage: ahr <command> [args]
@@ -30,20 +48,20 @@ dispatch() {
   shift || true
 
   case "$subcommand" in
-    menu) exec ahr-menu "$@" ;;
-    launch-terminal) exec ahr-launch-terminal "$@" ;;
-    launch-browser) exec ahr-launch-browser "$@" ;;
-    launch-files) exec ahr-launch-files "$@" ;;
-    launch-audio) exec ahr-launch-audio "$@" ;;
-    launch-wifi) exec ahr-launch-wifi "$@" ;;
-    default-browser) exec ahr-default-browser "$@" ;;
-    default-terminal) exec ahr-default-terminal "$@" ;;
-    update) exec ahr-update "$@" ;;
-    update-available) exec ahr-update-available "$@" ;;
-    migrate) exec ahr-migrate "$@" ;;
-    system-lock) exec ahr-system-lock "$@" ;;
-    system-reboot) exec ahr-system-reboot "$@" ;;
-    capture-screenshot) exec ahr-capture-screenshot "$@" ;;
+    menu) exec_ahr_command ahr-menu "$@" ;;
+    launch-terminal) exec_ahr_command ahr-launch-terminal "$@" ;;
+    launch-browser) exec_ahr_command ahr-launch-browser "$@" ;;
+    launch-files) exec_ahr_command ahr-launch-files "$@" ;;
+    launch-audio) exec_ahr_command ahr-launch-audio "$@" ;;
+    launch-wifi) exec_ahr_command ahr-launch-wifi "$@" ;;
+    default-browser) exec_ahr_command ahr-default-browser "$@" ;;
+    default-terminal) exec_ahr_command ahr-default-terminal "$@" ;;
+    update) exec_ahr_command ahr-update "$@" ;;
+    update-available) exec_ahr_command ahr-update-available "$@" ;;
+    migrate) exec_ahr_command ahr-migrate "$@" ;;
+    system-lock) exec_ahr_command ahr-system-lock "$@" ;;
+    system-reboot) exec_ahr_command ahr-system-reboot "$@" ;;
+    capture-screenshot) exec_ahr_command ahr-capture-screenshot "$@" ;;
     list)
       printf '%s\n' \
         "ahr-menu" \

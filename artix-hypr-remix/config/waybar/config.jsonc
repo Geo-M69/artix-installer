@@ -10,7 +10,7 @@
   "modules-right": ["group/tray-expander", "bluetooth", "network", "pulseaudio", "cpu", "battery"],
 
   "custom/remix": {
-    "format": "",
+    "format": "",
     "on-click": "ghostty",
     "on-click-right": "nautilus",
     "tooltip-format": "artix-hypr-remix"

@@ -63,7 +63,11 @@ fi
 mkdir -p "$STATE_DIR"
 touch "$LOG_FILE"
 
-log() { [[ "$quiet" == "false" ]] && printf '%s\n' "$1"; }
+log() {
+  if [[ "$quiet" == "false" ]]; then
+    printf '%s\n' "$1"
+  fi
+}
 
 log_line() {
   local message="$1"

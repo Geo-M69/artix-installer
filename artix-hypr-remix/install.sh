@@ -20,6 +20,7 @@ TARGET_PHASE=7
 ASSUME_YES=false
 DRY_RUN=false
 SKIP_AUR=false
+STARTUP_MODE="tty"
 TARGET_USER="${SUDO_USER:-}"
 TARGET_HOME=""
 
@@ -32,18 +33,28 @@ Phases:
 	2. Install packages from packages/[0-8]0-*.txt
 	3. Enable safe OpenRC services from services/openrc-default.txt
 	4. Deploy repo config/ into target user's ~/.config (copy + backup)
-	5. Configure tty1 login to start Hyprland for target user
+	5. Configure startup mode for Hyprland (tty or greetd)
 	6. Install AUR packages from packages/90-*.txt with safe paru bootstrap
 	7. Prepare first-run + post-install framework and migration state
 
 Options:
 	--phase N     Run phases up to N (1-7). Default: 7
 	--user NAME   Target non-root desktop user for phases 4-7
+	--startup-mode MODE  Startup mode for phase 5: tty (default) or greetd
 	--skip-aur    Skip phase 6 AUR install even when phase includes it
 	--dry-run     Print planned actions without changing the system
 	-y, --yes     Do not ask for confirmation
 	-h, --help    Show this help
 EOF
+}
+
+validate_startup_mode() {
+	local mode="$1"
+
+	case "$mode" in
+		tty|greetd) return 0 ;;
+		*) error "Invalid startup mode '$mode'. Use tty or greetd." ;;
+	esac
 }
 
 trim_whitespace() {
@@ -219,10 +230,10 @@ run_dotfiles_phase() {
 	initialize_xdg_user_dirs "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }
 
-run_tty_phase() {
-	info "[Phase 5/7] Configuring tty1 Hyprland startup"
+run_startup_phase() {
+	info "[Phase 5/7] Configuring startup mode '$STARTUP_MODE' for Hyprland"
 	resolve_target_user
-	configure_tty_hyprland_autostart "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
+	configure_startup_mode "$STARTUP_MODE" "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }
 
 run_post_install_phase() {
@@ -247,6 +258,12 @@ while [[ "$#" -gt 0 ]]; do
 			shift
 			[[ "$#" -gt 0 ]] || error "--user requires a username"
 			TARGET_USER="$1"
+			;;
+		--startup-mode)
+			shift
+			[[ "$#" -gt 0 ]] || error "--startup-mode requires a value (tty|greetd)"
+			validate_startup_mode "$1"
+			STARTUP_MODE="$1"
 			;;
 		--dry-run)
 			DRY_RUN=true
@@ -273,6 +290,9 @@ if [[ "$ASSUME_YES" == false ]]; then
 	if (( TARGET_PHASE >= 6 )) && [[ "$SKIP_AUR" == true ]]; then
 		info "AUR phase will be skipped (--skip-aur)"
 	fi
+	if (( TARGET_PHASE >= 5 )); then
+		info "Startup mode for phase 5: $STARTUP_MODE"
+	fi
 	read -r -p "Continue? [y/N]: " response
 	case "${response,,}" in
 		y|yes) ;;
@@ -293,7 +313,7 @@ if (( TARGET_PHASE >= 4 )); then
 	run_dotfiles_phase
 fi
 if (( TARGET_PHASE >= 5 )); then
-	run_tty_phase
+	run_startup_phase
 fi
 if (( TARGET_PHASE >= 6 )); then
 	run_aur_phase
