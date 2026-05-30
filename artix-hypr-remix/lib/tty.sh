@@ -199,11 +199,16 @@ startup_mode_preflight() {
     return 0
   fi
 
+  warn "Startup preflight ($mode): missing prerequisites detected"
+  for detail in "${missing[@]}"; do
+    warn "  - $detail"
+  done
+
+  if [[ "$mode" == "greetd" ]]; then
+    warn "Suggested packages: greetd tuigreet greetd-openrc"
+  fi
+
   if [[ "$dry_run" == "true" ]]; then
-    warn "Startup preflight ($mode): missing prerequisites detected"
-    for detail in "${missing[@]}"; do
-      warn "  - $detail"
-    done
     warn "Dry-run continues; non-dry-run would fail until prerequisites are installed"
     return 0
   fi
