@@ -233,6 +233,7 @@ run_dotfiles_phase() {
 run_startup_phase() {
 	info "[Phase 5/7] Configuring startup mode '$STARTUP_MODE' for Hyprland"
 	resolve_target_user
+	startup_mode_preflight "$STARTUP_MODE" "$TARGET_HOME" "$DRY_RUN"
 	configure_startup_mode "$STARTUP_MODE" "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }
 

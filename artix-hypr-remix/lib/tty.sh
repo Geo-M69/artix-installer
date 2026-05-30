@@ -163,6 +163,64 @@ ensure_session_launcher_present() {
   chmod 0755 "$launcher_path"
 }
 
+startup_mode_preflight() {
+  local mode="$1"
+  local target_home="$2"
+  local dry_run="${3:-false}"
+  local launcher_path
+  local detail
+  local -a missing=()
+
+  launcher_path="$(startup_session_launcher "$target_home")"
+
+  if [[ ! -f "$launcher_path" ]]; then
+    missing+=("session launcher: $launcher_path")
+  fi
+
+  case "$mode" in
+    tty)
+      ;;
+    greetd)
+      if [[ ! -x /etc/init.d/greetd ]]; then
+        missing+=("OpenRC service: /etc/init.d/greetd")
+      fi
+
+      if ! command -v tuigreet >/dev/null 2>&1; then
+        missing+=("command: tuigreet")
+      fi
+      ;;
+    *)
+      error "Unknown startup mode in preflight: $mode"
+      ;;
+  esac
+
+  if (( ${#missing[@]} == 0 )); then
+    info "Startup preflight ($mode): prerequisites satisfied"
+    return 0
+  fi
+
+  if [[ "$dry_run" == "true" ]]; then
+    warn "Startup preflight ($mode): missing prerequisites detected"
+    for detail in "${missing[@]}"; do
+      warn "  - $detail"
+    done
+    warn "Dry-run continues; non-dry-run would fail until prerequisites are installed"
+    return 0
+  fi
+
+  error "Startup preflight ($mode) failed. Install missing prerequisites and retry."
+}
+
+ensure_greetd_prereqs() {
+  if [[ ! -x /etc/init.d/greetd ]]; then
+    error "greetd OpenRC service is missing (/etc/init.d/greetd). Install greetd with OpenRC service support before using --startup-mode greetd."
+  fi
+
+  if ! command -v tuigreet >/dev/null 2>&1; then
+    error "tuigreet is missing. Install tuigreet before using --startup-mode greetd."
+  fi
+}
+
 configure_greetd_hyprland_autostart() {
   local target_user="$1"
   local target_home="$2"
@@ -175,18 +233,14 @@ configure_greetd_hyprland_autostart() {
 
   ensure_session_launcher_present "$target_home" "$dry_run"
 
+  if [[ "$dry_run" == "false" ]]; then
+    ensure_greetd_prereqs
+  fi
+
   if [[ "$dry_run" == "true" ]]; then
     info "Dry-run: would write greetd config to $greetd_config"
     info "Dry-run: would set greetd autologin session to $launcher_path"
   else
-    if [[ ! -x /etc/init.d/greetd ]]; then
-      error "greetd OpenRC service is missing (/etc/init.d/greetd). Install greetd before using --startup-mode greetd."
-    fi
-
-    if ! command -v tuigreet >/dev/null 2>&1; then
-      error "tuigreet is missing. Install tuigreet before using --startup-mode greetd."
-    fi
-
     install -d -m 0755 /etc/greetd
 
     cat > "$greetd_config" <<EOF
@@ -246,8 +300,8 @@ configure_startup_mode() {
       write_startup_mode_state "$target_user" "$target_home" "$mode" "$dry_run"
       ;;
     greetd)
-      remove_tty_hyprland_autostart "$target_user" "$target_home" "$dry_run"
       configure_greetd_hyprland_autostart "$target_user" "$target_home" "$dry_run"
+      remove_tty_hyprland_autostart "$target_user" "$target_home" "$dry_run"
       write_startup_mode_state "$target_user" "$target_home" "$mode" "$dry_run"
       ;;
     *)

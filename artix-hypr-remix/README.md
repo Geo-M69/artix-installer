@@ -74,6 +74,7 @@ Notes:
 - Phase 4 always replaces existing target config paths with timestamp backups.
 - Phase 4 runs `xdg-user-dirs-update` for the target user when available.
 - Phase 5 supports `--startup-mode tty|greetd` and uses `~/.config/artix-hypr-remix/bin/start-hyprland-session.sh` as the shared session launcher.
+- Phase 5 runs startup preflight checks before making mode changes; missing greetd prerequisites fail early on non-dry-run.
 - Phase 6 bootstraps `paru` if missing, then installs AUR packages as the target non-root user.
 - Phase 7 creates first-run state at `~/.local/state/artix-hypr-remix/first-run.mode`, installs scoped installer sudoers files, and initializes migration state under `~/.local/state/artix-hypr-remix/migrations`.
 - Phase 7 installs native command namespace links into `~/.local/bin` and writes a small Omarchy-compatible alias layer.
