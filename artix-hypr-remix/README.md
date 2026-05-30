@@ -20,7 +20,7 @@ Current installer milestone:
 3. Enable safe OpenRC services from `services/openrc-default.txt`.
 4. Deploy `config/` into the target user's `~/.config` using copy + timestamp backups, then initialize XDG user directories.
 5. Configure startup mode for Hyprland (`tty` default or optional `greetd`).
-6. Install AUR packages from `packages/90-*.txt` with safe `paru` bootstrap.
+6. Install AUR packages and Flatpak app profiles (`flatpaks/default.txt` by default).
 7. Prepare first-run/post-install framework, initialize migration state, and offer reboot prompt.
 
 Hardware detection v1:
@@ -55,6 +55,11 @@ Useful options:
     ./install.sh --phase 2 --hardware-mode off
     ./install.sh --phase 6 --user <username>
     ./install.sh --phase 6 --user <username> --skip-aur
+    ./install.sh --phase 6 --user <username> --skip-flatpak
+    ./install.sh --phase 6 --user <username> --flatpak-profile default
+    ./install.sh --phase 6 --user <username> --flatpak-profile optional
+    ./install.sh --phase 6 --user <username> --flatpak-profile all
+    ./install.sh --phase 6 --user <username> --flatpak-profile none
     ./install.sh --phase 7 --user <username>
 
 Config dependency validation:
@@ -86,6 +91,7 @@ Emergency recovery (if keybinds do not load):
 
 Notes:
 - `packages/90-aur.txt` is consumed by phase 6.
+- `flatpaks/default.txt` and `flatpaks/optional.txt` are consumed by phase 6.
 - Hardware profile package stubs are in `config/hardware/<profile>/packages.txt`.
 - `services/openrc-boot.txt` is not managed by the desktop installer.
 - Phase 4 always replaces existing target config paths with timestamp backups.
@@ -98,6 +104,8 @@ Notes:
 - greetd config is generated on VT7 to avoid input collisions with tty1 getty prompts.
 - Hardware profile snapshots are written to `/var/lib/artix-hypr-remix/hardware-profile.json` when installer runs as root.
 - Phase 6 bootstraps `paru` if missing, repairs AUR cache/state directory ownership, and installs AUR packages as the target non-root user.
+- Phase 6 installs Flatpak refs from `flatpaks/default.txt` by default (`--flatpak-profile optional|all|none` and `--skip-flatpak` are available).
+- Flatpak refs are installed with system scope and Flathub remote bootstrap (`flathub`) when missing.
 - Phase 7 creates first-run state at `~/.local/state/artix-hypr-remix/first-run.mode`, installs scoped installer sudoers files, and initializes migration state under `~/.local/state/artix-hypr-remix/migrations`.
 - Phase 7 installs native command namespace links into `~/.local/bin` and writes a small Omarchy-compatible alias layer.
 - Phase 7 offers a reboot prompt (skipped when `--yes` is used) so first-run can execute immediately on next login.

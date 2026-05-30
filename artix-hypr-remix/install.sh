@@ -15,15 +15,18 @@ source "$LIB_DIR/openrc.sh"
 source "$LIB_DIR/dotfiles.sh"
 source "$LIB_DIR/tty.sh"
 source "$LIB_DIR/hardware.sh"
+source "$LIB_DIR/flatpak.sh"
 source "$LIB_DIR/post_install.sh"
 
 TARGET_PHASE=7
 ASSUME_YES=false
 DRY_RUN=false
 SKIP_AUR=false
+SKIP_FLATPAK=false
 STARTUP_MODE="tty"
 GREETD_MODE="greeter"
 HARDWARE_MODE="recommend"
+FLATPAK_PROFILE="default"
 TARGET_USER="${SUDO_USER:-}"
 TARGET_HOME=""
 
@@ -37,7 +40,7 @@ Phases:
 	3. Enable safe OpenRC services from services/openrc-default.txt
 	4. Deploy repo config/ into target user's ~/.config (copy + backup)
 	5. Configure startup mode for Hyprland (tty or greetd)
-	6. Install AUR packages from packages/90-*.txt with safe paru bootstrap
+	6. Install AUR packages and Flatpak app profiles
 	7. Prepare first-run + post-install framework and migration state
 
 Options:
@@ -46,7 +49,9 @@ Options:
 	--startup-mode MODE  Startup mode for phase 5: tty (default) or greetd
 	--greetd-mode MODE   greetd session policy: autologin or greeter (default)
 	--hardware-mode MODE Hardware package mode for phase 2: recommend (default), auto, or off
+	--flatpak-profile MODE Flatpak app profile for phase 6: default (default), optional, all, or none
 	--skip-aur    Skip phase 6 AUR install even when phase includes it
+	--skip-flatpak Skip Flatpak profile install in phase 6
 	--dry-run     Print planned actions without changing the system
 	-y, --yes     Do not ask for confirmation
 	-h, --help    Show this help
@@ -77,6 +82,15 @@ validate_hardware_mode() {
 	case "$mode" in
 		recommend|auto|off) return 0 ;;
 		*) error "Invalid hardware mode '$mode'. Use recommend, auto, or off." ;;
+	esac
+}
+
+validate_flatpak_profile() {
+	local mode="$1"
+
+	case "$mode" in
+		default|optional|all|none) return 0 ;;
+		*) error "Invalid Flatpak profile '$mode'. Use default, optional, all, or none." ;;
 	esac
 }
 
@@ -353,6 +367,18 @@ run_aur_phase() {
 	install_aur_packages "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN" "${packages[@]}"
 }
 
+run_flatpak_phase() {
+	local profile_root="$SCRIPT_DIR/flatpaks"
+
+	if [[ "$SKIP_FLATPAK" == true || "$FLATPAK_PROFILE" == "none" ]]; then
+		info "[Phase 6/7] Skipping Flatpak profile install"
+		return 0
+	fi
+
+	info "[Phase 6/7] Installing Flatpak profile '$FLATPAK_PROFILE'"
+	install_flatpak_profile "$profile_root" "$FLATPAK_PROFILE" "$DRY_RUN"
+}
+
 resolve_target_user() {
 	if [[ -z "$TARGET_USER" || "$TARGET_USER" == "root" ]]; then
 		if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
@@ -453,6 +479,9 @@ while [[ "$#" -gt 0 ]]; do
 		--skip-aur)
 			SKIP_AUR=true
 			;;
+		--skip-flatpak)
+			SKIP_FLATPAK=true
+			;;
 		--user)
 			shift
 			[[ "$#" -gt 0 ]] || error "--user requires a username"
@@ -475,6 +504,12 @@ while [[ "$#" -gt 0 ]]; do
 			[[ "$#" -gt 0 ]] || error "--hardware-mode requires a value (recommend|auto|off)"
 			validate_hardware_mode "$1"
 			HARDWARE_MODE="$1"
+			;;
+		--flatpak-profile)
+			shift
+			[[ "$#" -gt 0 ]] || error "--flatpak-profile requires a value (default|optional|all|none)"
+			validate_flatpak_profile "$1"
+			FLATPAK_PROFILE="$1"
 			;;
 		--dry-run)
 			DRY_RUN=true
@@ -504,6 +539,13 @@ if [[ "$ASSUME_YES" == false ]]; then
 	fi
 	if (( TARGET_PHASE >= 6 )) && [[ "$SKIP_AUR" == true ]]; then
 		info "AUR phase will be skipped (--skip-aur)"
+	fi
+	if (( TARGET_PHASE >= 6 )); then
+		if [[ "$SKIP_FLATPAK" == true ]]; then
+			info "Flatpak install will be skipped (--skip-flatpak)"
+		else
+			info "Flatpak profile mode for phase 6: $FLATPAK_PROFILE"
+		fi
 	fi
 	if (( TARGET_PHASE >= 5 )); then
 		info "Startup mode for phase 5: $STARTUP_MODE"
@@ -538,6 +580,7 @@ if (( TARGET_PHASE >= 5 )); then
 fi
 if (( TARGET_PHASE >= 6 )); then
 	run_aur_phase
+	run_flatpak_phase
 fi
 if (( TARGET_PHASE >= 7 )); then
 	run_post_install_phase
