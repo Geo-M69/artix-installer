@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_THEME_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-theme-lib.sh}"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr-theme <command> [args]
+
+Commands:
+  list [--raw]                      List available themes
+  current [--raw]                   Show current theme
+  set [--quiet] [--skip-background] <theme>
+                                    Apply a theme
+  refresh [--quiet]                 Re-apply current theme
+  bg-next                           Cycle to next background for current theme
+  bg-set <path>                     Set specific background image
+  set-templates [dir]               Render templates into target directory
+  colors-from-alacritty [dir]       Generate colors.toml from alacritty.toml
+  help                              Show this help
+EOF
+}
+
+cmd_list() {
+  local raw=false
+  while (( $# > 0 )); do
+    case "$1" in
+      --raw) raw=true ;;
+      -h|--help) usage; exit 0 ;;
+      *) ahr_fail "Unknown option for list: $1" ;;
+    esac
+    shift
+  done
+
+  if [[ "$raw" == "true" ]]; then
+    ahr_theme_list_raw
+  else
+    ahr_theme_list_pretty
+  fi
+}
+
+cmd_current() {
+  local raw=false
+  while (( $# > 0 )); do
+    case "$1" in
+      --raw) raw=true ;;
+      -h|--help) usage; exit 0 ;;
+      *) ahr_fail "Unknown option for current: $1" ;;
+    esac
+    shift
+  done
+
+  if [[ "$raw" == "true" ]]; then
+    if ! ahr_theme_current_raw; then
+      exit 1
+    fi
+  else
+    if ! ahr_theme_current_pretty; then
+      exit 1
+    fi
+  fi
+}
+
+cmd_set() {
+  local quiet=false
+  local skip_background=false
+  local theme_name=""
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --quiet) quiet=true ;;
+      --skip-background) skip_background=true ;;
+      -h|--help) usage; exit 0 ;;
+      --) shift; break ;;
+      -*) ahr_fail "Unknown option for set: $1" ;;
+      *)
+        theme_name="$1"
+        shift
+        break
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$theme_name" && $# -gt 0 ]]; then
+    theme_name="$1"
+    shift
+  fi
+
+  [[ -z "$theme_name" ]] && ahr_fail "Usage: ahr-theme set [--quiet] [--skip-background] <theme>"
+  (( $# == 0 )) || ahr_fail "Unexpected extra arguments for set"
+
+  AHR_THEME_QUIET="$quiet"
+  if [[ "$skip_background" == "true" ]]; then
+    AHR_THEME_SKIP_BACKGROUND=1
+  fi
+
+  ahr_theme_set "$theme_name"
+}
+
+cmd_refresh() {
+  local quiet=false
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --quiet) quiet=true ;;
+      -h|--help) usage; exit 0 ;;
+      *) ahr_fail "Unknown option for refresh: $1" ;;
+    esac
+    shift
+  done
+
+  AHR_THEME_QUIET="$quiet"
+  ahr_theme_refresh
+}
+
+cmd_bg_next() {
+  (( $# == 0 )) || ahr_fail "Usage: ahr-theme bg-next"
+  ahr_theme_bg_next
+}
+
+cmd_bg_set() {
+  (( $# == 1 )) || ahr_fail "Usage: ahr-theme bg-set <path>"
+  ahr_theme_bg_set "$1"
+}
+
+cmd_set_templates() {
+  local target_dir="${1:-$AHR_THEME_NEXT_THEME_DIR}"
+  (( $# <= 1 )) || ahr_fail "Usage: ahr-theme set-templates [dir]"
+  ahr_theme_set_templates "$target_dir"
+}
+
+cmd_colors_from_alacritty() {
+  local target_dir="${1:-$AHR_THEME_CURRENT_THEME_DIR}"
+  (( $# <= 1 )) || ahr_fail "Usage: ahr-theme colors-from-alacritty [dir]"
+  ahr_theme_colors_from_alacritty "$target_dir"
+}
+
+dispatch() {
+  local subcommand="${1:-help}"
+  shift || true
+
+  case "$subcommand" in
+    list) cmd_list "$@" ;;
+    current) cmd_current "$@" ;;
+    set) cmd_set "$@" ;;
+    refresh) cmd_refresh "$@" ;;
+    bg-next) cmd_bg_next "$@" ;;
+    bg-set) cmd_bg_set "$@" ;;
+    set-templates) cmd_set_templates "$@" ;;
+    colors-from-alacritty) cmd_colors_from_alacritty "$@" ;;
+    help|-h|--help) usage ;;
+    *)
+      printf 'Unknown theme command: %s\n\n' "$subcommand" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+dispatch "$@"

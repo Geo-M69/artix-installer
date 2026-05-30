@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+theme_refresh="$HOME/.config/artix-hypr-remix/bin/ahr-theme-refresh"
+
+if [[ -x "$theme_refresh" ]]; then
+  if "$theme_refresh" --quiet; then
+    exit 0
+  fi
+fi
+
 if ! command -v gsettings >/dev/null 2>&1; then
   echo "Skipping GNOME theme setup: gsettings not found"
   exit 0

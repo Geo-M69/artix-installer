@@ -19,6 +19,15 @@ target_dir="$HOME/.local/bin"
 declare -a commands=(
   ahr
   ahr-menu
+  ahr-theme
+  ahr-theme-list
+  ahr-theme-current
+  ahr-theme-set
+  ahr-theme-refresh
+  ahr-theme-bg-next
+  ahr-theme-bg-set
+  ahr-theme-set-templates
+  ahr-theme-colors-from-alacritty
   ahr-launch-terminal
   ahr-launch-browser
   ahr-launch-files
@@ -36,6 +45,15 @@ declare -a commands=(
 
 declare -a aliases=(
   "omarchy-menu:ahr-menu"
+  "omarchy-theme:ahr-theme"
+  "omarchy-theme-list:ahr-theme-list"
+  "omarchy-theme-current:ahr-theme-current"
+  "omarchy-theme-set:ahr-theme-set"
+  "omarchy-theme-refresh:ahr-theme-refresh"
+  "omarchy-theme-bg-next:ahr-theme-bg-next"
+  "omarchy-theme-bg-set:ahr-theme-bg-set"
+  "omarchy-theme-set-templates:ahr-theme-set-templates"
+  "omarchy-theme-colors-from-alacritty:ahr-theme-colors-from-alacritty"
   "omarchy-launch-terminal:ahr-launch-terminal"
   "omarchy-launch-browser:ahr-launch-browser"
   "omarchy-launch-nautilus:ahr-launch-files"

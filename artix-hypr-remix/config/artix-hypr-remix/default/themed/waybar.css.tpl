@@ -1,0 +1,175 @@
+* {
+	background-color: {{ background }};
+	color: {{ foreground }};
+
+	border: none;
+	border-radius: 0;
+	min-height: 0;
+	font-family: "JetBrainsMono Nerd Font", "Font Awesome 6 Free", "Noto Color Emoji", monospace;
+	font-size: 12px;
+}
+
+.modules-left {
+	margin-left: 8px;
+}
+
+.modules-right {
+	margin-right: 8px;
+}
+
+#workspaces button {
+	all: initial;
+	padding: 0 6px;
+	margin: 0 1.5px;
+	min-width: 9px;
+}
+
+#workspaces button.empty {
+	opacity: 0.5;
+}
+
+#cpu,
+#battery,
+#pulseaudio,
+#custom-remix {
+	min-width: 12px;
+	margin: 0 7.5px;
+}
+
+#tray {
+	margin-right: 16px;
+}
+
+#bluetooth {
+	margin-right: 17px;
+}
+
+#network {
+	margin-right: 13px;
+}
+
+#custom-expand-icon {
+	margin-right: 18px;
+}
+
+tooltip {
+	padding: 2px;
+}
+
+#clock {
+	margin-left: 8.75px;
+}
+
+#clock,
+#custom-remix {
+	color: {{ accent }};
+}
+
+.left .modules-left,
+.right .modules-left {
+	margin: 8px 0 0 0;
+}
+
+.left .modules-right,
+.right .modules-right {
+	margin: 0 0 8px 0;
+}
+
+.left #workspaces button,
+.right #workspaces button {
+	padding: 6px 0;
+	margin: 1.5px 0;
+}
+
+.left #cpu,
+.right #cpu,
+.left #battery,
+.right #battery,
+.left #pulseaudio,
+.right #pulseaudio,
+.left #custom-remix,
+.right #custom-remix {
+	margin: 1.5px 0;
+	padding: 6px 0;
+	min-width: 0;
+	min-height: 12px;
+}
+
+.left #tray,
+.right #tray {
+	margin: 0 0 16px 0;
+}
+
+.left #bluetooth,
+.right #bluetooth {
+	margin: 1.5px 0;
+	padding: 6px 0;
+	min-height: 12px;
+}
+
+.left #network,
+.right #network {
+	margin: 1.5px 0;
+	padding: 6px 0;
+	min-height: 12px;
+}
+
+.left #custom-expand-icon,
+.right #custom-expand-icon {
+	margin: 1.5px 0;
+	padding: 6px 0;
+	min-height: 12px;
+}
+
+.left #clock,
+.right #clock {
+	margin: 8.75px 0 0 0;
+}
+
+#custom-expand-icon.vertical,
+.left #custom-expand-icon.horizontal,
+.right #custom-expand-icon.horizontal {
+	opacity: 0;
+	font-size: 0;
+	min-width: 0;
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+}
+
+.left #custom-expand-icon.vertical,
+.right #custom-expand-icon.vertical {
+	opacity: 1;
+	font-size: inherit;
+	min-width: 0;
+	min-height: 12px;
+	margin: 1.5px 0;
+	padding: 6px 0;
+}
+
+#clock.vertical,
+.left #clock.horizontal,
+.right #clock.horizontal {
+	opacity: 0;
+	font-size: 0;
+	min-width: 0;
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+}
+
+.left #clock.vertical,
+.right #clock.vertical {
+	opacity: 1;
+	font-size: inherit;
+	min-width: 0;
+	min-height: 12px;
+	margin: 8.75px 0 0 0;
+}
+
+#battery.warning,
+#battery.critical,
+#pulseaudio.muted,
+#network.disconnected {
+	color: {{ color9 }};
+}

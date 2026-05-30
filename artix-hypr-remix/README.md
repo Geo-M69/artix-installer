@@ -111,6 +111,7 @@ Notes:
 - Phase 7 offers a reboot prompt (skipped when `--yes` is used) so first-run can execute immediately on next login.
 - First user login runs `~/.config/artix-hypr-remix/bin/first-run.sh` from Hyprland autostart and then removes first-run marker state.
 - Post-boot hook execution runs `~/.config/artix-hypr-remix/bin/hook.sh post-boot`, which includes automatic migration runner execution.
+- Theme engine v1 stores state in `~/.config/artix-hypr-remix/current`, supports Omarchy theme assets, and can create a compatibility symlink at `~/.config/omarchy/current` when unused.
 - Namespace specification and command inventory are documented in `COMMAND_NAMESPACE.md`.
 - Startup architecture contract is documented in `STARTUP_ARCHITECTURE.md`.
 
@@ -141,6 +142,14 @@ Command namespace:
 
     ~/.config/artix-hypr-remix/bin/namespace-install.sh
     ahr help
+
+Theme workflow:
+
+    ahr theme list
+    ahr theme set artix-dark
+    ahr theme current
+    ahr theme bg-next
+    ahr theme refresh
 
 Package policy:
 1. Prefer Artix/pacman packages.

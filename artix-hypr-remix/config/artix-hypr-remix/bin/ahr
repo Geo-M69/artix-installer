@@ -25,6 +25,7 @@ Usage: ahr <command> [args]
 
 Commands:
   menu                Open application launcher
+  theme               Theme engine command group
   launch-terminal     Open terminal
   launch-browser      Open browser
   launch-files        Open file manager
@@ -49,6 +50,7 @@ dispatch() {
 
   case "$subcommand" in
     menu) exec_ahr_command ahr-menu "$@" ;;
+    theme) exec_ahr_command ahr-theme "$@" ;;
     launch-terminal) exec_ahr_command ahr-launch-terminal "$@" ;;
     launch-browser) exec_ahr_command ahr-launch-browser "$@" ;;
     launch-files) exec_ahr_command ahr-launch-files "$@" ;;
@@ -65,6 +67,7 @@ dispatch() {
     list)
       printf '%s\n' \
         "ahr-menu" \
+        "ahr-theme" \
         "ahr-launch-terminal" \
         "ahr-launch-browser" \
         "ahr-launch-files" \
