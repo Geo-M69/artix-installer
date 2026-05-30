@@ -230,9 +230,56 @@ run_dotfiles_phase() {
 	initialize_xdg_user_dirs "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }
 
+detect_tuigreet_package() {
+	local candidate
+
+	if command -v tuigreet >/dev/null 2>&1; then
+		printf '%s\n' ""
+		return 0
+	fi
+
+	for candidate in greetd-tuigreet tuigreet; do
+		if pacman -Si "$candidate" >/dev/null 2>&1; then
+			printf '%s\n' "$candidate"
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+ensure_startup_mode_packages() {
+	local -a startup_packages=()
+	local tuigreet_pkg
+
+	if [[ "$STARTUP_MODE" != "greetd" ]]; then
+		return 0
+	fi
+
+	startup_packages+=(greetd greetd-openrc)
+
+	if tuigreet_pkg="$(detect_tuigreet_package)"; then
+		if [[ -n "$tuigreet_pkg" ]]; then
+			startup_packages+=("$tuigreet_pkg")
+		fi
+	else
+		warn "Could not resolve tuigreet package name from repositories (tried: greetd-tuigreet, tuigreet)."
+	fi
+
+	if [[ "$DRY_RUN" == true ]]; then
+		info "Dry-run: would ensure startup packages for greetd mode"
+		printf '  - %s\n' "${startup_packages[@]}"
+		return 0
+	fi
+
+	refresh_package_databases
+	install_packages "${startup_packages[@]}"
+}
+
 run_startup_phase() {
 	info "[Phase 5/7] Configuring startup mode '$STARTUP_MODE' for Hyprland"
 	resolve_target_user
+	ensure_startup_mode_packages
 	startup_mode_preflight "$STARTUP_MODE" "$TARGET_HOME" "$DRY_RUN"
 	configure_startup_mode "$STARTUP_MODE" "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }

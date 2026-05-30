@@ -205,7 +205,7 @@ startup_mode_preflight() {
   done
 
   if [[ "$mode" == "greetd" ]]; then
-    warn "Suggested packages: greetd tuigreet greetd-openrc"
+    warn "Suggested packages: greetd greetd-openrc greetd-tuigreet (or tuigreet, depending on repository naming)"
   fi
 
   if [[ "$dry_run" == "true" ]]; then
