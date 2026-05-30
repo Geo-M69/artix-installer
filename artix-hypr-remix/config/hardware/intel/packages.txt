@@ -1,0 +1,4 @@
+# Recommended Intel graphics profile packages.
+# Keep this list focused on packages not guaranteed by base sets.
+vulkan-intel
+intel-media-driver

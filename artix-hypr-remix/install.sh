@@ -14,6 +14,7 @@ source "$LIB_DIR/aur.sh"
 source "$LIB_DIR/openrc.sh"
 source "$LIB_DIR/dotfiles.sh"
 source "$LIB_DIR/tty.sh"
+source "$LIB_DIR/hardware.sh"
 source "$LIB_DIR/post_install.sh"
 
 TARGET_PHASE=7
@@ -22,6 +23,8 @@ DRY_RUN=false
 SKIP_AUR=false
 STARTUP_MODE="tty"
 GREETD_MODE="greeter"
+HARDWARE_MODE="recommend"
+DEV_SIMULATE_ARTIX=false
 TARGET_USER="${SUDO_USER:-}"
 TARGET_HOME=""
 
@@ -43,6 +46,8 @@ Options:
 	--user NAME   Target non-root desktop user for phases 4-7
 	--startup-mode MODE  Startup mode for phase 5: tty (default) or greetd
 	--greetd-mode MODE   greetd session policy: autologin or greeter (default)
+	--hardware-mode MODE Hardware package mode for phase 2: recommend (default), auto, or off
+	--dev-simulate-artix Dev-only: allow dry-run execution on non-Artix hosts without pacman/OpenRC checks
 	--skip-aur    Skip phase 6 AUR install even when phase includes it
 	--dry-run     Print planned actions without changing the system
 	-y, --yes     Do not ask for confirmation
@@ -65,6 +70,15 @@ validate_greetd_mode() {
 	case "$mode" in
 		autologin|greeter) return 0 ;;
 		*) error "Invalid greetd mode '$mode'. Use autologin or greeter." ;;
+	esac
+}
+
+validate_hardware_mode() {
+	local mode="$1"
+
+	case "$mode" in
+		recommend|auto|off) return 0 ;;
+		*) error "Invalid hardware mode '$mode'. Use recommend, auto, or off." ;;
 	esac
 }
 
@@ -122,8 +136,133 @@ collect_services() {
 	parse_list_file "$SERVICES_DIR/openrc-default.txt"
 }
 
+filter_installable_packages() {
+	local -n out_ref=$1
+	shift
+	local pkg
+
+	out_ref=()
+
+	if [[ "$DRY_RUN" == "true" ]]; then
+		out_ref=("$@")
+		return 0
+	fi
+
+	for pkg in "$@"; do
+		if pacman -Si "$pkg" >/dev/null 2>&1; then
+			out_ref+=("$pkg")
+		else
+			warn "Skipping unavailable package from hardware profile: $pkg" >&2
+		fi
+	done
+}
+
+resolve_hardware_mode_choice() {
+	local -a recommended_packages=("$@")
+	local response
+
+	case "$HARDWARE_MODE" in
+		off)
+			info "Hardware profile package recommendations are disabled (--hardware-mode off)"
+			return 1
+			;;
+		auto)
+			info "Applying hardware profile recommendations automatically (--hardware-mode auto)"
+			return 0
+			;;
+		recommend)
+			if [[ "$ASSUME_YES" == "true" ]]; then
+				info "Applying hardware profile recommendations because --yes was provided"
+				return 0
+			fi
+
+			if [[ ! -t 0 ]]; then
+				warn "Non-interactive terminal: skipping hardware package recommendations"
+				return 1
+			fi
+
+			info "Recommended hardware packages (${#recommended_packages[@]}): ${recommended_packages[*]}"
+			if command -v gum >/dev/null 2>&1; then
+				if gum confirm "Install recommended hardware package set now?"; then
+					return 0
+				fi
+				return 1
+			fi
+
+			read -r -p "Install recommended hardware package set now? [y/N]: " response
+			case "${response,,}" in
+				y|yes) return 0 ;;
+				*) return 1 ;;
+			esac
+			;;
+		*)
+			error "Unknown hardware mode: $HARDWARE_MODE"
+			;;
+	esac
+}
+
+persist_hardware_profile_snapshot() {
+	local profile_path
+
+	profile_path="$(hardware_default_profile_path)"
+
+	if [[ "$DRY_RUN" == "true" ]]; then
+		info "Dry-run: would write hardware profile snapshot to $profile_path"
+		return 0
+	fi
+
+	hardware_write_profile_json "$profile_path"
+	info "Hardware profile snapshot written to $profile_path"
+}
+
+collect_hardware_recommended_packages() {
+	local -n out_ref=$1
+	local -a profiles=()
+	local -a candidate_packages=()
+	local -a installable_packages=()
+	local profile_root
+
+	out_ref=()
+
+	profile_root="$CONFIG_DIR/hardware"
+
+	mapfile -t profiles < <(hardware_detect_profiles)
+	if [[ "${#profiles[@]}" -eq 0 ]]; then
+		info "Hardware detection: no matching profile packages"
+		persist_hardware_profile_snapshot
+		return 0
+	fi
+
+	info "Hardware detection summary: $(hardware_summary_line)"
+	info "Matched hardware profiles: ${profiles[*]}"
+
+	mapfile -t candidate_packages < <(hardware_collect_profile_packages "$profile_root" "${profiles[@]}")
+	if [[ "${#candidate_packages[@]}" -eq 0 ]]; then
+		warn "No package stubs found for detected hardware profiles under $profile_root"
+		persist_hardware_profile_snapshot
+		return 0
+	fi
+
+	filter_installable_packages installable_packages "${candidate_packages[@]}"
+	if [[ "${#installable_packages[@]}" -eq 0 ]]; then
+		warn "Hardware profile packages were detected but none are installable"
+		persist_hardware_profile_snapshot
+		return 0
+	fi
+
+	persist_hardware_profile_snapshot
+
+	if resolve_hardware_mode_choice "${installable_packages[@]}"; then
+		out_ref=("${installable_packages[@]}")
+	fi
+}
+
 run_preflight() {
 	info "[Phase 1/7] Running preflight checks"
+
+	if [[ "$DEV_SIMULATE_ARTIX" == "true" && "$DRY_RUN" != "true" ]]; then
+		error "--dev-simulate-artix is only allowed with --dry-run"
+	fi
 
 	if [[ "$EUID" -ne 0 ]]; then
 		if [[ "$DRY_RUN" == true ]]; then
@@ -134,12 +273,20 @@ run_preflight() {
 	fi
 
 	if [[ ! -f /etc/artix-release ]]; then
-		warn "This does not look like Artix Linux (/etc/artix-release missing)."
+		if [[ "$DEV_SIMULATE_ARTIX" == "true" ]]; then
+			warn "Dev simulation enabled: skipping Artix host check (/etc/artix-release missing)."
+		else
+			warn "This does not look like Artix Linux (/etc/artix-release missing)."
+		fi
 	fi
 
-	require_command pacman
-	require_command rc-update
-	require_command rc-service
+	if [[ "$DEV_SIMULATE_ARTIX" != "true" ]]; then
+		require_command pacman
+		require_command rc-update
+		require_command rc-service
+	else
+		warn "Dev simulation enabled: skipping pacman/OpenRC command checks"
+	fi
 	require_command id
 	require_command getent
 
@@ -148,7 +295,14 @@ run_preflight() {
 
 run_package_phase() {
 	local -a packages=()
+	local -a hardware_packages=()
 	mapfile -t packages < <(collect_packages)
+	collect_hardware_recommended_packages hardware_packages
+
+	if [[ "${#hardware_packages[@]}" -gt 0 ]]; then
+		packages+=("${hardware_packages[@]}")
+		mapfile -t packages < <(printf '%s\n' "${packages[@]}" | awk '!seen[$0]++')
+	fi
 
 	info "[Phase 2/7] Installing packages"
 
@@ -330,6 +484,15 @@ while [[ "$#" -gt 0 ]]; do
 			validate_greetd_mode "$1"
 			GREETD_MODE="$1"
 			;;
+		--hardware-mode)
+			shift
+			[[ "$#" -gt 0 ]] || error "--hardware-mode requires a value (recommend|auto|off)"
+			validate_hardware_mode "$1"
+			HARDWARE_MODE="$1"
+			;;
+		--dev-simulate-artix)
+			DEV_SIMULATE_ARTIX=true
+			;;
 		--dry-run)
 			DRY_RUN=true
 			;;
@@ -364,6 +527,12 @@ if [[ "$ASSUME_YES" == false ]]; then
 		if [[ "$STARTUP_MODE" == "greetd" ]]; then
 			info "greetd session policy: $GREETD_MODE"
 		fi
+	fi
+	if (( TARGET_PHASE >= 2 )); then
+		info "Hardware package mode for phase 2: $HARDWARE_MODE"
+	fi
+	if [[ "$DEV_SIMULATE_ARTIX" == "true" ]]; then
+		info "Dev simulation mode: enabled"
 	fi
 	read -r -p "Continue? [y/N]: " response
 	case "${response,,}" in

@@ -1,0 +1,4 @@
+# Recommended laptop profile packages.
+# Keep this conservative for v1.
+acpi
+acpid

@@ -1,0 +1,4 @@
+# Recommended AMD graphics profile packages.
+# Keep this list focused on packages not guaranteed by base sets.
+vulkan-radeon
+libva-mesa-driver

@@ -1,0 +1,5 @@
+# Recommended NVIDIA profile packages.
+# Installer recommend mode asks before applying this profile.
+nvidia
+nvidia-utils
+nvidia-settings
