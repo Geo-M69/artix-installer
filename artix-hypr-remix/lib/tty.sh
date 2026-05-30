@@ -6,6 +6,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/openrc.sh" || true
 TTY_BLOCK_BEGIN="# >>> artix-hypr-remix tty hyprland >>>"
 TTY_BLOCK_END="# <<< artix-hypr-remix tty hyprland <<<"
 STARTUP_MODE_STATE_REL=".local/state/artix-hypr-remix/startup.mode"
+GREETD_VT="7"
 
 startup_session_launcher() {
   local target_home="$1"
@@ -253,7 +254,7 @@ configure_greetd_hyprland_autostart() {
       autologin)
         cat > "$greetd_config" <<EOF
 [terminal]
-vt = 1
+vt = $GREETD_VT
 
 [initial_session]
 command = "bash $launcher_path"
@@ -267,7 +268,7 @@ EOF
       greeter)
         cat > "$greetd_config" <<EOF
 [terminal]
-vt = 1
+vt = $GREETD_VT
 
 [default_session]
 command = "tuigreet --time --remember --remember-session --cmd 'bash $launcher_path'"
@@ -280,7 +281,7 @@ EOF
     esac
 
     chmod 0644 "$greetd_config"
-    info "Configured greetd startup at $greetd_config (mode=$greetd_mode)"
+    info "Configured greetd startup at $greetd_config (mode=$greetd_mode vt=$GREETD_VT)"
   fi
 
   if [[ "$dry_run" == "true" ]]; then

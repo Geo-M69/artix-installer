@@ -36,6 +36,7 @@ Behavior:
   - Removes greetd from OpenRC runlevel (best effort).
 - `greetd` mode:
   - Removes managed tty startup block from `~/.bash_profile` and `~/.zprofile`.
+  - Uses greetd terminal VT7 to avoid conflicts with tty1 getty prompts.
   - Writes `/etc/greetd/config.toml` using the selected greetd policy:
     - `autologin`: boot directly into Hyprland and keep tuigreet as fallback.
     - `greeter` (default): show tuigreet login prompt on boot.
