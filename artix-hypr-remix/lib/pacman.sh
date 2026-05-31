@@ -2,9 +2,16 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh" || true
 
+PACMAN_REFRESHED=false
+
 refresh_package_databases() {
-  info "Refreshing pacman package databases"
-  pacman -Sy --noconfirm
+  if [[ "$PACMAN_REFRESHED" == "true" ]]; then
+    return 0
+  fi
+
+  info "Refreshing package databases and upgrading system packages"
+  pacman -Syu --noconfirm
+  PACMAN_REFRESHED=true
 }
 
 install_packages() {

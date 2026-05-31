@@ -29,6 +29,8 @@ HARDWARE_MODE="recommend"
 FLATPAK_PROFILE="default"
 TARGET_USER="${SUDO_USER:-}"
 TARGET_HOME=""
+INSTALL_LOG_FILE="${AHR_INSTALL_LOG_FILE:-/var/log/artix-hypr-remix-install.log}"
+ACTIVE_INSTALL_LOG_FILE=""
 
 usage() {
 	cat <<EOF
@@ -92,6 +94,25 @@ validate_flatpak_profile() {
 		default|optional|all|none) return 0 ;;
 		*) error "Invalid Flatpak profile '$mode'. Use default, optional, all, or none." ;;
 	esac
+}
+
+setup_install_logging() {
+	local requested_path log_dir fallback_path
+
+	requested_path="$INSTALL_LOG_FILE"
+	ACTIVE_INSTALL_LOG_FILE="$requested_path"
+	log_dir="$(dirname "$requested_path")"
+
+	if ! mkdir -p "$log_dir" >/dev/null 2>&1 || ! touch "$requested_path" >/dev/null 2>&1; then
+		fallback_path="/tmp/artix-hypr-remix-install-$(date +%Y%m%d-%H%M%S)-$$.log"
+		ACTIVE_INSTALL_LOG_FILE="$fallback_path"
+		mkdir -p "$(dirname "$fallback_path")" >/dev/null 2>&1 || true
+		touch "$fallback_path"
+	fi
+
+	chmod 0644 "$ACTIVE_INSTALL_LOG_FILE" >/dev/null 2>&1 || true
+	exec > >(tee -a "$ACTIVE_INSTALL_LOG_FILE") 2>&1
+	info "Installer log file: $ACTIVE_INSTALL_LOG_FILE"
 }
 
 trim_whitespace() {
@@ -537,6 +558,9 @@ while [[ "$#" -gt 0 ]]; do
 	esac
 	shift
 done
+
+setup_install_logging
+trap 'status=$?; printf "[%s] Installer exit status: %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$status" >> "$ACTIVE_INSTALL_LOG_FILE"' EXIT
 
 if [[ "$STARTUP_MODE" != "greetd" && "$GREETD_MODE" != "greeter" ]]; then
 	warn "Ignoring --greetd-mode '$GREETD_MODE' because startup mode is '$STARTUP_MODE'"

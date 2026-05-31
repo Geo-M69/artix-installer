@@ -66,6 +66,7 @@ Useful options:
     ./install.sh --phase 6 --user <username> --flatpak-profile all
     ./install.sh --phase 6 --user <username> --flatpak-profile none
     ./install.sh --phase 7 --user <username>
+    AHR_INSTALL_LOG_FILE=/tmp/ahr-install.log ./install.sh
 
 Config dependency validation:
 
@@ -108,13 +109,15 @@ Notes:
 - In `--startup-mode greetd`, phase 5 enables greetd for the next boot and does not start it immediately during installer execution.
 - greetd config is generated on VT7 to avoid input collisions with tty1 getty prompts.
 - Hardware profile snapshots are written to `/var/lib/artix-hypr-remix/hardware-profile.json` when installer runs as root.
+- Installer output is logged to `/var/log/artix-hypr-remix-install.log` by default (override with `AHR_INSTALL_LOG_FILE`, fallback under `/tmp` when needed).
+- Package installation phases refresh and upgrade package databases in a full `pacman -Syu` transaction before package-specific installs (avoids `-Sy` partial upgrade risk).
 - Phase 6 bootstraps `paru` if missing, repairs AUR cache/state directory ownership, and installs AUR packages as the target non-root user.
 - Phase 6 installs Flatpak refs from `flatpaks/default.txt` by default (`--flatpak-profile optional|all|none` and `--skip-flatpak` are available).
 - Flatpak refs are installed with system scope and Flathub remote bootstrap (`flathub`) when missing.
 - Phase 7 creates first-run state at `~/.local/state/artix-hypr-remix/first-run.mode`, installs scoped installer sudoers files, and initializes migration state under `~/.local/state/artix-hypr-remix/migrations`.
 - Phase 7 installs native command namespace links into `~/.local/bin` and writes a small Omarchy-compatible alias layer.
 - Phase 7 offers a reboot prompt (skipped when `--yes` is used) so first-run can execute immediately on next login.
-- First user login runs `~/.config/artix-hypr-remix/bin/first-run.sh` from Hyprland autostart and then removes first-run marker state.
+- First user login runs `~/.config/artix-hypr-remix/bin/first-run.sh` from Hyprland autostart; task completion is tracked at `~/.local/state/artix-hypr-remix/first-run.tasks`, and the marker is only removed after all first-run steps succeed.
 - Post-boot hook execution runs `~/.config/artix-hypr-remix/bin/hook.sh post-boot`, which includes automatic migration runner execution.
 - Theme engine v1 stores state in `~/.config/artix-hypr-remix/current`, supports Omarchy theme assets, and can create a compatibility symlink at `~/.config/omarchy/current` when unused.
 - Namespace specification and command inventory are documented in `COMMAND_NAMESPACE.md`.
