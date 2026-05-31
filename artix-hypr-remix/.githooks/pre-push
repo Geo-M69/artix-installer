@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+
+echo "Running artix-hypr-remix quality gate before push..."
+bash "$repo_root/artix-hypr-remix/scripts/quality-gate.sh"

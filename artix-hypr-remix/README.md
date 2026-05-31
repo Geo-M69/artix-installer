@@ -80,6 +80,24 @@ Combined health check:
     ./scripts/doctor.sh
     ./scripts/doctor.sh --no-aur
 
+Phase 2 quality gate (host-independent):
+
+    ./scripts/quality-gate.sh
+    ./scripts/quality-gate.sh --no-aur
+
+Install local pre-push hook (runs quality gate automatically):
+
+    ./scripts/install-git-hooks.sh
+
+CI enforcement:
+
+- GitHub Actions workflow `.github/workflows/artix-hypr-remix-quality-gate.yml` runs quality gate on push and pull requests affecting `artix-hypr-remix/**`.
+
+Targeted validation helpers:
+
+    ./scripts/check-openrc-portability.sh
+    ./scripts/check-first-run-idempotency.sh
+
 Hardware detection check:
 
     ./scripts/check-hardware.sh

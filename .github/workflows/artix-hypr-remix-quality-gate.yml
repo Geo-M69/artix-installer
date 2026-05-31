@@ -1,0 +1,24 @@
+name: artix-hypr-remix quality gate
+
+on:
+  push:
+    paths:
+      - "artix-hypr-remix/**"
+      - ".github/workflows/artix-hypr-remix-quality-gate.yml"
+  pull_request:
+    paths:
+      - "artix-hypr-remix/**"
+      - ".github/workflows/artix-hypr-remix-quality-gate.yml"
+  workflow_dispatch:
+
+jobs:
+  quality-gate:
+    name: quality gate (host-independent)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: run quality gate
+        run: bash artix-hypr-remix/scripts/quality-gate.sh
