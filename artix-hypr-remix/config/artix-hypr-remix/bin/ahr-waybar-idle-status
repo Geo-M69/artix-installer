@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if pgrep -x hypridle >/dev/null 2>&1; then
+  printf '{"text":"󰒲","class":"active","tooltip":"Idle lock enabled"}\n'
+else
+  printf '{"text":"󰒳","class":"inactive","tooltip":"Idle lock disabled"}\n'
+fi

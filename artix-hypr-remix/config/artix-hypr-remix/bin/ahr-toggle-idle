@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if pgrep -x hypridle >/dev/null 2>&1; then
+  pkill -x hypridle >/dev/null 2>&1 || true
+  ahr_notify "Idle" "Idle lock disabled"
+else
+  if ! ahr_has_cmd hypridle; then
+    ahr_fail "hypridle is not installed"
+  fi
+
+  setsid hypridle >/dev/null 2>&1 &
+  ahr_notify "Idle" "Idle lock enabled"
+fi
+
+pkill -RTMIN+9 -x waybar >/dev/null 2>&1 || true

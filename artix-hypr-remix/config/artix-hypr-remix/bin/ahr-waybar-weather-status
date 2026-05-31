@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+json_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/ }"
+  printf '%s' "$value"
+}
+
+if ! ahr_has_cmd curl; then
+  printf '{"text":"","class":"hidden","tooltip":"curl is not installed"}\n'
+  exit 0
+fi
+
+location_raw="${AHR_WEATHER_LOCATION:-}"
+location_encoded="${location_raw// /%20}"
+url="https://wttr.in/${location_encoded}?format=%c+%t"
+
+weather="$(curl -fsS --max-time 3 "$url" 2>/dev/null | tr -d '\r\n' || true)"
+
+if [[ -z "$weather" ]]; then
+  printf '{"text":"","class":"hidden","tooltip":"Weather unavailable"}\n'
+  exit 0
+fi
+
+weather="$(json_escape "$weather")"
+printf '{"text":"%s","class":"active","tooltip":"Weather via wttr.in"}\n' "$weather"

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if ! ahr_has_cmd walker; then
+  ahr_fail "walker is not installed"
+fi
+
+pkill -x walker >/dev/null 2>&1 || true
+setsid walker --gapplication-service >/dev/null 2>&1 &
+
+ahr_notify "Walker" "Walker service restarted"

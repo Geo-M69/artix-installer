@@ -11,6 +11,7 @@ hypridle
 swww
 grim
 slurp
+gpu-screen-recorder
 satty
 wl-clipboard
 cliphist

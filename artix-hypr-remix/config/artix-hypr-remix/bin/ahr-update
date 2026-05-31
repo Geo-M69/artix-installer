@@ -80,6 +80,10 @@ log_and_print() {
   log "$message"
 }
 
+signal_waybar_update() {
+  pkill -RTMIN+7 -x waybar >/dev/null 2>&1 || true
+}
+
 cleanup_lock() {
   if [[ "$lock_mode" == "mkdir" ]]; then
     rmdir "$LOCK_DIR" >/dev/null 2>&1 || true
@@ -121,6 +125,7 @@ run_cmd() {
 finalize() {
   local exit_code=$?
   cleanup_lock
+  signal_waybar_update
 
   if (( exit_code == 0 )); then
     log_line "Update run completed successfully"

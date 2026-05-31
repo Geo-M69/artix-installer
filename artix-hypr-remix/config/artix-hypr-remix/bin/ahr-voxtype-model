@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+launch_terminal() {
+  if ahr_has_cmd ghostty; then
+    setsid ghostty -e "$@" >/dev/null 2>&1 &
+    return 0
+  fi
+
+  if ahr_has_cmd foot; then
+    setsid foot "$@" >/dev/null 2>&1 &
+    return 0
+  fi
+
+  if ahr_has_cmd kitty; then
+    setsid kitty "$@" >/dev/null 2>&1 &
+    return 0
+  fi
+
+  if ahr_has_cmd alacritty; then
+    setsid alacritty -e "$@" >/dev/null 2>&1 &
+    return 0
+  fi
+
+  if ahr_has_cmd xterm; then
+    setsid xterm -e "$@" >/dev/null 2>&1 &
+    return 0
+  fi
+
+  return 1
+}
+
+if ! ahr_has_cmd voxtype; then
+  ahr_fail "voxtype is not installed"
+fi
+
+if ! launch_terminal voxtype setup model; then
+  ahr_fail "No terminal found to launch voxtype model setup"
+fi
+
+pkill -RTMIN+11 -x waybar >/dev/null 2>&1 || true

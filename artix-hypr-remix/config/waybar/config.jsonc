@@ -6,14 +6,62 @@
   "height": 28,
   "spacing": 0,
   "modules-left": ["custom/remix", "hyprland/workspaces"],
-  "modules-center": ["clock#horizontal", "clock#vertical"],
+  "modules-center": ["clock#horizontal", "clock#vertical", "custom/weather", "custom/update", "custom/voxtype", "custom/screenrecording-indicator", "custom/idle-indicator", "custom/notification-silencing-indicator"],
   "modules-right": ["group/tray-expander", "bluetooth", "network", "pulseaudio", "cpu", "battery"],
 
   "custom/remix": {
     "format": "",
-    "on-click": "ghostty",
+    "on-click": "bash ~/.config/artix-hypr-remix/bin/ahr-menu",
     "on-click-right": "nautilus",
     "tooltip-format": "artix-hypr-remix"
+  },
+
+  "custom/weather": {
+    "exec": "bash ~/.config/artix-hypr-remix/bin/ahr-waybar-weather-status",
+    "return-type": "json",
+    "interval": 900,
+    "tooltip": true
+  },
+
+  "custom/update": {
+    "exec": "bash ~/.config/artix-hypr-remix/bin/ahr-waybar-update-status",
+    "return-type": "json",
+    "on-click": "ghostty -e ~/.config/artix-hypr-remix/bin/ahr-update",
+    "signal": 7,
+    "interval": 600
+  },
+
+  "custom/voxtype": {
+    "exec": "bash ~/.config/artix-hypr-remix/bin/ahr-waybar-voxtype-status",
+    "return-type": "json",
+    "on-click": "bash ~/.config/artix-hypr-remix/bin/ahr-voxtype-model",
+    "on-click-right": "bash ~/.config/artix-hypr-remix/bin/ahr-voxtype-config",
+    "signal": 11,
+    "interval": 2
+  },
+
+  "custom/screenrecording-indicator": {
+    "exec": "bash ~/.config/artix-hypr-remix/bin/ahr-waybar-screen-recording-status",
+    "return-type": "json",
+    "on-click": "bash ~/.config/artix-hypr-remix/bin/ahr-capture-screenrecording",
+    "signal": 8,
+    "interval": 2
+  },
+
+  "custom/idle-indicator": {
+    "exec": "bash ~/.config/artix-hypr-remix/bin/ahr-waybar-idle-status",
+    "return-type": "json",
+    "on-click": "bash ~/.config/artix-hypr-remix/bin/ahr-toggle-idle",
+    "signal": 9,
+    "interval": 5
+  },
+
+  "custom/notification-silencing-indicator": {
+    "exec": "bash ~/.config/artix-hypr-remix/bin/ahr-waybar-notification-silencing-status",
+    "return-type": "json",
+    "on-click": "bash ~/.config/artix-hypr-remix/bin/ahr-toggle-notification-silencing",
+    "signal": 10,
+    "interval": 5
   },
 
   "hyprland/workspaces": {

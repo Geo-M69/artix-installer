@@ -31,6 +31,11 @@ Categories:
 - `ahr-default-terminal` - inspect or set the user's preferred terminal (xdg-terminals.list)
 - `ahr-update` - run package updates, migrations, and post-update hooks
 - `ahr-update-available` - report package and migration work remaining
+- `ahr-voxtype-model` - open voxtype model setup workflow
+- `ahr-voxtype-config` - open voxtype configuration file
+- `ahr-toggle-idle` - toggle `hypridle` daemon state for lock/suspend behavior
+- `ahr-toggle-notification-silencing` - toggle do-not-disturb mode for `mako`
+- `ahr-restart-walker` - restart Walker launcher service
 - `ahr-migrate` - run framework migrations directly (`--status`, `--dry-run`, `--retry-skipped`)
 - `ahr-theme` - top-level theme management dispatcher (`list`, `current`, `set`, `refresh`, `bg-next`, `bg-set`)
 - `ahr-theme-list` - list discovered themes from Artix and Omarchy theme directories
@@ -43,6 +48,7 @@ Categories:
 - `ahr-theme-colors-from-alacritty` - generate `colors.toml` from `alacritty.toml`
 - `ahr-system-lock` - lock current session
 - `ahr-system-reboot` - reboot safely via available init interface
+- `ahr-capture-screenrecording` - start or stop screen recording
 - `ahr-capture-screenshot` - area screenshot with Wayland tools
 
 ## Compatibility Aliases (Optional)
@@ -69,9 +75,15 @@ When namespace installation runs, selected Omarchy-style aliases are created in
 - `omarchy-default-terminal` -> `ahr-default-terminal`
 - `omarchy-update` -> `ahr-update`
 - `omarchy-update-available` -> `ahr-update-available`
+- `omarchy-voxtype-model` -> `ahr-voxtype-model`
+- `omarchy-voxtype-config` -> `ahr-voxtype-config`
+- `omarchy-toggle-idle` -> `ahr-toggle-idle`
+- `omarchy-toggle-notification-silencing` -> `ahr-toggle-notification-silencing`
+- `omarchy-restart-walker` -> `ahr-restart-walker`
 - `omarchy-migrate` -> `ahr-migrate`
 - `omarchy-system-lock` -> `ahr-system-lock`
 - `omarchy-system-reboot` -> `ahr-system-reboot`
+- `omarchy-capture-screenrecording` -> `ahr-capture-screenrecording`
 - `omarchy-capture-screenshot` -> `ahr-capture-screenshot`
 
 The alias set is intentionally small. The canonical interface remains `ahr-*`.

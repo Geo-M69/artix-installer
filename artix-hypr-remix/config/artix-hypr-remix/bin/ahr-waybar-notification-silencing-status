@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+state_file="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles/notification-silencing"
+
+silenced=false
+if [[ -f "$state_file" ]]; then
+  silenced=true
+elif ahr_has_cmd makoctl; then
+  if makoctl mode 2>/dev/null | grep -q 'do-not-disturb'; then
+    silenced=true
+  fi
+fi
+
+if [[ "$silenced" == "true" ]]; then
+  printf '{"text":"󰂛","class":"active","tooltip":"Notifications silenced"}\n'
+else
+  printf '{"text":"󰂚","class":"inactive","tooltip":"Notifications enabled"}\n'
+fi

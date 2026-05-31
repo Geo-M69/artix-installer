@@ -35,9 +35,15 @@ Commands:
   default-terminal    Inspect or set default terminal
   update              System + AUR update helper
   update-available    Check whether updates are available (for status bars)
+  voxtype-model       Open voxtype model setup
+  voxtype-config      Open voxtype configuration file
+  toggle-idle         Toggle hypridle daemon state
+  toggle-notifications Toggle notification silencing mode
+  restart-walker      Restart Walker launcher service
   migrate             Run or inspect pending framework migrations
   system-lock         Lock session
   system-reboot       Reboot system
+  capture-screenrecording Toggle screen recording
   capture-screenshot  Interactive area screenshot
   list                Show command list
   help                Show this help
@@ -60,9 +66,15 @@ dispatch() {
     default-terminal) exec_ahr_command ahr-default-terminal "$@" ;;
     update) exec_ahr_command ahr-update "$@" ;;
     update-available) exec_ahr_command ahr-update-available "$@" ;;
+    voxtype-model) exec_ahr_command ahr-voxtype-model "$@" ;;
+    voxtype-config) exec_ahr_command ahr-voxtype-config "$@" ;;
+    toggle-idle) exec_ahr_command ahr-toggle-idle "$@" ;;
+    toggle-notifications) exec_ahr_command ahr-toggle-notification-silencing "$@" ;;
+    restart-walker) exec_ahr_command ahr-restart-walker "$@" ;;
     migrate) exec_ahr_command ahr-migrate "$@" ;;
     system-lock) exec_ahr_command ahr-system-lock "$@" ;;
     system-reboot) exec_ahr_command ahr-system-reboot "$@" ;;
+    capture-screenrecording) exec_ahr_command ahr-capture-screenrecording "$@" ;;
     capture-screenshot) exec_ahr_command ahr-capture-screenshot "$@" ;;
     list)
       printf '%s\n' \
@@ -77,9 +89,15 @@ dispatch() {
         "ahr-default-terminal" \
         "ahr-update" \
         "ahr-update-available" \
+        "ahr-voxtype-model" \
+        "ahr-voxtype-config" \
+        "ahr-toggle-idle" \
+        "ahr-toggle-notification-silencing" \
+        "ahr-restart-walker" \
         "ahr-migrate" \
         "ahr-system-lock" \
         "ahr-system-reboot" \
+        "ahr-capture-screenrecording" \
         "ahr-capture-screenshot"
       ;;
     help|-h|--help|"")

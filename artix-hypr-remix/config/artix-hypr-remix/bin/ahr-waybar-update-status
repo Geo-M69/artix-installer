@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+update_cmd="$HOME/.config/artix-hypr-remix/bin/ahr-update-available"
+if [[ ! -x "$update_cmd" ]]; then
+  update_cmd="ahr-update-available"
+fi
+
+json="$("$update_cmd" --json 2>/dev/null || true)"
+if [[ -z "$json" ]]; then
+  printf '{"text":"","class":"hidden","tooltip":"Update status unavailable"}\n'
+  exit 0
+fi
+
+extract_number() {
+  local key="$1"
+
+  if ahr_has_cmd jq; then
+    printf '%s' "$json" | jq -r --arg key "$key" '.[$key] // 0' 2>/dev/null || printf '0'
+    return
+  fi
+
+  printf '%s' "$json" | sed -nE "s/.*\"$key\"[[:space:]]*:[[:space:]]*([0-9]+).*/\\1/p" | head -n1
+}
+
+system_count="$(extract_number system)"
+aur_count="$(extract_number aur)"
+migration_count="$(extract_number migrations)"
+skipped_count="$(extract_number skipped_migrations)"
+total_count="$(extract_number total)"
+
+system_count="${system_count:-0}"
+aur_count="${aur_count:-0}"
+migration_count="${migration_count:-0}"
+skipped_count="${skipped_count:-0}"
+total_count="${total_count:-0}"
+
+if (( total_count > 0 )); then
+  printf '{"text":"","class":"active","tooltip":"Updates: system=%s aur=%s migrations=%s skipped=%s"}\n' \
+    "$system_count" "$aur_count" "$migration_count" "$skipped_count"
+else
+  printf '{"text":"","class":"hidden","tooltip":"System is up to date"}\n'
+fi

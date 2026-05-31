@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+config_file="${XDG_CONFIG_HOME:-$HOME/.config}/voxtype/config.toml"
+
+launch_terminal_editor() {
+  local editor_cmd="$1"
+
+  if ahr_has_cmd ghostty; then
+    setsid ghostty -e "$editor_cmd" "$config_file" >/dev/null 2>&1 &
+    return 0
+  fi
+
+  if ahr_has_cmd foot; then
+    setsid foot "$editor_cmd" "$config_file" >/dev/null 2>&1 &
+    return 0
+  fi
+
+  if ahr_has_cmd kitty; then
+    setsid kitty "$editor_cmd" "$config_file" >/dev/null 2>&1 &
+    return 0
+  fi
+
+  if ahr_has_cmd alacritty; then
+    setsid alacritty -e "$editor_cmd" "$config_file" >/dev/null 2>&1 &
+    return 0
+  fi
+
+  if ahr_has_cmd xterm; then
+    setsid xterm -e "$editor_cmd" "$config_file" >/dev/null 2>&1 &
+    return 0
+  fi
+
+  return 1
+}
+
+mkdir -p "$(dirname "$config_file")"
+touch "$config_file"
+
+if [[ -n "${EDITOR:-}" ]] && command -v "$EDITOR" >/dev/null 2>&1; then
+  setsid "$EDITOR" "$config_file" >/dev/null 2>&1 &
+  pkill -RTMIN+11 -x waybar >/dev/null 2>&1 || true
+  exit 0
+fi
+
+if ahr_has_cmd hx && launch_terminal_editor hx; then
+  pkill -RTMIN+11 -x waybar >/dev/null 2>&1 || true
+  exit 0
+fi
+
+if ahr_has_cmd nvim && launch_terminal_editor nvim; then
+  pkill -RTMIN+11 -x waybar >/dev/null 2>&1 || true
+  exit 0
+fi
+
+if ahr_has_cmd nano && launch_terminal_editor nano; then
+  pkill -RTMIN+11 -x waybar >/dev/null 2>&1 || true
+  exit 0
+fi
+
+if ahr_has_cmd xdg-open; then
+  setsid xdg-open "$config_file" >/dev/null 2>&1 &
+  pkill -RTMIN+11 -x waybar >/dev/null 2>&1 || true
+  exit 0
+fi
+
+ahr_fail "No editor found to open voxtype config"

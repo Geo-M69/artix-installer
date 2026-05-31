@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
+RECORDING_FILE="$STATE_DIR/screenrecording.file"
+OUTPUT_DIR="${XDG_VIDEOS_DIR:-$HOME/Videos}"
+
+mkdir -p "$STATE_DIR"
+mkdir -p "$OUTPUT_DIR"
+
+signal_waybar() {
+  pkill -RTMIN+8 -x waybar >/dev/null 2>&1 || true
+}
+
+if pgrep -f "^gpu-screen-recorder" >/dev/null 2>&1; then
+  pkill -SIGINT -f "^gpu-screen-recorder" >/dev/null 2>&1 || true
+
+  # Wait briefly for clean shutdown before forcing termination.
+  for _ in $(seq 1 50); do
+    if ! pgrep -f "^gpu-screen-recorder" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.1
+  done
+
+  if pgrep -f "^gpu-screen-recorder" >/dev/null 2>&1; then
+    pkill -9 -f "^gpu-screen-recorder" >/dev/null 2>&1 || true
+    ahr_notify "Screen recording" "Recording process was force-stopped"
+  else
+    if [[ -f "$RECORDING_FILE" ]]; then
+      recording_path="$(cat "$RECORDING_FILE")"
+      ahr_notify "Screen recording" "Saved: $recording_path"
+    else
+      ahr_notify "Screen recording" "Recording stopped"
+    fi
+  fi
+
+  rm -f "$RECORDING_FILE"
+  signal_waybar
+  exit 0
+fi
+
+if ! ahr_has_cmd gpu-screen-recorder; then
+  ahr_fail "gpu-screen-recorder is required for screen recording"
+fi
+
+monitor_name=""
+if ahr_has_cmd hyprctl && ahr_has_cmd jq; then
+  monitor_name="$(hyprctl monitors -j | jq -r '.[] | select(.focused == true) | .name' | head -n1)"
+fi
+
+if [[ -z "$monitor_name" || "$monitor_name" == "null" ]]; then
+  monitor_name="screen"
+fi
+
+output_file="$OUTPUT_DIR/screenrecording-$(date +'%Y-%m-%d_%H-%M-%S').mp4"
+
+gpu-screen-recorder -w "$monitor_name" -k auto -f 60 -fm cfr -fallback-cpu-encoding yes -o "$output_file" >/dev/null 2>&1 &
+
+echo "$output_file" > "$RECORDING_FILE"
+ahr_notify "Screen recording" "Recording started"
+signal_waybar

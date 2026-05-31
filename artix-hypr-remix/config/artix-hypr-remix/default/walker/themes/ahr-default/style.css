@@ -1,0 +1,80 @@
+* {
+  all: unset;
+  font-family: "JetBrainsMono Nerd Font", "Noto Sans", monospace;
+  font-size: 18px;
+  color: #d7dae0;
+}
+
+scrollbar {
+  opacity: 0;
+}
+
+.normal-icons {
+  -gtk-icon-size: 16px;
+}
+
+.large-icons {
+  -gtk-icon-size: 32px;
+}
+
+.box-wrapper {
+  background: rgba(17, 19, 24, 0.95);
+  padding: 20px;
+  border: 2px solid #5ec4ff;
+  border-radius: 12px;
+}
+
+.search-container {
+  background: #1f232b;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.input placeholder {
+  opacity: 0.6;
+}
+
+.input:focus,
+.input:active {
+  box-shadow: none;
+  outline: none;
+}
+
+child:selected .item-box * {
+  color: #111318;
+}
+
+child:selected {
+  background: rgba(94, 196, 255, 0.8);
+}
+
+.item-box {
+  padding-left: 14px;
+}
+
+.item-text-box {
+  all: unset;
+  padding: 14px 0;
+}
+
+.item-subtext {
+  font-size: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.item-image {
+  margin-right: 14px;
+  -gtk-icon-transform: scale(0.9);
+}
+
+.current {
+  font-style: italic;
+}
+
+.keybind-hints {
+  background: #1f232b;
+  padding: 10px;
+  margin-top: 10px;
+}

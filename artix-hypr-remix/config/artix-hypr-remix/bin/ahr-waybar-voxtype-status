@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+print_hidden() {
+  printf '{"text":"","class":"hidden","tooltip":""}\n'
+}
+
+if ! ahr_has_cmd voxtype; then
+  print_hidden
+  exit 0
+fi
+
+status_json="$(voxtype status --extended --format json 2>/dev/null || true)"
+
+if [[ -n "$status_json" ]] && ahr_has_cmd jq; then
+  printf '%s' "$status_json" | jq -c '
+    if type != "object" then
+      {"text":"","class":"hidden","tooltip":""}
+    else
+      . as $s |
+      {
+        text: ($s.icon // $s.text // ""),
+        class: ($s.class // $s.state // "hidden"),
+        alt: ($s.class // $s.state // ""),
+        tooltip: ($s.tooltip // $s.status // "")
+      }
+    end
+  ' 2>/dev/null || print_hidden
+  exit 0
+fi
+
+status_text="$(voxtype status 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+
+if [[ "$status_text" == *record* ]]; then
+  printf '{"text":"󰍬","class":"recording","alt":"recording","tooltip":"Voxtype recording"}\n'
+elif [[ "$status_text" == *transcrib* ]] || [[ "$status_text" == *process* ]]; then
+  printf '{"text":"󰔟","class":"transcribing","alt":"transcribing","tooltip":"Voxtype transcribing"}\n'
+else
+  print_hidden
+fi

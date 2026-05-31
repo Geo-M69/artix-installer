@@ -5,6 +5,7 @@ return {
   "elephant",
   "walker --gapplication-service",
   "swww-daemon",
+  "hypridle",
   "wl-paste --type text --watch cliphist store",
   "wl-paste --type image --watch cliphist store",
   "gnome-keyring-daemon --start --components=secrets",

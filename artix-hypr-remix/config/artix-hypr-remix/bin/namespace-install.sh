@@ -37,9 +37,15 @@ declare -a commands=(
   ahr-default-terminal
   ahr-update
   ahr-update-available
+  ahr-voxtype-model
+  ahr-voxtype-config
+  ahr-toggle-idle
+  ahr-toggle-notification-silencing
+  ahr-restart-walker
   ahr-migrate
   ahr-system-lock
   ahr-system-reboot
+  ahr-capture-screenrecording
   ahr-capture-screenshot
 )
 
@@ -61,11 +67,17 @@ declare -a aliases=(
   "omarchy-launch-wifi:ahr-launch-wifi"
   "omarchy-system-lock:ahr-system-lock"
   "omarchy-system-reboot:ahr-system-reboot"
+  "omarchy-capture-screenrecording:ahr-capture-screenrecording"
   "omarchy-capture-screenshot:ahr-capture-screenshot"
   "omarchy-default-browser:ahr-default-browser"
   "omarchy-default-terminal:ahr-default-terminal"
   "omarchy-update:ahr-update"
   "omarchy-update-available:ahr-update-available"
+  "omarchy-voxtype-model:ahr-voxtype-model"
+  "omarchy-voxtype-config:ahr-voxtype-config"
+  "omarchy-toggle-idle:ahr-toggle-idle"
+  "omarchy-toggle-notification-silencing:ahr-toggle-notification-silencing"
+  "omarchy-restart-walker:ahr-restart-walker"
   "omarchy-migrate:ahr-migrate"
 )
 

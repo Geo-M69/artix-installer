@@ -31,7 +31,13 @@
 #cpu,
 #battery,
 #pulseaudio,
-#custom-remix {
+#custom-remix,
+#custom-update,
+#custom-weather,
+#custom-voxtype,
+#custom-screenrecording-indicator,
+#custom-idle-indicator,
+#custom-notification-silencing-indicator {
 	min-width: 12px;
 	margin: 0 7.5px;
 }
@@ -61,8 +67,23 @@ tooltip {
 }
 
 #clock,
-#custom-remix {
+#custom-remix,
+#custom-weather,
+#custom-voxtype.recording,
+#custom-voxtype.transcribing,
+#custom-update.active {
 	color: #5ec4ff;
+}
+
+#custom-update.hidden,
+#custom-weather.hidden,
+#custom-voxtype.hidden,
+#custom-screenrecording-indicator.hidden {
+	opacity: 0;
+	font-size: 0;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
 }
 
 .left .modules-left,
@@ -88,7 +109,19 @@ tooltip {
 .left #pulseaudio,
 .right #pulseaudio,
 .left #custom-remix,
-.right #custom-remix {
+.right #custom-remix,
+.left #custom-update,
+.right #custom-update,
+.left #custom-weather,
+.right #custom-weather,
+.left #custom-voxtype,
+.right #custom-voxtype,
+.left #custom-screenrecording-indicator,
+.right #custom-screenrecording-indicator,
+.left #custom-idle-indicator,
+.right #custom-idle-indicator,
+.left #custom-notification-silencing-indicator,
+.right #custom-notification-silencing-indicator {
 	margin: 1.5px 0;
 	padding: 6px 0;
 	min-width: 0;
@@ -170,6 +203,9 @@ tooltip {
 #battery.warning,
 #battery.critical,
 #pulseaudio.muted,
-#network.disconnected {
+#network.disconnected,
+#custom-screenrecording-indicator.active,
+#custom-idle-indicator.inactive,
+#custom-notification-silencing-indicator.active {
 	color: #ff7a8a;
 }

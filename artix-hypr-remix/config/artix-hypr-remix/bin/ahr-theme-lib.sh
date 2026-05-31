@@ -404,17 +404,31 @@ ahr_theme_collect_backgrounds() {
   local theme_name="$1"
   local output_ref_name="$2"
   local -n output_ref="$output_ref_name"
+  local dir
+  local -a background_dirs=(
+    "$AHR_THEME_USER_BACKGROUNDS_DIR/$theme_name"
+    "$AHR_THEME_CURRENT_THEME_DIR/backgrounds"
+    "$AHR_THEME_FRAMEWORK_ROOT/default/backgrounds/$theme_name"
+    "/usr/share/backgrounds"
+    "/usr/share/wallpapers"
+  )
 
   output_ref=()
 
-  mapfile -d '' -t output_ref < <(
-    find -L \
-      "$AHR_THEME_USER_BACKGROUNDS_DIR/$theme_name" \
-      "$AHR_THEME_CURRENT_THEME_DIR/backgrounds" \
-      -maxdepth 1 -type f \
-      \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) \
-      -print0 2>/dev/null | sort -z
-  )
+  for dir in "${background_dirs[@]}"; do
+    [[ -d "$dir" ]] || continue
+    while IFS= read -r -d '' background; do
+      output_ref+=("$background")
+    done < <(
+      find -L "$dir" -maxdepth 1 -type f \
+        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) \
+        -print0 2>/dev/null
+    )
+  done
+
+  if (( ${#output_ref[@]} > 0 )); then
+    mapfile -t output_ref < <(printf '%s\n' "${output_ref[@]}" | LC_ALL=C sort -u)
+  fi
 
   (( ${#output_ref[@]} > 0 ))
 }
