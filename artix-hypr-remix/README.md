@@ -15,7 +15,7 @@ Hypr config source:
 - `config/hypr/*.lua` are staging/source notes for future generation tooling.
 
 Current installer milestone:
-1. Run `./install.sh` on fresh Artix OpenRC.
+1. Run `sudo ./install.sh` on fresh Artix OpenRC from a non-root user shell.
 2. Install package sets from `packages/00-*.txt` through `packages/80-*.txt`.
 3. Enable safe OpenRC services from `services/openrc-default.txt`.
 4. Deploy `config/` into the target user's `~/.config` using copy + timestamp backups, then initialize XDG user directories.
@@ -41,33 +41,46 @@ Phase 4 configuration strategy:
 
 Usage:
 
-    ./install.sh
+Quick install (fresh Artix OpenRC):
+
+    git clone https://github.com/<you>/artix-installer.git
+    cd artix-installer/artix-hypr-remix
+    sudo ./install.sh
+
+Install command notes:
+- Installer phases 1-7 require root privileges.
+- Running with `sudo` preserves `SUDO_USER`, so phases 4-7 can target your desktop user automatically.
+- If you run from a root shell directly, pass `--user <username>` for phases 4-7.
+
+Usage (from `artix-hypr-remix/`):
+
+    sudo ./install.sh
 
 Useful options:
 
-    ./install.sh --dry-run
-    ./install.sh --phase 1
-    ./install.sh --phase 2
-    ./install.sh --phase 3 -y
-    ./install.sh --phase 4 --user <username>
-    ./install.sh --phase 5 --user <username>
-    ./install.sh --phase 5 --user <username> --startup-mode tty
-    ./install.sh --phase 5 --user <username> --startup-mode greetd
-    ./install.sh --phase 5 --user <username> --startup-mode greetd --greetd-mode autologin
-    ./install.sh --phase 5 --user <username> --startup-mode greetd --greetd-mode greeter
-    ./install.sh --phase 2 --hardware-mode recommend
-    ./install.sh --phase 2 --hardware-mode auto
-    ./install.sh --phase 2 --hardware-mode off
-    ./install.sh --phase 6 --user <username>
-    ./install.sh --phase 6 --user <username> --skip-aur
-    ./install.sh --phase 6 --user <username> --skip-flatpak
-    ./install.sh --phase 6 --user <username> --flatpak-profile default
-    ./install.sh --phase 6 --user <username> --flatpak-profile optional
-    ./install.sh --phase 6 --user <username> --flatpak-profile all
-    ./install.sh --phase 6 --user <username> --flatpak-profile none
-    ./install.sh --phase 7 --user <username>
-    ./install.sh --host-policy vm --phase 1
-    AHR_INSTALL_LOG_FILE=/tmp/ahr-install.log ./install.sh
+    sudo ./install.sh --dry-run
+    sudo ./install.sh --phase 1
+    sudo ./install.sh --phase 2
+    sudo ./install.sh --phase 3 -y
+    sudo ./install.sh --phase 4 --user <username>
+    sudo ./install.sh --phase 5 --user <username>
+    sudo ./install.sh --phase 5 --user <username> --startup-mode tty
+    sudo ./install.sh --phase 5 --user <username> --startup-mode greetd
+    sudo ./install.sh --phase 5 --user <username> --startup-mode greetd --greetd-mode autologin
+    sudo ./install.sh --phase 5 --user <username> --startup-mode greetd --greetd-mode greeter
+    sudo ./install.sh --phase 2 --hardware-mode recommend
+    sudo ./install.sh --phase 2 --hardware-mode auto
+    sudo ./install.sh --phase 2 --hardware-mode off
+    sudo ./install.sh --phase 6 --user <username>
+    sudo ./install.sh --phase 6 --user <username> --skip-aur
+    sudo ./install.sh --phase 6 --user <username> --skip-flatpak
+    sudo ./install.sh --phase 6 --user <username> --flatpak-profile default
+    sudo ./install.sh --phase 6 --user <username> --flatpak-profile optional
+    sudo ./install.sh --phase 6 --user <username> --flatpak-profile all
+    sudo ./install.sh --phase 6 --user <username> --flatpak-profile none
+    sudo ./install.sh --phase 7 --user <username>
+    sudo ./install.sh --host-policy vm --phase 1
+    AHR_INSTALL_LOG_FILE=/tmp/ahr-install.log sudo ./install.sh
     AHR_HOST_POLICY=vm ./scripts/doctor.sh
 
 Config dependency validation:
@@ -92,6 +105,7 @@ Install local pre-push hook (runs quality gate automatically):
 CI enforcement:
 
 - GitHub Actions workflow `.github/workflows/artix-hypr-remix-quality-gate.yml` runs quality gate on push and pull requests affecting `artix-hypr-remix/**`.
+- GitHub Actions workflow `.github/workflows/artix-hypr-remix-framework-smoke.yml` runs the framework smoke test in CI with `AHR_HOST_POLICY=any` on `ubuntu-latest`.
 
 Targeted validation helpers:
 

@@ -201,6 +201,34 @@ filter_installable_packages() {
 	done
 }
 
+validate_package_availability() {
+	local phase_label="$1"
+	shift
+	local -a pkgs=("$@")
+	local -a missing=()
+	local pkg
+
+	if [[ "${#pkgs[@]}" -eq 0 ]]; then
+		return 0
+	fi
+
+	info "Validating package availability for $phase_label (${#pkgs[@]} packages)"
+
+	for pkg in "${pkgs[@]}"; do
+		if ! pacman -Si "$pkg" >/dev/null 2>&1; then
+			missing+=("$pkg")
+		fi
+	done
+
+	if [[ "${#missing[@]}" -gt 0 ]]; then
+		warn "Missing packages detected for $phase_label:"
+		printf '  - %s\n' "${missing[@]}" >&2
+		error "Package availability check failed for $phase_label. Update package manifests or repository configuration and retry."
+	fi
+
+	info "Package availability check passed for $phase_label"
+}
+
 resolve_hardware_mode_choice() {
 	local -a recommended_packages=("$@")
 	local response
@@ -369,6 +397,8 @@ run_package_phase() {
 		warn "No packages found under $PACKAGES_DIR"
 		return 0
 	fi
+
+	validate_package_availability "phase 2 package set" "${packages[@]}"
 
 	if [[ "$DRY_RUN" == true ]]; then
 		info "Dry-run: would install ${#packages[@]} packages"

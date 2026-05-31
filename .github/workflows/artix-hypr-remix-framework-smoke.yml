@@ -20,4 +20,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: run framework smoke test
-        run: bash artix-hypr-remix/scripts/smoke-framework.sh
+        run: AHR_HOST_POLICY=any bash artix-hypr-remix/scripts/smoke-framework.sh

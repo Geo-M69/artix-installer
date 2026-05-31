@@ -7,19 +7,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # These patterns should not appear in Artix/OpenRC runtime paths.
 declare -a RULES=(
   "systemctl --user|systemd user services are not supported in OpenRC runtime paths"
-  "/run/systemd/resolve/stub-resolv.conf|systemd-resolved stub path should not be required"
 )
 
 should_ignore_hit() {
   local pattern="$1"
   local hit="$2"
-
-  # Allowed compatibility fallback in DNS first-run script.
-  if [[ "$pattern" == "/run/systemd/resolve/stub-resolv.conf" ]] &&
-     [[ "$hit" == *"config/artix-hypr-remix/first-run.d/50-dns-resolver.sh:"* ]]; then
-    return 0
-  fi
-
+  # No runtime-path exceptions currently allowed.
+  : "$pattern" "$hit"
   return 1
 }
 

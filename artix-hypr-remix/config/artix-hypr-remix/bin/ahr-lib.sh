@@ -10,7 +10,8 @@ ahr_notify() {
   local body="${2:-}"
 
   if ahr_has_cmd notify-send; then
-    notify-send "$title" "$body"
+    # Notifications are best-effort; headless sessions may not have a working bus.
+    notify-send "$title" "$body" >/dev/null 2>&1 || true
   fi
 }
 
