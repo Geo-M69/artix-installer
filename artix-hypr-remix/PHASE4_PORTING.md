@@ -11,6 +11,9 @@ Hyprland:
 - Source references:
   - `omarchy/config/hypr/*.lua`
   - `omarchy/default/hypr/envs.lua`
+  - `omarchy/config/hypr/hyprlock.conf`
+  - `omarchy/config/hypr/hypridle.conf`
+  - `omarchy/config/hypr/xdph.conf`
 - Ported into:
   - `config/hypr/hyprland.conf` (runtime)
   - `config/hypr/hyprland.lua`
@@ -20,6 +23,9 @@ Hyprland:
   - `config/hypr/input.lua`
   - `config/hypr/looknfeel.lua`
   - `config/hypr/monitors.lua`
+  - `config/hypr/hyprlock.conf`
+  - `config/hypr/hypridle.conf`
+  - `config/hypr/xdph.conf`
 
 Important runtime note:
 - Hyprland reads `config/hypr/hyprland.conf` at runtime.

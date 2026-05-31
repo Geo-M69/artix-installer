@@ -9,6 +9,7 @@ return {
   MOZ_ENABLE_WAYLAND = "1",
   ELECTRON_OZONE_PLATFORM_HINT = "wayland",
   OZONE_PLATFORM = "wayland",
+  XCOMPOSEFILE = "$HOME/.XCompose",
 
   XCURSOR_SIZE = "24",
   HYPRCURSOR_SIZE = "24",
