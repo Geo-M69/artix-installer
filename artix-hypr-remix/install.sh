@@ -35,7 +35,7 @@ usage() {
 Usage: ./install.sh [options]
 
 Phases:
-	1. Preflight checks (Artix/OpenRC + required commands)
+	1. Preflight checks (Artix VM/OpenRC + required commands)
 	2. Install packages from packages/[0-8]0-*.txt
 	3. Enable safe OpenRC services from services/openrc-default.txt
 	4. Deploy repo config/ into target user's ~/.config (copy + backup)
@@ -271,6 +271,7 @@ collect_hardware_recommended_packages() {
 
 run_preflight() {
 	info "[Phase 1/7] Running preflight checks"
+	local allow_non_vm="${AHR_ALLOW_NON_VM_TESTING:-0}"
 
 	if [[ "$EUID" -ne 0 ]]; then
 		if [[ "$DRY_RUN" == true ]]; then
@@ -280,8 +281,17 @@ run_preflight() {
 		fi
 	fi
 
-	if [[ ! -f /etc/artix-release ]]; then
-		warn "This does not look like Artix Linux (/etc/artix-release missing)."
+	if [[ "$allow_non_vm" == "1" ]]; then
+		warn "VM-only preflight checks are bypassed (AHR_ALLOW_NON_VM_TESTING=1)"
+	else
+		if [[ ! -f /etc/artix-release ]]; then
+			error "VM-only policy: Artix host required (/etc/artix-release missing)."
+		fi
+
+		hardware_probe
+		if [[ "$HARDWARE_IS_VIRTUALIZED" != "true" ]]; then
+			error "VM-only policy: virtualization is required for installer validation/stabilization."
+		fi
 	fi
 
 	require_command pacman

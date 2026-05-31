@@ -6,6 +6,32 @@ CHECKER_SCRIPT="$SCRIPT_DIR/check-config-deps.sh"
 
 checker_args=()
 
+is_virtualized_host() {
+  if command -v systemd-detect-virt >/dev/null 2>&1; then
+    systemd-detect-virt -q
+    return $?
+  fi
+
+  grep -qi hypervisor /proc/cpuinfo 2>/dev/null
+}
+
+require_vm_only_host() {
+  if [[ "${AHR_ALLOW_NON_VM_TESTING:-0}" == "1" ]]; then
+    echo "WARN: VM-only checks bypassed (AHR_ALLOW_NON_VM_TESTING=1)"
+    return 0
+  fi
+
+  if [[ ! -f /etc/artix-release ]]; then
+    echo "ERROR: VM-only policy: Artix host required (/etc/artix-release missing)." >&2
+    exit 1
+  fi
+
+  if ! is_virtualized_host; then
+    echo "ERROR: VM-only policy: virtualization is required for doctor validation." >&2
+    exit 1
+  fi
+}
+
 usage() {
   cat <<'EOF'
 Usage: ./scripts/doctor.sh [options]
@@ -13,6 +39,9 @@ Usage: ./scripts/doctor.sh [options]
 Options:
   --no-aur   Pass through to dependency checker (ignore packages/90-*.txt)
   -h, --help Show this help
+
+Environment:
+  AHR_ALLOW_NON_VM_TESTING=1  Bypass Artix VM-only guard (maintenance only)
 EOF
 }
 
@@ -33,6 +62,8 @@ while [[ "$#" -gt 0 ]]; do
   esac
   shift
 done
+
+require_vm_only_host
 
 overall_status=0
 

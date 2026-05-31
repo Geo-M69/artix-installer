@@ -23,6 +23,11 @@ Current installer milestone:
 6. Install AUR packages and Flatpak app profiles (`flatpaks/default.txt` by default).
 7. Prepare first-run/post-install framework, initialize migration state, and offer reboot prompt.
 
+Validation and stabilization policy:
+- Installer preflight and runtime validation scripts are VM-only by default.
+- Artix host and virtualization are required for `./install.sh`, `./scripts/doctor.sh`, `./scripts/smoke-framework.sh`, and `./scripts/check-hardware.sh`.
+- For maintenance-only exceptions, set `AHR_ALLOW_NON_VM_TESTING=1` to bypass the guard.
+
 Hardware detection v1:
 - Phase 2 auto-detects basic hardware profiles (`nvidia`, `intel`, `amd`, `laptop`) and maps them to optional package stubs under `config/hardware/<profile>/packages.txt`.
 - Default mode is `recommend`: installer prints detected profile packages and asks whether to install them.
@@ -77,7 +82,7 @@ Hardware detection check:
     ./scripts/check-hardware.sh
     ./scripts/check-hardware.sh /tmp/hardware-profile.json
 
-Framework smoke test (works on non-Artix hosts):
+Framework smoke test (Artix VM only):
 
     ./scripts/smoke-framework.sh
     ./scripts/smoke-framework.sh --keep-sandbox
