@@ -8,6 +8,7 @@ return {
   "wl-paste --type text --watch cliphist store",
   "wl-paste --type image --watch cliphist store",
   "gnome-keyring-daemon --start --components=secrets",
+  "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1",
   "pipewire",
   "wireplumber",
   "pipewire-pulse",

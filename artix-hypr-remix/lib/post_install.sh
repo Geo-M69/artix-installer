@@ -80,14 +80,11 @@ write_first_run_sudoers() {
   cat > "$temp_file" <<EOF
 Cmnd_Alias FIRST_RUN_CLEANUP = /bin/rm -f $FIRST_RUN_SUDOERS_FILE
 Cmnd_Alias REBOOT_CLEANUP = /bin/rm -f $REBOOT_SUDOERS_FILE
-Cmnd_Alias DNS_STUB_SYMLINK = /usr/bin/ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
-$target_user ALL=(ALL) NOPASSWD: /usr/bin/systemctl
 $target_user ALL=(ALL) NOPASSWD: /usr/bin/ufw
 $target_user ALL=(ALL) NOPASSWD: /usr/bin/ufw-docker
 $target_user ALL=(ALL) NOPASSWD: /usr/bin/rc-update
 $target_user ALL=(ALL) NOPASSWD: /usr/bin/rc-service
 $target_user ALL=(ALL) NOPASSWD: /usr/bin/gtk-update-icon-cache
-$target_user ALL=(ALL) NOPASSWD: DNS_STUB_SYMLINK
 $target_user ALL=(ALL) NOPASSWD: FIRST_RUN_CLEANUP
 $target_user ALL=(ALL) NOPASSWD: REBOOT_CLEANUP
 EOF

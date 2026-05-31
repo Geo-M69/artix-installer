@@ -7,7 +7,4 @@ if ! command -v elephant >/dev/null 2>&1; then
 fi
 
 elephant service enable || true
-
-if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files 2>/dev/null | grep -q '^elephant.service'; then
-  systemctl --user start elephant.service || true
-fi
+elephant service start || true

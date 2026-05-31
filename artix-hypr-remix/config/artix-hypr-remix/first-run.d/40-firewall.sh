@@ -30,9 +30,6 @@ fi
 if command -v rc-service >/dev/null 2>&1; then
   sudo rc-service ufw start >/dev/null 2>&1 || true
 fi
-if command -v systemctl >/dev/null 2>&1; then
-  sudo systemctl enable ufw >/dev/null 2>&1 || true
-fi
 
 if command -v ufw-docker >/dev/null 2>&1; then
   sudo ufw-docker install || true
