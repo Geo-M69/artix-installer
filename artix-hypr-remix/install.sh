@@ -29,6 +29,7 @@ HARDWARE_MODE="recommend"
 FLATPAK_PROFILE="default"
 TARGET_USER="${SUDO_USER:-}"
 TARGET_HOME=""
+HOST_POLICY="${AHR_HOST_POLICY:-artix}"
 INSTALL_LOG_FILE="${AHR_INSTALL_LOG_FILE:-/var/log/artix-hypr-remix-install.log}"
 ACTIVE_INSTALL_LOG_FILE=""
 
@@ -37,7 +38,7 @@ usage() {
 Usage: ./install.sh [options]
 
 Phases:
-	1. Preflight checks (Artix VM/OpenRC + required commands)
+	1. Preflight checks (host policy + OpenRC command requirements)
 	2. Install packages from packages/[0-8]0-*.txt
 	3. Enable safe OpenRC services from services/openrc-default.txt
 	4. Deploy repo config/ into target user's ~/.config (copy + backup)
@@ -52,6 +53,7 @@ Options:
 	--greetd-mode MODE   greetd session policy: autologin or greeter (default)
 	--hardware-mode MODE Hardware package mode for phase 2: recommend (default), auto, or off
 	--flatpak-profile MODE Flatpak app profile for phase 6: default (default), optional, all, or none
+	--host-policy MODE Host policy for preflight: artix (default), vm, or any
 	--skip-aur    Skip phase 6 AUR install even when phase includes it
 	--skip-flatpak Skip Flatpak profile install in phase 6
 	--dry-run     Print planned actions without changing the system
@@ -93,6 +95,15 @@ validate_flatpak_profile() {
 	case "$mode" in
 		default|optional|all|none) return 0 ;;
 		*) error "Invalid Flatpak profile '$mode'. Use default, optional, all, or none." ;;
+	esac
+}
+
+validate_host_policy() {
+	local mode="$1"
+
+	case "$mode" in
+		artix|vm|any) return 0 ;;
+		*) error "Invalid host policy '$mode'. Use artix, vm, or any." ;;
 	esac
 }
 
@@ -293,6 +304,7 @@ collect_hardware_recommended_packages() {
 run_preflight() {
 	info "[Phase 1/7] Running preflight checks"
 	local allow_non_vm="${AHR_ALLOW_NON_VM_TESTING:-0}"
+	local effective_host_policy="$HOST_POLICY"
 
 	if [[ "$EUID" -ne 0 ]]; then
 		if [[ "$DRY_RUN" == true ]]; then
@@ -303,17 +315,33 @@ run_preflight() {
 	fi
 
 	if [[ "$allow_non_vm" == "1" ]]; then
-		warn "VM-only preflight checks are bypassed (AHR_ALLOW_NON_VM_TESTING=1)"
-	else
-		if [[ ! -f /etc/artix-release ]]; then
-			error "VM-only policy: Artix host required (/etc/artix-release missing)."
-		fi
-
-		hardware_probe
-		if [[ "$HARDWARE_IS_VIRTUALIZED" != "true" ]]; then
-			error "VM-only policy: virtualization is required for installer validation/stabilization."
-		fi
+		warn "AHR_ALLOW_NON_VM_TESTING=1 is set; forcing host policy to 'any'"
+		effective_host_policy="any"
 	fi
+
+	case "$effective_host_policy" in
+		any)
+			warn "Host checks are bypassed (host policy: any)"
+			;;
+		artix)
+			if [[ ! -f /etc/artix-release ]]; then
+				error "Host policy requires Artix (/etc/artix-release missing)."
+			fi
+			;;
+		vm)
+			if [[ ! -f /etc/artix-release ]]; then
+				error "Host policy 'vm' requires Artix (/etc/artix-release missing)."
+			fi
+
+			hardware_probe
+			if [[ "$HARDWARE_IS_VIRTUALIZED" != "true" ]]; then
+				error "Host policy 'vm' requires virtualization."
+			fi
+			;;
+		*)
+			error "Unknown effective host policy: $effective_host_policy"
+			;;
+	esac
 
 	require_command pacman
 	require_command rc-update
@@ -542,6 +570,12 @@ while [[ "$#" -gt 0 ]]; do
 			validate_flatpak_profile "$1"
 			FLATPAK_PROFILE="$1"
 			;;
+		--host-policy)
+			shift
+			[[ "$#" -gt 0 ]] || error "--host-policy requires a value (artix|vm|any)"
+			validate_host_policy "$1"
+			HOST_POLICY="$1"
+			;;
 		--dry-run)
 			DRY_RUN=true
 			;;
@@ -564,6 +598,10 @@ trap 'status=$?; printf "[%s] Installer exit status: %s\n" "$(date "+%Y-%m-%d %H
 
 if [[ "$STARTUP_MODE" != "greetd" && "$GREETD_MODE" != "greeter" ]]; then
 	warn "Ignoring --greetd-mode '$GREETD_MODE' because startup mode is '$STARTUP_MODE'"
+fi
+
+if [[ "$HOST_POLICY" != "artix" ]]; then
+	info "Host policy override: $HOST_POLICY"
 fi
 
 if [[ "$ASSUME_YES" == false ]]; then

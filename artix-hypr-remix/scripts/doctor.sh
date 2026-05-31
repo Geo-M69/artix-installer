@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKER_SCRIPT="$SCRIPT_DIR/check-config-deps.sh"
 
 checker_args=()
+host_policy="${AHR_HOST_POLICY:-artix}"
 
 is_virtualized_host() {
   if command -v systemd-detect-virt >/dev/null 2>&1; then
@@ -15,21 +16,40 @@ is_virtualized_host() {
   grep -qi hypervisor /proc/cpuinfo 2>/dev/null
 }
 
-require_vm_only_host() {
+require_supported_host() {
+  local effective_host_policy="$host_policy"
+
   if [[ "${AHR_ALLOW_NON_VM_TESTING:-0}" == "1" ]]; then
-    echo "WARN: VM-only checks bypassed (AHR_ALLOW_NON_VM_TESTING=1)"
-    return 0
+    echo "WARN: AHR_ALLOW_NON_VM_TESTING=1 is set; forcing host policy to any"
+    effective_host_policy="any"
   fi
 
-  if [[ ! -f /etc/artix-release ]]; then
-    echo "ERROR: VM-only policy: Artix host required (/etc/artix-release missing)." >&2
-    exit 1
-  fi
+  case "$effective_host_policy" in
+    any)
+      echo "WARN: Host checks bypassed (host policy: any)"
+      ;;
+    artix)
+      if [[ ! -f /etc/artix-release ]]; then
+        echo "ERROR: Host policy requires Artix (/etc/artix-release missing)." >&2
+        exit 1
+      fi
+      ;;
+    vm)
+      if [[ ! -f /etc/artix-release ]]; then
+        echo "ERROR: Host policy 'vm' requires Artix (/etc/artix-release missing)." >&2
+        exit 1
+      fi
 
-  if ! is_virtualized_host; then
-    echo "ERROR: VM-only policy: virtualization is required for doctor validation." >&2
-    exit 1
-  fi
+      if ! is_virtualized_host; then
+        echo "ERROR: Host policy 'vm' requires virtualization for doctor validation." >&2
+        exit 1
+      fi
+      ;;
+    *)
+      echo "ERROR: Invalid AHR_HOST_POLICY '$effective_host_policy' (use artix, vm, or any)." >&2
+      exit 1
+      ;;
+  esac
 }
 
 usage() {
@@ -41,7 +61,8 @@ Options:
   -h, --help Show this help
 
 Environment:
-  AHR_ALLOW_NON_VM_TESTING=1  Bypass Artix VM-only guard (maintenance only)
+  AHR_HOST_POLICY=artix|vm|any  Host policy (default: artix)
+  AHR_ALLOW_NON_VM_TESTING=1    Legacy compatibility; forces policy to any
 EOF
 }
 
@@ -63,7 +84,7 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-require_vm_only_host
+require_supported_host
 
 overall_status=0
 

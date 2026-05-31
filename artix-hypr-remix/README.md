@@ -24,9 +24,9 @@ Current installer milestone:
 7. Prepare first-run/post-install framework, initialize migration state, and offer reboot prompt.
 
 Validation and stabilization policy:
-- Installer preflight and runtime validation scripts are VM-only by default.
-- Artix host and virtualization are required for `./install.sh`, `./scripts/doctor.sh`, `./scripts/smoke-framework.sh`, and `./scripts/check-hardware.sh`.
-- For maintenance-only exceptions, set `AHR_ALLOW_NON_VM_TESTING=1` to bypass the guard.
+- Host policy defaults to Artix-only (`AHR_HOST_POLICY=artix`) for `./install.sh`, `./scripts/doctor.sh`, `./scripts/smoke-framework.sh`, and `./scripts/check-hardware.sh`.
+- Use strict VM validation with `AHR_HOST_POLICY=vm` (requires Artix + virtualization).
+- For maintenance-only exceptions, use `AHR_HOST_POLICY=any` (legacy `AHR_ALLOW_NON_VM_TESTING=1` still forces bypass).
 
 Hardware detection v1:
 - Phase 2 auto-detects basic hardware profiles (`nvidia`, `intel`, `amd`, `laptop`) and maps them to optional package stubs under `config/hardware/<profile>/packages.txt`.
@@ -66,7 +66,9 @@ Useful options:
     ./install.sh --phase 6 --user <username> --flatpak-profile all
     ./install.sh --phase 6 --user <username> --flatpak-profile none
     ./install.sh --phase 7 --user <username>
+    ./install.sh --host-policy vm --phase 1
     AHR_INSTALL_LOG_FILE=/tmp/ahr-install.log ./install.sh
+    AHR_HOST_POLICY=vm ./scripts/doctor.sh
 
 Config dependency validation:
 
@@ -83,7 +85,7 @@ Hardware detection check:
     ./scripts/check-hardware.sh
     ./scripts/check-hardware.sh /tmp/hardware-profile.json
 
-Framework smoke test (Artix VM only):
+Framework smoke test:
 
     ./scripts/smoke-framework.sh
     ./scripts/smoke-framework.sh --keep-sandbox
@@ -100,6 +102,7 @@ Notes:
 - `flatpaks/default.txt` and `flatpaks/optional.txt` are consumed by phase 6.
 - Hardware profile package stubs are in `config/hardware/<profile>/packages.txt`.
 - `services/openrc-boot.txt` is not managed by the desktop installer.
+- Installer preflight host policy supports `--host-policy artix|vm|any` (default: `artix`), and `AHR_HOST_POLICY` applies to helper validation scripts.
 - Phase 4 always replaces existing target config paths with timestamp backups.
 - Phase 4 runs `xdg-user-dirs-update` for the target user when available.
 - Phase 5 supports `--startup-mode tty|greetd` and uses `~/.config/artix-hypr-remix/bin/start-hyprland-session.sh` as the shared session launcher.
