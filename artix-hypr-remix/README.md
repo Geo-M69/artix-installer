@@ -23,6 +23,7 @@ Current installer milestone:
 6. Configure startup mode for Hyprland (`tty` default or optional `greetd`).
 7. Install AUR packages and Flatpak app profiles (`flatpaks/default.txt` by default).
 8. Prepare first-run/post-install framework, initialize migration state, and offer reboot prompt.
+9. Optionally apply a guarded Git/GPG/SSH baseline for the target user (disabled by default).
 
 Validation and stabilization policy:
 - Host policy defaults to Artix-only (`AHR_HOST_POLICY=artix`) for `./install.sh`, `./scripts/doctor.sh`, `./scripts/smoke-framework.sh`, and `./scripts/check-hardware.sh`.
@@ -54,9 +55,9 @@ Quick install (fresh Artix OpenRC):
     sudo ./install.sh
 
 Install command notes:
-- Installer phases 1-7 require root privileges.
-- Running with `sudo` preserves `SUDO_USER`, so phases 4-7 can target your desktop user automatically.
-- If you run from a root shell directly, pass `--user <username>` for phases 4-7.
+- Installer phases 1-8 require root privileges.
+- Running with `sudo` preserves `SUDO_USER`, so phases 4-8 can target your desktop user automatically.
+- If you run from a root shell directly, pass `--user <username>` for phases 4-8.
 
 Usage (from `artix-hypr-remix/`):
 
@@ -89,7 +90,9 @@ Useful options:
     sudo ./install.sh --phase 6 --user <username> --flatpak-profile all
     sudo ./install.sh --phase 6 --user <username> --flatpak-profile none
     sudo ./install.sh --phase 7 --user <username>
+    sudo ./install.sh --phase 8 --user <username> --dev-baseline on
     sudo ./install.sh --from-phase 6 --phase 7 --user <username>
+    sudo ./install.sh --from-phase 8 --phase 8 --user <username> --dev-baseline on
     sudo ./install.sh --host-policy vm --phase 1
     AHR_INSTALL_STATE_DIR=/tmp/ahr-install-state sudo ./install.sh --phase 3
     AHR_INSTALL_LOG_FILE=/tmp/ahr-install.log sudo ./install.sh
@@ -184,6 +187,7 @@ Notes:
 - Phase 6 installs Flatpak refs from `flatpaks/default.txt` by default (`--flatpak-profile optional|all|none` and `--skip-flatpak` are available).
 - Flatpak refs are installed with system scope and Flathub remote bootstrap (`flathub`) when missing.
 - Phase 7 creates first-run state at `~/.local/state/artix-hypr-remix/first-run.mode`, installs scoped installer sudoers files, and initializes migration state under `~/.local/state/artix-hypr-remix/migrations`.
+- Phase 8 is optional and only applies when `--dev-baseline on` is set; it writes guarded managed blocks for `~/.ssh/config`, `~/.gnupg/gpg.conf`, and `~/.gnupg/gpg-agent.conf` with one-time backups (`*.ahr-dev-baseline.bak`) and preserves existing explicit git settings.
 - Phase 7 installs native command namespace links into `~/.local/bin` and writes a small Omarchy-compatible alias layer.
 - Phase 7 offers a reboot prompt (skipped when `--yes` is used) so first-run can execute immediately on next login.
 - First user login runs `~/.config/artix-hypr-remix/bin/first-run.sh` from Hyprland autostart; task completion is tracked at `~/.local/state/artix-hypr-remix/first-run.tasks`, and the marker is only removed after all first-run steps succeed.

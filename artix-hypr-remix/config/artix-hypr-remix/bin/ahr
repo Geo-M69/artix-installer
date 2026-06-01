@@ -24,7 +24,7 @@ usage() {
 Usage: ahr <command> [args]
 
 Commands:
-  menu                Open application launcher
+  menu                Open command menu (setup/install/remove/update/system)
   theme               Theme engine command group
   launch-terminal     Open terminal
   launch-browser      Open browser

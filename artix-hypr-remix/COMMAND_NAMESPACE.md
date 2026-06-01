@@ -21,7 +21,7 @@ Categories:
 ## V1 Commands
 
 - `ahr` - top-level help and subcommand dispatcher
-- `ahr-menu` - open the application launcher
+- `ahr-menu` - open feature-sliced command menu (`setup`, `install`, `remove`, `update`, `system`) with app-launcher entry
 - `ahr-launch-terminal` - open preferred terminal
 - `ahr-launch-browser` - open default browser/homepage
 - `ahr-launch-files` - open file manager in a target path

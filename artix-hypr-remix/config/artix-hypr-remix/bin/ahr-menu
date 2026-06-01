@@ -1,18 +1,491 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
-if ahr_has_cmd walker; then
-  exec walker
-fi
+MENU_BACKEND=""
 
-if ahr_has_cmd wofi; then
-  exec wofi --show drun
-fi
+usage() {
+  cat <<'EOF'
+Usage: ahr-menu [slice]
 
-if ahr_has_cmd rofi; then
-  exec rofi -show drun
-fi
+Slices:
+  main      Main menu (default)
+  apps      Open application launcher directly
+  setup     Setup actions
+  install   Install actions
+  remove    Remove actions
+  update    Update and migration actions
+  system    Session and power actions
+  help      Show this help
+EOF
+}
 
-ahr_fail "No application launcher found (walker/wofi/rofi)"
+resolve_command_path() {
+  local command_name="$1"
+
+  if [[ -x "$SCRIPT_DIR/$command_name" ]]; then
+    printf '%s\n' "$SCRIPT_DIR/$command_name"
+    return 0
+  fi
+
+  if command -v "$command_name" >/dev/null 2>&1; then
+    command -v "$command_name"
+    return 0
+  fi
+
+  return 1
+}
+
+run_command_now() {
+  local command_name="$1"
+  shift || true
+  local command_path
+
+  command_path="$(resolve_command_path "$command_name")" || ahr_fail "Command not found: $command_name"
+  exec "$command_path" "$@"
+}
+
+run_command_background() {
+  local command_name="$1"
+  shift || true
+  local command_path
+
+  command_path="$(resolve_command_path "$command_name")" || ahr_fail "Command not found: $command_name"
+  nohup "$command_path" "$@" >/dev/null 2>&1 &
+  exit 0
+}
+
+quote_command() {
+  local output=""
+  local arg
+
+  for arg in "$@"; do
+    output+="$(printf '%q' "$arg") "
+  done
+
+  printf '%s' "${output% }"
+}
+
+run_terminal_script() {
+  local script_text="$1"
+
+  if ahr_exec_terminal_app bash -lc "$script_text"; then
+    exit 0
+  fi
+
+  ahr_fail "No terminal found for this action"
+}
+
+run_terminal_command() {
+  local command_line
+  command_line="$(quote_command "$@")"
+  run_terminal_script "$command_line"
+}
+
+menu_backend() {
+  if [[ -n "$MENU_BACKEND" ]]; then
+    printf '%s\n' "$MENU_BACKEND"
+    return 0
+  fi
+
+  if [[ -n "${AHR_MENU_BACKEND:-}" ]]; then
+    case "$AHR_MENU_BACKEND" in
+      walker|wofi|rofi|tty)
+        MENU_BACKEND="$AHR_MENU_BACKEND"
+        printf '%s\n' "$MENU_BACKEND"
+        return 0
+        ;;
+    esac
+  fi
+
+  if ahr_has_cmd walker; then
+    MENU_BACKEND="walker"
+  elif ahr_has_cmd wofi; then
+    MENU_BACKEND="wofi"
+  elif ahr_has_cmd rofi; then
+    MENU_BACKEND="rofi"
+  elif [[ -t 0 && -t 1 ]]; then
+    MENU_BACKEND="tty"
+  else
+    ahr_fail "No menu backend found (walker/wofi/rofi)"
+  fi
+
+  printf '%s\n' "$MENU_BACKEND"
+}
+
+menu_select_tty() {
+  local prompt="$1"
+  shift
+  local -a options=("$@")
+  local selection
+  local index
+
+  printf '\n%s\n' "$prompt"
+  for index in "${!options[@]}"; do
+    printf '  %d) %s\n' "$((index + 1))" "${options[$index]}"
+  done
+
+  printf '> '
+  read -r selection || true
+
+  if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#options[@]} )); then
+    printf '%s\n' "${options[$((selection - 1))]}"
+    return 0
+  fi
+
+  printf '%s\n' ""
+}
+
+menu_select() {
+  local prompt="$1"
+  shift
+  local -a options=("$@")
+
+  case "$(menu_backend)" in
+    walker)
+      printf '%s\n' "${options[@]}" | walker --dmenu -p "$prompt" 2>/dev/null || true
+      ;;
+    wofi)
+      printf '%s\n' "${options[@]}" | wofi --dmenu --prompt "$prompt" 2>/dev/null || true
+      ;;
+    rofi)
+      printf '%s\n' "${options[@]}" | rofi -dmenu -p "$prompt" 2>/dev/null || true
+      ;;
+    tty)
+      menu_select_tty "$prompt" "${options[@]}"
+      ;;
+    *)
+      ahr_fail "No menu backend found (walker/wofi/rofi)"
+      ;;
+  esac
+}
+
+confirm_yes() {
+  local prompt="$1"
+  local answer
+
+  answer="$(menu_select "$prompt" "No" "Yes")"
+  [[ "$answer" == "Yes" ]]
+}
+
+open_application_launcher() {
+  if ahr_has_cmd walker; then
+    exec walker
+  fi
+
+  if ahr_has_cmd wofi; then
+    exec wofi --show drun
+  fi
+
+  if ahr_has_cmd rofi; then
+    exec rofi -show drun
+  fi
+
+  ahr_fail "No application launcher found (walker/wofi/rofi)"
+}
+
+show_default_browser_menu() {
+  local current
+  local choice
+
+  current="$(run_command_capture ahr-default-browser)"
+  choice="$(menu_select "Setup: Default Browser (current: ${current:-unknown})" \
+    "Chromium" "Chrome" "Brave" "Brave Origin" "Edge" "Firefox" "Zen" "Back")"
+
+  case "$choice" in
+    Chromium) run_command_now ahr-default-browser chromium ;;
+    Chrome) run_command_now ahr-default-browser chrome ;;
+    Brave) run_command_now ahr-default-browser brave ;;
+    "Brave Origin") run_command_now ahr-default-browser brave-origin ;;
+    Edge) run_command_now ahr-default-browser edge ;;
+    Firefox) run_command_now ahr-default-browser firefox ;;
+    Zen) run_command_now ahr-default-browser zen ;;
+    *) return 0 ;;
+  esac
+}
+
+show_default_terminal_menu() {
+  local current
+  local choice
+
+  current="$(run_command_capture ahr-default-terminal)"
+  choice="$(menu_select "Setup: Default Terminal (current: ${current:-unknown})" \
+    "Alacritty" "Foot" "Ghostty" "Kitty" "Back")"
+
+  case "$choice" in
+    Alacritty) run_command_now ahr-default-terminal alacritty ;;
+    Foot) run_command_now ahr-default-terminal foot ;;
+    Ghostty) run_command_now ahr-default-terminal ghostty ;;
+    Kitty) run_command_now ahr-default-terminal kitty ;;
+    *) return 0 ;;
+  esac
+}
+
+show_theme_set_menu() {
+  local theme_cmd
+  local -a themes=()
+  local choice
+
+  theme_cmd="$(resolve_command_path ahr-theme)" || ahr_fail "Command not found: ahr-theme"
+  mapfile -t themes < <("$theme_cmd" list --raw 2>/dev/null | sed '/^[[:space:]]*$/d')
+
+  if (( ${#themes[@]} == 0 )); then
+    ahr_fail "No themes found"
+  fi
+
+  themes+=("Back")
+  choice="$(menu_select "Setup: Theme" "${themes[@]}")"
+
+  if [[ -z "$choice" || "$choice" == "Back" ]]; then
+    return 0
+  fi
+
+  exec "$theme_cmd" set "$choice"
+}
+
+run_command_capture() {
+  local command_name="$1"
+  shift || true
+  local command_path
+
+  if ! command_path="$(resolve_command_path "$command_name")"; then
+    printf '%s\n' ""
+    return 0
+  fi
+
+  "$command_path" "$@" 2>/dev/null || true
+}
+
+show_setup_menu() {
+  local choice
+
+  while true; do
+    choice="$(menu_select "Setup" \
+      "Audio Control" \
+      "Network Control" \
+      "Default Browser" \
+      "Default Terminal" \
+      "Theme Set" \
+      "Theme Next Background" \
+      "Theme Refresh" \
+      "Toggle Idle Lock" \
+      "Toggle Notifications" \
+      "Restart Walker" \
+      "Back")"
+
+    case "$choice" in
+      "Audio Control") run_command_background ahr-launch-audio ;;
+      "Network Control") run_command_background ahr-launch-wifi ;;
+      "Default Browser") show_default_browser_menu ;;
+      "Default Terminal") show_default_terminal_menu ;;
+      "Theme Set") show_theme_set_menu ;;
+      "Theme Next Background") run_command_now ahr-theme bg-next ;;
+      "Theme Refresh") run_command_now ahr-theme refresh ;;
+      "Toggle Idle Lock") run_command_now ahr-toggle-idle ;;
+      "Toggle Notifications") run_command_now ahr-toggle-notification-silencing ;;
+      "Restart Walker") run_command_now ahr-restart-walker ;;
+      "Back"|"") return 0 ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+show_install_menu() {
+  local choice
+
+  while true; do
+    choice="$(menu_select "Install" \
+      "Pacman Package(s)" \
+      "AUR Package(s)" \
+      "Flatpak App" \
+      "Docker Stack (OpenRC)" \
+      "Printing Stack (OpenRC)" \
+      "Back")"
+
+    case "$choice" in
+      "Pacman Package(s)")
+        run_terminal_script "set -e; read -r -p 'Packages to install via pacman (space-separated): ' packages; [[ -n \"\$packages\" ]] || exit 0; sudo pacman -S --needed \$packages"
+        ;;
+      "AUR Package(s)")
+        run_terminal_script "set -e; read -r -p 'Packages to install via AUR helper (space-separated): ' packages; [[ -n \"\$packages\" ]] || exit 0; if command -v paru >/dev/null 2>&1; then paru -S --needed \$packages; elif command -v yay >/dev/null 2>&1; then yay -S --needed \$packages; else echo 'No AUR helper found (paru/yay).'; exit 1; fi"
+        ;;
+      "Flatpak App")
+        run_terminal_script "set -e; if ! command -v flatpak >/dev/null 2>&1; then echo 'flatpak is not installed.'; exit 1; fi; read -r -p 'Flatpak application id (for flathub): ' app_id; [[ -n \"\$app_id\" ]] || exit 0; flatpak install flathub \"\$app_id\""
+        ;;
+      "Docker Stack (OpenRC)")
+        run_terminal_script "set -e; sudo pacman -S --needed docker docker-openrc; sudo rc-update add docker default; sudo rc-service docker start"
+        ;;
+      "Printing Stack (OpenRC)")
+        run_terminal_script "set -e; sudo pacman -S --needed cups avahi cups-openrc avahi-openrc; sudo rc-update add cupsd default; sudo rc-update add avahi-daemon default; sudo rc-service cupsd start; sudo rc-service avahi-daemon start"
+        ;;
+      "Back"|"") return 0 ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+show_remove_menu() {
+  local choice
+
+  while true; do
+    choice="$(menu_select "Remove" \
+      "Pacman Package(s)" \
+      "Flatpak App" \
+      "Docker Stack (OpenRC)" \
+      "Printing Stack (OpenRC)" \
+      "Back")"
+
+    case "$choice" in
+      "Pacman Package(s)")
+        run_terminal_script "set -e; read -r -p 'Packages to remove via pacman (space-separated): ' packages; [[ -n \"\$packages\" ]] || exit 0; sudo pacman -Rns \$packages"
+        ;;
+      "Flatpak App")
+        run_terminal_script "set -e; if ! command -v flatpak >/dev/null 2>&1; then echo 'flatpak is not installed.'; exit 1; fi; read -r -p 'Flatpak application id to remove: ' app_id; [[ -n \"\$app_id\" ]] || exit 0; flatpak uninstall \"\$app_id\""
+        ;;
+      "Docker Stack (OpenRC)")
+        if ! confirm_yes "Remove docker stack?"; then
+          continue
+        fi
+        run_terminal_script "set -e; sudo rc-service docker stop >/dev/null 2>&1 || true; sudo rc-update del docker default >/dev/null 2>&1 || true; remove_pkgs=(); for pkg in docker docker-openrc; do pacman -Q \"\$pkg\" >/dev/null 2>&1 && remove_pkgs+=(\"\$pkg\"); done; if (( \${#remove_pkgs[@]} > 0 )); then sudo pacman -Rns \"\${remove_pkgs[@]}\"; else echo 'Docker packages are not installed.'; fi"
+        ;;
+      "Printing Stack (OpenRC)")
+        if ! confirm_yes "Remove printing stack?"; then
+          continue
+        fi
+        run_terminal_script "set -e; sudo rc-service cupsd stop >/dev/null 2>&1 || true; sudo rc-service avahi-daemon stop >/dev/null 2>&1 || true; sudo rc-update del cupsd default >/dev/null 2>&1 || true; sudo rc-update del avahi-daemon default >/dev/null 2>&1 || true; remove_pkgs=(); for pkg in cups avahi cups-openrc avahi-openrc; do pacman -Q \"\$pkg\" >/dev/null 2>&1 && remove_pkgs+=(\"\$pkg\"); done; if (( \${#remove_pkgs[@]} > 0 )); then sudo pacman -Rns \"\${remove_pkgs[@]}\"; else echo 'Printing stack packages are not installed.'; fi"
+        ;;
+      "Back"|"") return 0 ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+show_update_menu() {
+  local choice
+  local update_cmd
+  local available_cmd
+  local migrate_cmd
+
+  update_cmd="$(resolve_command_path ahr-update)" || ahr_fail "Command not found: ahr-update"
+  available_cmd="$(resolve_command_path ahr-update-available)" || ahr_fail "Command not found: ahr-update-available"
+  migrate_cmd="$(resolve_command_path ahr-migrate)" || ahr_fail "Command not found: ahr-migrate"
+
+  while true; do
+    choice="$(menu_select "Update" \
+      "Run Full Update" \
+      "Run Update + Flatpak" \
+      "Run Migrations Only" \
+      "Check Update Availability" \
+      "Migration Status" \
+      "Retry Skipped Migrations" \
+      "Back")"
+
+    case "$choice" in
+      "Run Full Update") run_terminal_command "$update_cmd" ;;
+      "Run Update + Flatpak") run_terminal_command "$update_cmd" --flatpak ;;
+      "Run Migrations Only") run_terminal_command "$update_cmd" --migrations-only ;;
+      "Check Update Availability")
+        run_terminal_script "set +e; $(quote_command "$available_cmd"); status=\$?; echo; echo \"Exit code: \$status\"; if [[ \$status -eq 1 ]]; then echo 'No updates pending.'; fi; read -r -p 'Press Enter to close...' _"
+        ;;
+      "Migration Status")
+        run_terminal_script "set -e; $(quote_command "$migrate_cmd" --status); read -r -p 'Press Enter to close...' _"
+        ;;
+      "Retry Skipped Migrations") run_terminal_command "$migrate_cmd" --retry-skipped ;;
+      "Back"|"") return 0 ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+show_system_menu() {
+  local choice
+
+  while true; do
+    choice="$(menu_select "System" \
+      "Lock Screen" \
+      "Logout Hyprland" \
+      "Reboot" \
+      "Power Off" \
+      "Open Terminal" \
+      "Open App Launcher" \
+      "Capture Screenshot" \
+      "Toggle Screen Recording" \
+      "Back")"
+
+    case "$choice" in
+      "Lock Screen") run_command_background ahr-system-lock ;;
+      "Logout Hyprland")
+        if ahr_has_cmd hyprctl; then
+          nohup hyprctl dispatch exit >/dev/null 2>&1 &
+          exit 0
+        fi
+        ahr_fail "hyprctl is not available to end the current session"
+        ;;
+      "Reboot")
+        if confirm_yes "Reboot now?"; then
+          run_command_now ahr-system-reboot
+        fi
+        ;;
+      "Power Off")
+        if confirm_yes "Power off now?"; then
+          run_terminal_script "sudo poweroff"
+        fi
+        ;;
+      "Open Terminal") run_command_background ahr-launch-terminal ;;
+      "Open App Launcher") open_application_launcher ;;
+      "Capture Screenshot") run_command_background ahr-capture-screenshot ;;
+      "Toggle Screen Recording") run_command_background ahr-capture-screenrecording ;;
+      "Back"|"") return 0 ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+show_main_menu() {
+  local choice
+
+  while true; do
+    choice="$(menu_select "AHR Menu" \
+      "Applications" \
+      "Setup" \
+      "Install" \
+      "Remove" \
+      "Update" \
+      "System" \
+      "Cancel")"
+
+    case "$choice" in
+      "Applications") open_application_launcher ;;
+      "Setup") show_setup_menu ;;
+      "Install") show_install_menu ;;
+      "Remove") show_remove_menu ;;
+      "Update") show_update_menu ;;
+      "System") show_system_menu ;;
+      "Cancel"|"") exit 0 ;;
+      *) exit 0 ;;
+    esac
+  done
+}
+
+dispatch() {
+  local slice="${1:-main}"
+
+  case "$slice" in
+    main) show_main_menu ;;
+    apps) open_application_launcher ;;
+    setup) show_setup_menu ;;
+    install) show_install_menu ;;
+    remove) show_remove_menu ;;
+    update) show_update_menu ;;
+    system) show_system_menu ;;
+    help|-h|--help) usage ;;
+    *)
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+dispatch "${1:-main}"

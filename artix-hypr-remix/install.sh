@@ -20,6 +20,7 @@ source "$LIB_DIR/tty.sh"
 source "$LIB_DIR/hardware.sh"
 source "$LIB_DIR/flatpak.sh"
 source "$LIB_DIR/post_install.sh"
+source "$LIB_DIR/dev_baseline.sh"
 source "$LIB_DIR/state.sh"
 
 TARGET_PHASE=7
@@ -35,6 +36,7 @@ HARDWARE_MODE="recommend"
 DOCKER_PROFILE="off"
 PRINTING_PROFILE="off"
 FLATPAK_PROFILE="default"
+DEV_BASELINE_MODE="off"
 TARGET_USER="${SUDO_USER:-}"
 TARGET_HOME=""
 HOST_POLICY="${AHR_HOST_POLICY:-artix}"
@@ -54,17 +56,19 @@ Phases:
 	5. Configure startup mode for Hyprland (tty or greetd)
 	6. Install AUR packages and Flatpak app profiles
 	7. Prepare first-run + post-install framework and migration state
+	8. Optional Git/GPG/SSH baseline defaults for target user
 
 Options:
-	--phase N     Run phases up to N (1-7). Default: 7
-	--from-phase N Start from phase N (1-7). Default: 1
-	--user NAME   Target non-root desktop user for phases 4-7
+	--phase N     Run phases up to N (1-8). Default: 7
+	--from-phase N Start from phase N (1-8). Default: 1
+	--user NAME   Target non-root desktop user for phases 4-8
 	--startup-mode MODE  Startup mode for phase 5: tty (default) or greetd
 	--greetd-mode MODE   greetd session policy: autologin or greeter (default)
 	--hardware-mode MODE Hardware package mode for phase 2: recommend (default), auto, or off
 	--docker-profile MODE Optional docker profile for phase 2/3: off (default) or on
 	--printing-profile MODE Optional printing profile for phase 2/3: off (default) or on
 	--flatpak-profile MODE Flatpak app profile for phase 6: default (default), optional, all, or none
+	--dev-baseline MODE Optional phase 8 baseline: off (default) or on
 	--host-policy MODE Host policy for preflight: artix (default), vm, or any
 	--skip-aur    Skip phase 6 AUR install even when phase includes it
 	--skip-flatpak Skip Flatpak profile install in phase 6
@@ -134,6 +138,15 @@ validate_host_policy() {
 	case "$mode" in
 		artix|vm|any) return 0 ;;
 		*) error "Invalid host policy '$mode'. Use artix, vm, or any." ;;
+	esac
+}
+
+validate_dev_baseline_mode() {
+	local mode="$1"
+
+	case "$mode" in
+		off|on) return 0 ;;
+		*) error "Invalid dev baseline mode '$mode'. Use off or on." ;;
 	esac
 }
 
@@ -834,7 +847,7 @@ resolve_target_user() {
 	fi
 
 	if [[ -z "$TARGET_USER" || "$TARGET_USER" == "root" ]]; then
-		error "Phases 4-7 require a non-root desktop user. Re-run with --user <name>."
+		error "Phases 4-8 require a non-root desktop user. Re-run with --user <name>."
 	fi
 
 	if ! id "$TARGET_USER" >/dev/null 2>&1; then
@@ -915,6 +928,17 @@ run_post_install_phase() {
 	finish_post_install "$TARGET_USER" "$DRY_RUN" "$ASSUME_YES"
 }
 
+run_dev_baseline_phase() {
+	if [[ "$DEV_BASELINE_MODE" != "on" ]]; then
+		info "[Phase 8/8] Skipping optional Git/GPG/SSH baseline (--dev-baseline off)"
+		return 0
+	fi
+
+	info "[Phase 8/8] Applying optional Git/GPG/SSH baseline"
+	resolve_target_user
+	apply_dev_baseline "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
+}
+
 run_phase_by_number() {
 	local phase="$1"
 
@@ -943,6 +967,9 @@ run_phase_by_number() {
 		7)
 			run_post_install_phase
 			;;
+		8)
+			run_dev_baseline_phase
+			;;
 		*)
 			error "Unsupported phase number: $phase"
 			;;
@@ -955,14 +982,14 @@ while [[ "$#" -gt 0 ]]; do
 	case "$1" in
 		--phase)
 			shift
-			[[ "$#" -gt 0 ]] || error "--phase requires a value (1-7)"
-			[[ "$1" =~ ^[1-7]$ ]] || error "Invalid phase '$1'. Use 1, 2, 3, 4, 5, 6, or 7."
+			[[ "$#" -gt 0 ]] || error "--phase requires a value (1-8)"
+			[[ "$1" =~ ^[1-8]$ ]] || error "Invalid phase '$1'. Use 1, 2, 3, 4, 5, 6, 7, or 8."
 			TARGET_PHASE="$1"
 			;;
 		--from-phase)
 			shift
-			[[ "$#" -gt 0 ]] || error "--from-phase requires a value (1-7)"
-			[[ "$1" =~ ^[1-7]$ ]] || error "Invalid from-phase '$1'. Use 1, 2, 3, 4, 5, 6, or 7."
+			[[ "$#" -gt 0 ]] || error "--from-phase requires a value (1-8)"
+			[[ "$1" =~ ^[1-8]$ ]] || error "Invalid from-phase '$1'. Use 1, 2, 3, 4, 5, 6, 7, or 8."
 			FROM_PHASE="$1"
 			FROM_PHASE_EXPLICIT=true
 			;;
@@ -1013,6 +1040,12 @@ while [[ "$#" -gt 0 ]]; do
 			validate_flatpak_profile "$1"
 			FLATPAK_PROFILE="$1"
 			;;
+		--dev-baseline)
+			shift
+			[[ "$#" -gt 0 ]] || error "--dev-baseline requires a value (off|on)"
+			validate_dev_baseline_mode "$1"
+			DEV_BASELINE_MODE="$1"
+			;;
 		--host-policy)
 			shift
 			[[ "$#" -gt 0 ]] || error "--host-policy requires a value (artix|vm|any)"
@@ -1044,7 +1077,7 @@ setup_install_logging
 trap 'status=$?; printf "[%s] Installer exit status: %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$status" >> "$ACTIVE_INSTALL_LOG_FILE"' EXIT
 state_init "$INSTALL_STATE_DIR" "$DRY_RUN"
 
-last_completed_phase="$(state_last_completed_phase 7)"
+last_completed_phase="$(state_last_completed_phase 8)"
 if [[ "$DRY_RUN" == "true" ]]; then
 	info "Dry-run mode: installer state markers are read-only (source: $INSTALL_STATE_DIR)"
 else
@@ -1071,8 +1104,8 @@ if [[ "$ASSUME_YES" == false ]]; then
 	if (( FROM_PHASE > 1 )); then
 		info "Installer start phase: $FROM_PHASE"
 	fi
-	if (( TARGET_PHASE >= 4 && FROM_PHASE <= 7 )); then
-		info "Target desktop user for phases 4-7: ${TARGET_USER:-<unset>}"
+	if (( TARGET_PHASE >= 4 && FROM_PHASE <= 8 )); then
+		info "Target desktop user for phases 4-8: ${TARGET_USER:-<unset>}"
 	fi
 	if (( TARGET_PHASE >= 6 && FROM_PHASE <= 6 )) && [[ "$SKIP_AUR" == true ]]; then
 		info "AUR phase will be skipped (--skip-aur)"
@@ -1094,6 +1127,9 @@ if [[ "$ASSUME_YES" == false ]]; then
 		info "Hardware package mode for phase 2: $HARDWARE_MODE"
 		info "Docker profile mode for phase 2/3: $DOCKER_PROFILE"
 		info "Printing profile mode for phase 2/3: $PRINTING_PROFILE"
+	fi
+	if (( TARGET_PHASE >= 8 && FROM_PHASE <= 8 )); then
+		info "Optional dev baseline mode for phase 8: $DEV_BASELINE_MODE"
 	fi
 	info "Execution phase window: $FROM_PHASE..$TARGET_PHASE"
 	read -r -p "Continue? [y/N]: " response
