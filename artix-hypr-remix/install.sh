@@ -218,6 +218,37 @@ validate_required_openrc_services_declared() {
 	done < <(required_openrc_services)
 }
 
+validate_openrc_service_init_scripts() {
+	local -a services=("$@")
+	local -a missing_required=()
+	local -a missing_optional=()
+	local service
+
+	for service in "${services[@]}"; do
+		if service_exists "$service"; then
+			continue
+		fi
+
+		if is_required_openrc_service "$service"; then
+			missing_required+=("$service")
+			continue
+		fi
+
+		missing_optional+=("$service")
+	done
+
+	if [[ "${#missing_optional[@]}" -gt 0 ]]; then
+		warn "OpenRC manifest contains optional services without init scripts under /etc/init.d (they will be skipped):"
+		printf '  - %s\n' "${missing_optional[@]}" >&2
+	fi
+
+	if [[ "${#missing_required[@]}" -gt 0 ]]; then
+		warn "Required OpenRC services are missing init scripts under /etc/init.d:"
+		printf '  - %s\n' "${missing_required[@]}" >&2
+		error "OpenRC required-service manifest validation failed. Verify service names in $SERVICES_DIR/openrc-default.txt and installed packages."
+	fi
+}
+
 filter_installable_packages() {
 	local -n out_ref=$1
 	shift
@@ -475,7 +506,14 @@ run_service_phase() {
 		return 0
 	fi
 
+	validate_openrc_service_init_scripts "${services[@]}"
+
 	for service in "${services[@]}"; do
+		if ! service_exists "$service"; then
+			# Optional missing services were already reported by manifest validation.
+			continue
+		fi
+
 		if is_required_openrc_service "$service"; then
 			enable_service_required "$service" "default" "true"
 			continue
