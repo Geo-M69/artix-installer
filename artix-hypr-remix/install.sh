@@ -193,6 +193,31 @@ is_required_openrc_service() {
 	esac
 }
 
+required_openrc_services() {
+	printf '%s\n' "dbus" "elogind" "NetworkManager"
+}
+
+validate_required_openrc_services_declared() {
+	local -a services=("$@")
+	local required_service service found
+
+	while IFS= read -r required_service; do
+		[[ -z "$required_service" ]] && continue
+		found="false"
+
+		for service in "${services[@]}"; do
+			if [[ "$service" == "$required_service" ]]; then
+				found="true"
+				break
+			fi
+		done
+
+		if [[ "$found" != "true" ]]; then
+			error "Required OpenRC service '$required_service' is missing from $SERVICES_DIR/openrc-default.txt"
+		fi
+	done < <(required_openrc_services)
+}
+
 filter_installable_packages() {
 	local -n out_ref=$1
 	shift
@@ -426,7 +451,6 @@ run_package_phase() {
 run_service_phase() {
 	local -a services=()
 	local service
-	local required
 
 	mapfile -t services < <(collect_services)
 
@@ -436,6 +460,8 @@ run_service_phase() {
 		warn "No services found in $SERVICES_DIR/openrc-default.txt"
 		return 0
 	fi
+
+	validate_required_openrc_services_declared "${services[@]}"
 
 	if [[ "$DRY_RUN" == true ]]; then
 		info "Dry-run: would enable/start ${#services[@]} services"
@@ -450,11 +476,12 @@ run_service_phase() {
 	fi
 
 	for service in "${services[@]}"; do
-		required="false"
 		if is_required_openrc_service "$service"; then
-			required="true"
+			enable_service_required "$service" "default" "true"
+			continue
 		fi
-		enable_service "$service" "default" "true" "$required"
+
+		enable_service_optional "$service" "default" "true"
 	done
 }
 

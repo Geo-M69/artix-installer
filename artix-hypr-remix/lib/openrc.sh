@@ -51,5 +51,33 @@ enable_service() {
     fi
 
     warn "Service '$svc' was enabled but could not be started right now"
+    return 0
   fi
+
+  if rc-service "$svc" status >/dev/null 2>&1; then
+    info "OpenRC service '$svc' is running"
+    return 0
+  fi
+
+  if [[ "$required" == "true" ]]; then
+    error "Required OpenRC service '$svc' did not report running after start"
+  fi
+
+  warn "Service '$svc' start command completed but status is not running"
+}
+
+enable_service_required() {
+  local svc="$1"
+  local runlevel="${2:-default}"
+  local start_now="${3:-true}"
+
+  enable_service "$svc" "$runlevel" "$start_now" "true"
+}
+
+enable_service_optional() {
+  local svc="$1"
+  local runlevel="${2:-default}"
+  local start_now="${3:-true}"
+
+  enable_service "$svc" "$runlevel" "$start_now" "false"
 }
