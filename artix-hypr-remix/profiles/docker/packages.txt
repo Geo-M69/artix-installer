@@ -1,0 +1,3 @@
+# Optional Docker profile packages (installer --docker-profile on).
+docker
+docker-openrc

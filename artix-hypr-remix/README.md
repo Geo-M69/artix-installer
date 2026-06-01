@@ -32,6 +32,10 @@ Validation and stabilization policy:
 Hardware detection v1:
 - Phase 2 auto-detects basic hardware profiles (`nvidia`, `intel`, `amd`, `laptop`) and maps them to optional package stubs under `config/hardware/<profile>/packages.txt`.
 - Phase 2 applies OpenRC-native hardware module actions from `config/hardware/<profile>/openrc-module.sh` when profile scripts are present.
+- Optional Docker profile installs package set from `profiles/docker/packages.txt` when `--docker-profile on` is set.
+- When `--docker-profile on` is set, phase 3 also attempts to enable/start the OpenRC `docker` service.
+- Optional printing profile installs package set from `packages/profile-printing.txt` when `--printing-profile on` is set.
+- When `--printing-profile on` is set, phase 3 also enables/starts printing OpenRC services from `services/openrc-printing.txt`.
 - Default mode is `recommend`: installer prints detected profile packages and asks whether to install them.
 - Use `--hardware-mode auto` to install detected profile packages without a prompt.
 - Use `--hardware-mode off` to disable hardware profile package handling and OpenRC module actions.
@@ -73,6 +77,10 @@ Useful options:
     sudo ./install.sh --phase 2 --hardware-mode recommend
     sudo ./install.sh --phase 2 --hardware-mode auto
     sudo ./install.sh --phase 2 --hardware-mode off
+    sudo ./install.sh --phase 2 --docker-profile on
+    sudo ./install.sh --phase 3 --docker-profile on
+    sudo ./install.sh --phase 2 --printing-profile on
+    sudo ./install.sh --phase 3 --printing-profile on
     sudo ./install.sh --phase 6 --user <username>
     sudo ./install.sh --phase 6 --user <username> --skip-aur
     sudo ./install.sh --phase 6 --user <username> --skip-flatpak
@@ -115,6 +123,13 @@ Targeted validation helpers:
 
     ./scripts/check-openrc-portability.sh
     ./scripts/check-first-run-idempotency.sh
+    ./scripts/check-docker-profile.sh
+
+Printing profile validation (host-independent dry-run):
+
+    AHR_HOST_POLICY=any sudo ./install.sh --dry-run --from-phase 2 --phase 2 --printing-profile on -y
+    AHR_HOST_POLICY=any sudo ./install.sh --dry-run --from-phase 3 --phase 3 --printing-profile on -y
+    AHR_HOST_POLICY=any sudo ./install.sh --dry-run --from-phase 3 --phase 3 --printing-profile off -y
 
 Post-install smoke validation:
 
@@ -143,11 +158,15 @@ Notes:
 - `packages/90-*.txt` is the core AUR bucket consumed by phase 6 (fail-fast on install failure).
 - `packages/9[1-9]-*.txt` is the optional AUR bucket consumed by phase 6 (warn-and-continue on install failure).
 - `flatpaks/default.txt` and `flatpaks/optional.txt` are consumed by phase 6.
+- Docker optional profile package manifest is `profiles/docker/packages.txt`.
+- Printing optional profile package manifest is `packages/profile-printing.txt`.
+- Printing optional profile OpenRC service manifest is `services/openrc-printing.txt`.
 - Hardware profile package stubs are in `config/hardware/<profile>/packages.txt`.
 - Hardware profile OpenRC modules are in `config/hardware/<profile>/openrc-module.sh`.
 - `services/openrc-boot.txt` is not managed by the desktop installer.
 - Installer preflight host policy supports `--host-policy artix|vm|any` (default: `artix`), and `AHR_HOST_POLICY` applies to helper validation scripts.
 - `scripts/check-openrc-portability.sh` fails on runtime-path use of `systemctl`, `loginctl`, `journalctl`, `systemd-run`, and `/run/systemd` (with documented exceptions for intentional fallback paths).
+- `scripts/check-docker-profile.sh` verifies `--docker-profile` CLI coverage, phase 2 package injection, and phase 3 docker service toggle behavior.
 - Installer state markers are persisted under `/var/lib/artix-hypr-remix/install-state` (`phase-<N>.started` and `phase-<N>.completed`), and resume windows can be selected with `--from-phase`.
 - Phase 4 always replaces existing target config paths with timestamp backups.
 - Phase 4 runs `xdg-user-dirs-update` for the target user when available.

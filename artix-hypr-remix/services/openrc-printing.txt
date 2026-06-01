@@ -1,0 +1,3 @@
+# Optional printing profile OpenRC services (installer --printing-profile on).
+cupsd
+avahi-daemon

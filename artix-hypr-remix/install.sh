@@ -6,6 +6,9 @@ PACKAGES_DIR="$SCRIPT_DIR/packages"
 SERVICES_DIR="$SCRIPT_DIR/services"
 CONFIG_DIR="$SCRIPT_DIR/config"
 LIB_DIR="$SCRIPT_DIR/lib"
+DOCKER_PROFILE_PACKAGES_FILE="$SCRIPT_DIR/profiles/docker/packages.txt"
+PRINTING_PROFILE_PACKAGES_FILE="$PACKAGES_DIR/profile-printing.txt"
+PRINTING_PROFILE_SERVICES_FILE="$SERVICES_DIR/openrc-printing.txt"
 
 source "$LIB_DIR/common.sh"
 source "$LIB_DIR/checks.sh"
@@ -29,6 +32,8 @@ SKIP_FLATPAK=false
 STARTUP_MODE="tty"
 GREETD_MODE="greeter"
 HARDWARE_MODE="recommend"
+DOCKER_PROFILE="off"
+PRINTING_PROFILE="off"
 FLATPAK_PROFILE="default"
 TARGET_USER="${SUDO_USER:-}"
 TARGET_HOME=""
@@ -57,6 +62,8 @@ Options:
 	--startup-mode MODE  Startup mode for phase 5: tty (default) or greetd
 	--greetd-mode MODE   greetd session policy: autologin or greeter (default)
 	--hardware-mode MODE Hardware package mode for phase 2: recommend (default), auto, or off
+	--docker-profile MODE Optional docker profile for phase 2/3: off (default) or on
+	--printing-profile MODE Optional printing profile for phase 2/3: off (default) or on
 	--flatpak-profile MODE Flatpak app profile for phase 6: default (default), optional, all, or none
 	--host-policy MODE Host policy for preflight: artix (default), vm, or any
 	--skip-aur    Skip phase 6 AUR install even when phase includes it
@@ -100,6 +107,24 @@ validate_flatpak_profile() {
 	case "$mode" in
 		default|optional|all|none) return 0 ;;
 		*) error "Invalid Flatpak profile '$mode'. Use default, optional, all, or none." ;;
+	esac
+}
+
+validate_docker_profile() {
+	local mode="$1"
+
+	case "$mode" in
+		off|on) return 0 ;;
+		*) error "Invalid docker profile '$mode'. Use off or on." ;;
+	esac
+}
+
+validate_printing_profile() {
+	local mode="$1"
+
+	case "$mode" in
+		off|on) return 0 ;;
+		*) error "Invalid printing profile '$mode'. Use off or on." ;;
 	esac
 }
 
@@ -165,6 +190,42 @@ collect_optional_aur_package_files() {
 	find "$PACKAGES_DIR" -maxdepth 1 -type f -name '9[1-9]-*.txt' | sort
 }
 
+collect_docker_profile_packages() {
+	if [[ "$DOCKER_PROFILE" != "on" ]]; then
+		return 0
+	fi
+
+	if [[ ! -f "$DOCKER_PROFILE_PACKAGES_FILE" ]]; then
+		return 0
+	fi
+
+	parse_list_file "$DOCKER_PROFILE_PACKAGES_FILE"
+}
+
+collect_printing_profile_packages() {
+	if [[ "$PRINTING_PROFILE" != "on" ]]; then
+		return 0
+	fi
+
+	if [[ ! -f "$PRINTING_PROFILE_PACKAGES_FILE" ]]; then
+		return 0
+	fi
+
+	parse_list_file "$PRINTING_PROFILE_PACKAGES_FILE"
+}
+
+collect_printing_profile_services() {
+	if [[ "$PRINTING_PROFILE" != "on" ]]; then
+		return 0
+	fi
+
+	if [[ ! -f "$PRINTING_PROFILE_SERVICES_FILE" ]]; then
+		return 0
+	fi
+
+	parse_list_file "$PRINTING_PROFILE_SERVICES_FILE"
+}
+
 collect_packages() {
 	local file pkg
 	while IFS= read -r file; do
@@ -217,6 +278,35 @@ required_openrc_services() {
 	printf '%s\n' "dbus" "elogind" "NetworkManager"
 }
 
+required_printing_profile_packages() {
+	printf '%s\n' "cups" "avahi"
+}
+
+required_printing_services() {
+	printf '%s\n' "cupsd" "avahi-daemon"
+}
+
+validate_required_printing_profile_packages_declared() {
+	local -a packages=("$@")
+	local required_package pkg found
+
+	while IFS= read -r required_package; do
+		[[ -z "$required_package" ]] && continue
+		found="false"
+
+		for pkg in "${packages[@]}"; do
+			if [[ "$pkg" == "$required_package" ]]; then
+				found="true"
+				break
+			fi
+		done
+
+		if [[ "$found" != "true" ]]; then
+			error "Required printing package '$required_package' is missing from $PRINTING_PROFILE_PACKAGES_FILE"
+		fi
+	done < <(required_printing_profile_packages)
+}
+
 validate_required_openrc_services_declared() {
 	local -a services=("$@")
 	local required_service service found
@@ -238,6 +328,54 @@ validate_required_openrc_services_declared() {
 	done < <(required_openrc_services)
 }
 
+validate_required_printing_services_declared() {
+	local -a services=("$@")
+	local required_service service found
+
+	while IFS= read -r required_service; do
+		[[ -z "$required_service" ]] && continue
+		found="false"
+
+		for service in "${services[@]}"; do
+			if [[ "$service" == "$required_service" ]]; then
+				found="true"
+				break
+			fi
+		done
+
+		if [[ "$found" != "true" ]]; then
+			error "Required printing OpenRC service '$required_service' is missing from $PRINTING_PROFILE_SERVICES_FILE"
+		fi
+	done < <(required_printing_services)
+}
+
+is_required_printing_service() {
+	local service="$1"
+
+	if [[ "$PRINTING_PROFILE" != "on" ]]; then
+		return 1
+	fi
+
+	case "$service" in
+		cupsd|avahi-daemon)
+			return 0
+			;;
+		*)
+			return 1
+			;;
+	esac
+}
+
+is_required_service() {
+	local service="$1"
+
+	if is_required_openrc_service "$service"; then
+		return 0
+	fi
+
+	is_required_printing_service "$service"
+}
+
 validate_openrc_service_init_scripts() {
 	local -a services=("$@")
 	local -a missing_required=()
@@ -249,7 +387,7 @@ validate_openrc_service_init_scripts() {
 			continue
 		fi
 
-		if is_required_openrc_service "$service"; then
+		if is_required_service "$service"; then
 			missing_required+=("$service")
 			continue
 		fi
@@ -472,16 +610,35 @@ run_preflight() {
 run_package_phase() {
 	local -a packages=()
 	local -a hardware_packages=()
+	local -a docker_profile_packages=()
+	local -a printing_profile_packages=()
 	local -a matched_profiles=()
 	local profile_root
 	mapfile -t packages < <(collect_packages)
 	collect_hardware_recommended_packages hardware_packages
+	mapfile -t docker_profile_packages < <(collect_docker_profile_packages)
+	mapfile -t printing_profile_packages < <(collect_printing_profile_packages)
 	mapfile -t matched_profiles < <(hardware_detect_profiles)
 	profile_root="$CONFIG_DIR/hardware"
 
 	if [[ "${#hardware_packages[@]}" -gt 0 ]]; then
 		packages+=("${hardware_packages[@]}")
-		mapfile -t packages < <(printf '%s\n' "${packages[@]}" | awk '!seen[$0]++')
+	fi
+
+	if [[ "${#docker_profile_packages[@]}" -gt 0 ]]; then
+		info "Docker profile enabled: adding ${#docker_profile_packages[@]} package(s)"
+		packages+=("${docker_profile_packages[@]}")
+	fi
+
+	if [[ "${#printing_profile_packages[@]}" -gt 0 ]]; then
+		info "Printing profile enabled: adding ${#printing_profile_packages[@]} package(s)"
+		packages+=("${printing_profile_packages[@]}")
+	fi
+
+	mapfile -t packages < <(printf '%s\n' "${packages[@]}" | awk '!seen[$0]++')
+
+	if [[ "$PRINTING_PROFILE" == "on" ]]; then
+		validate_required_printing_profile_packages_declared "${printing_profile_packages[@]}"
 	fi
 
 	info "[Phase 2/7] Installing packages"
@@ -496,6 +653,22 @@ run_package_phase() {
 	if [[ "$DRY_RUN" == true ]]; then
 		info "Dry-run: would install ${#packages[@]} packages"
 		printf '  - %s\n' "${packages[@]}"
+
+		if [[ "$DOCKER_PROFILE" == "on" ]]; then
+			if [[ "${#docker_profile_packages[@]}" -eq 0 ]]; then
+				warn "Docker profile is enabled but no packages were found in $DOCKER_PROFILE_PACKAGES_FILE"
+			fi
+		else
+			info "Docker profile is disabled (--docker-profile off)"
+		fi
+
+		if [[ "$PRINTING_PROFILE" == "on" ]]; then
+			if [[ "${#printing_profile_packages[@]}" -eq 0 ]]; then
+				warn "Printing profile is enabled but no packages were found in $PRINTING_PROFILE_PACKAGES_FILE"
+			fi
+		else
+			info "Printing profile is disabled (--printing-profile off)"
+		fi
 
 		if [[ "$HARDWARE_MODE" == "off" ]]; then
 			info "Hardware OpenRC modules are disabled (--hardware-mode off)"
@@ -512,22 +685,55 @@ run_package_phase() {
 
 	if [[ "$HARDWARE_MODE" == "off" ]]; then
 		info "Hardware OpenRC modules are disabled (--hardware-mode off)"
-		return 0
+	else
+		if [[ "${#matched_profiles[@]}" -eq 0 ]]; then
+			info "No detected hardware profiles to apply OpenRC modules"
+		else
+			hardware_apply_profile_modules "$profile_root" "$DRY_RUN" "${matched_profiles[@]}"
+		fi
 	fi
 
-	if [[ "${#matched_profiles[@]}" -eq 0 ]]; then
-		info "No detected hardware profiles to apply OpenRC modules"
-		return 0
+	if [[ "$DOCKER_PROFILE" == "on" ]]; then
+		if [[ "${#docker_profile_packages[@]}" -eq 0 ]]; then
+			warn "Docker profile is enabled but no packages were found in $DOCKER_PROFILE_PACKAGES_FILE"
+		else
+			info "Docker profile package set applied"
+		fi
+	else
+		info "Docker profile is disabled (--docker-profile off)"
 	fi
 
-	hardware_apply_profile_modules "$profile_root" "$DRY_RUN" "${matched_profiles[@]}"
+	if [[ "$PRINTING_PROFILE" == "on" ]]; then
+		if [[ "${#printing_profile_packages[@]}" -eq 0 ]]; then
+			warn "Printing profile is enabled but no packages were found in $PRINTING_PROFILE_PACKAGES_FILE"
+		else
+			info "Printing profile package set applied"
+		fi
+	else
+		info "Printing profile is disabled (--printing-profile off)"
+	fi
 }
 
 run_service_phase() {
 	local -a services=()
+	local -a printing_profile_services=()
 	local service
 
 	mapfile -t services < <(collect_services)
+
+	if [[ "$DOCKER_PROFILE" == "on" ]]; then
+		services+=("docker")
+	fi
+
+	if [[ "$PRINTING_PROFILE" == "on" ]]; then
+		mapfile -t printing_profile_services < <(collect_printing_profile_services)
+		if [[ "${#printing_profile_services[@]}" -gt 0 ]]; then
+			info "Printing profile enabled: adding ${#printing_profile_services[@]} OpenRC service(s)"
+			services+=("${printing_profile_services[@]}")
+		fi
+	fi
+
+	mapfile -t services < <(printf '%s\n' "${services[@]}" | awk '!seen[$0]++')
 
 	info "[Phase 3/7] Enabling safe OpenRC services"
 
@@ -538,10 +744,14 @@ run_service_phase() {
 
 	validate_required_openrc_services_declared "${services[@]}"
 
+	if [[ "$PRINTING_PROFILE" == "on" ]]; then
+		validate_required_printing_services_declared "${services[@]}"
+	fi
+
 	if [[ "$DRY_RUN" == true ]]; then
 		info "Dry-run: would enable/start ${#services[@]} services"
 		for service in "${services[@]}"; do
-			if is_required_openrc_service "$service"; then
+			if is_required_service "$service"; then
 				printf '  - %s (required)\n' "$service"
 			else
 				printf '  - %s\n' "$service"
@@ -558,7 +768,7 @@ run_service_phase() {
 			continue
 		fi
 
-		if is_required_openrc_service "$service"; then
+		if is_required_service "$service"; then
 			enable_service_required "$service" "default" "true"
 			continue
 		fi
@@ -785,6 +995,18 @@ while [[ "$#" -gt 0 ]]; do
 			validate_hardware_mode "$1"
 			HARDWARE_MODE="$1"
 			;;
+		--docker-profile)
+			shift
+			[[ "$#" -gt 0 ]] || error "--docker-profile requires a value (off|on)"
+			validate_docker_profile "$1"
+			DOCKER_PROFILE="$1"
+			;;
+		--printing-profile)
+			shift
+			[[ "$#" -gt 0 ]] || error "--printing-profile requires a value (off|on)"
+			validate_printing_profile "$1"
+			PRINTING_PROFILE="$1"
+			;;
 		--flatpak-profile)
 			shift
 			[[ "$#" -gt 0 ]] || error "--flatpak-profile requires a value (default|optional|all|none)"
@@ -870,6 +1092,8 @@ if [[ "$ASSUME_YES" == false ]]; then
 	fi
 	if (( TARGET_PHASE >= 2 && FROM_PHASE <= 2 )); then
 		info "Hardware package mode for phase 2: $HARDWARE_MODE"
+		info "Docker profile mode for phase 2/3: $DOCKER_PROFILE"
+		info "Printing profile mode for phase 2/3: $PRINTING_PROFILE"
 	fi
 	info "Execution phase window: $FROM_PHASE..$TARGET_PHASE"
 	read -r -p "Continue? [y/N]: " response

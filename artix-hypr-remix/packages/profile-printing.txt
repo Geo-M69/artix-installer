@@ -1,0 +1,3 @@
+# Optional printing profile packages (installer --printing-profile on).
+cups
+avahi

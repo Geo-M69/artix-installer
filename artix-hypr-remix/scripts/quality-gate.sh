@@ -63,7 +63,7 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-echo "[1/5] Shell syntax check"
+echo "[1/6] Shell syntax check"
 mapfile -t shell_files < <(find "$REPO_ROOT" -type f -name '*.sh' | sort)
 if [[ "${#shell_files[@]}" -eq 0 ]]; then
   echo "No shell files found" >&2
@@ -71,16 +71,19 @@ if [[ "${#shell_files[@]}" -eq 0 ]]; then
 fi
 bash -n "${shell_files[@]}"
 
-echo "[2/5] OpenRC portability check"
+echo "[2/6] OpenRC portability check"
 "$SCRIPT_DIR/check-openrc-portability.sh"
 
-echo "[3/5] First-run idempotency check"
+echo "[3/6] First-run idempotency check"
 "$SCRIPT_DIR/check-first-run-idempotency.sh"
 
-echo "[4/5] Config dependency check (core)"
+echo "[4/6] Docker profile check"
+"$SCRIPT_DIR/check-docker-profile.sh"
+
+echo "[5/6] Config dependency check (core)"
 run_core_dependency_check
 
-echo "[5/5] Config dependency check (full)"
+echo "[6/6] Config dependency check (full)"
 if [[ "$include_aur" == "true" ]]; then
   "$SCRIPT_DIR/check-config-deps.sh"
 else
