@@ -112,6 +112,12 @@ Targeted validation helpers:
     ./scripts/check-openrc-portability.sh
     ./scripts/check-first-run-idempotency.sh
 
+Post-install smoke validation:
+
+    ./scripts/post-install-smoke.sh
+    ./scripts/post-install-smoke.sh --user <username>
+    sudo ./scripts/post-install-smoke.sh --user <username>
+
 Hardware detection check:
 
     ./scripts/check-hardware.sh
@@ -143,6 +149,7 @@ Notes:
 - In `--startup-mode greetd`, phase 5 attempts to install `greetd`, `greetd-openrc`, and the available tuigreet package variant (`greetd-tuigreet` or `tuigreet`).
 - In `--startup-mode greetd`, phase 5 enables greetd for the next boot and does not start it immediately during installer execution.
 - greetd config is generated on VT7 to avoid input collisions with tty1 getty prompts.
+- `scripts/post-install-smoke.sh` validates required OpenRC service health (`dbus`, `elogind`, `NetworkManager`), startup mode state, session launcher executable state, and mode-specific startup wiring.
 - Hardware profile snapshots are written to `/var/lib/artix-hypr-remix/hardware-profile.json` when installer runs as root.
 - Installer output is logged to `/var/log/artix-hypr-remix-install.log` by default (override with `AHR_INSTALL_LOG_FILE`, fallback under `/tmp` when needed).
 - Package installation phases refresh and upgrade package databases in a full `pacman -Syu` transaction before package-specific installs (avoids `-Sy` partial upgrade risk).

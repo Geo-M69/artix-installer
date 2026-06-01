@@ -180,6 +180,19 @@ collect_services() {
 	parse_list_file "$SERVICES_DIR/openrc-default.txt"
 }
 
+is_required_openrc_service() {
+	local service="$1"
+
+	case "$service" in
+		dbus|elogind|NetworkManager)
+			return 0
+			;;
+		*)
+			return 1
+			;;
+	esac
+}
+
 filter_installable_packages() {
 	local -n out_ref=$1
 	shift
@@ -413,6 +426,7 @@ run_package_phase() {
 run_service_phase() {
 	local -a services=()
 	local service
+	local required
 
 	mapfile -t services < <(collect_services)
 
@@ -425,12 +439,22 @@ run_service_phase() {
 
 	if [[ "$DRY_RUN" == true ]]; then
 		info "Dry-run: would enable/start ${#services[@]} services"
-		printf '  - %s\n' "${services[@]}"
+		for service in "${services[@]}"; do
+			if is_required_openrc_service "$service"; then
+				printf '  - %s (required)\n' "$service"
+			else
+				printf '  - %s\n' "$service"
+			fi
+		done
 		return 0
 	fi
 
 	for service in "${services[@]}"; do
-		enable_service "$service" "default" "true"
+		required="false"
+		if is_required_openrc_service "$service"; then
+			required="true"
+		fi
+		enable_service "$service" "default" "true" "$required"
 	done
 }
 

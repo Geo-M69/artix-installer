@@ -2,8 +2,8 @@
 return {
   -- Launchers and core apps.
   { mods = { "SUPER" }, key = "RETURN", action = "exec", command = "ghostty" },
-  { mods = { "SUPER" }, key = "SPACE", action = "exec", command = "walker" },
-  { mods = { "SUPER", "ALT" }, key = "SPACE", action = "exec", command = "walker" },
+  { mods = { "SUPER" }, key = "SPACE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu" },
+  { mods = { "SUPER", "ALT" }, key = "SPACE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu" },
   { mods = { "SUPER", "SHIFT" }, key = "RETURN", action = "exec", command = "firefox" },
   { mods = { "SUPER", "SHIFT" }, key = "F", action = "exec", command = "nautilus" },
 
