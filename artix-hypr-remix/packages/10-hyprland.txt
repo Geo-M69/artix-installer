@@ -15,6 +15,7 @@ gpu-screen-recorder
 satty
 wl-clipboard
 cliphist
+wofi
 brightnessctl
 playerctl
 pamixer

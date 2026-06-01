@@ -57,7 +57,7 @@ usage() {
 Usage: ./scripts/doctor.sh [options]
 
 Options:
-  --no-aur   Pass through to dependency checker (ignore packages/90-*.txt)
+  --no-aur   Pass through to dependency checker (ignore packages/9[0-9]-*.txt)
   -h, --help Show this help
 
 Environment:

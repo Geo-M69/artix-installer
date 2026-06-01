@@ -1,7 +1,8 @@
-walker-bin
-elephant
-elephant-clipboard
-elephant-desktopapplications
-elephant-files
-elephant-websearch
-paru (should be handled in lib/aur.sh)
+# Core AUR packages (phase 6 must fail if any of these fail).
+# Keep this list minimal; optional UX extras should live in 9[1-9]-*.txt manifests.
+
+# Example:
+# package-name
+
+# AUR helper bootstrap is handled in lib/aur.sh.
+# paru

@@ -108,3 +108,42 @@ install_aur_packages() {
   info "Installing AUR packages (${#pkgs[@]}): ${pkgs[*]}"
   aur_paru_as_user "$target_user" "$target_home" paru -S --needed --noconfirm --skipreview "${pkgs[@]}"
 }
+
+install_aur_packages_optional() {
+  local target_user="$1"
+  local target_home="$2"
+  local dry_run="$3"
+  shift 3
+  local pkgs=("$@")
+  local pkg
+  local -a failed=()
+
+  if [[ "${#pkgs[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  ensure_aur_user_dirs "$target_user" "$target_home" "$dry_run"
+
+  if [[ "$dry_run" == "true" ]]; then
+    info "Dry-run: would install optional AUR packages (${#pkgs[@]}): ${pkgs[*]}"
+    return 0
+  fi
+
+  info "Installing optional AUR packages (${#pkgs[@]}): ${pkgs[*]}"
+  for pkg in "${pkgs[@]}"; do
+    if aur_paru_as_user "$target_user" "$target_home" paru -S --needed --noconfirm --skipreview "$pkg"; then
+      continue
+    fi
+
+    warn "Optional AUR package '$pkg' failed to install; continuing"
+    failed+=("$pkg")
+  done
+
+  if [[ "${#failed[@]}" -gt 0 ]]; then
+    warn "Optional AUR install finished with failures (${#failed[@]}): ${failed[*]}"
+  else
+    info "Optional AUR packages installed successfully"
+  fi
+
+  return 0
+}

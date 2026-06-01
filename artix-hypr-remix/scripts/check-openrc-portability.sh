@@ -5,15 +5,54 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # These patterns should not appear in Artix/OpenRC runtime paths.
-declare -a RULES=(
-  "systemctl --user|systemd user services are not supported in OpenRC runtime paths"
+declare -a RULE_PATTERNS=(
+  '(^|[^[:alnum:]_])systemctl([^[:alnum:]_]|$)'
+  '(^|[^[:alnum:]_])loginctl([^[:alnum:]_]|$)'
+  '(^|[^[:alnum:]_])journalctl([^[:alnum:]_]|$)'
+  '(^|[^[:alnum:]_])systemd-run([^[:alnum:]_]|$)'
+  '/run/systemd'
+)
+
+declare -a RULE_MESSAGES=(
+  "systemctl is not supported in OpenRC runtime paths"
+  "loginctl is not supported in OpenRC runtime paths"
+  "journalctl is not supported in OpenRC runtime paths"
+  "systemd-run is not supported in OpenRC runtime paths"
+  "/run/systemd paths are not supported in OpenRC runtime paths"
+)
+
+# Documented exceptions:
+# - ahr-system-reboot keeps logind/systemd fallbacks for broader host compatibility.
+declare -a EXCEPTION_PATH_FRAGMENTS=(
+  "config/artix-hypr-remix/bin/ahr-system-reboot"
+)
+
+declare -a EXCEPTION_LINE_REGEXES=(
+  '(^|[^[:alnum:]_])(systemctl|loginctl)([^[:alnum:]_]|$)'
+)
+
+declare -a EXCEPTION_REASONS=(
+  "Intentional reboot fallback path"
 )
 
 should_ignore_hit() {
   local pattern="$1"
   local hit="$2"
-  # No runtime-path exceptions currently allowed.
-  : "$pattern" "$hit"
+
+  local path line_text idx path_fragment line_regex
+
+  path="${hit%%:*}"
+  line_text="${hit#*:*:}"
+
+  for idx in "${!EXCEPTION_PATH_FRAGMENTS[@]}"; do
+    path_fragment="${EXCEPTION_PATH_FRAGMENTS[$idx]}"
+    line_regex="${EXCEPTION_LINE_REGEXES[$idx]}"
+
+    if [[ "$path" == *"$path_fragment" ]] && [[ "$line_text" =~ $line_regex ]]; then
+      return 0
+    fi
+  done
+
   return 1
 }
 
@@ -55,9 +94,9 @@ scan_rule() {
 echo "Checking OpenRC portability in Artix runtime paths"
 
 violations=0
-for rule in "${RULES[@]}"; do
-  pattern="${rule%%|*}"
-  message="${rule#*|}"
+for idx in "${!RULE_PATTERNS[@]}"; do
+  pattern="${RULE_PATTERNS[$idx]}"
+  message="${RULE_MESSAGES[$idx]}"
   if scan_rule "$pattern" "$message"; then
     violations=1
   fi

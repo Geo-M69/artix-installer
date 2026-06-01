@@ -17,11 +17,12 @@ Hypr config source:
 Current installer milestone:
 1. Run `sudo ./install.sh` on fresh Artix OpenRC from a non-root user shell.
 2. Install package sets from `packages/00-*.txt` through `packages/80-*.txt`.
-3. Enable safe OpenRC services from `services/openrc-default.txt`.
-4. Deploy `config/` into the target user's `~/.config` using copy + timestamp backups, then initialize XDG user directories.
-5. Configure startup mode for Hyprland (`tty` default or optional `greetd`).
-6. Install AUR packages and Flatpak app profiles (`flatpaks/default.txt` by default).
-7. Prepare first-run/post-install framework, initialize migration state, and offer reboot prompt.
+3. Apply detected hardware profile OpenRC modules from `config/hardware/<profile>/openrc-module.sh`.
+4. Enable safe OpenRC services from `services/openrc-default.txt`.
+5. Deploy `config/` into the target user's `~/.config` using copy + timestamp backups, then initialize XDG user directories.
+6. Configure startup mode for Hyprland (`tty` default or optional `greetd`).
+7. Install AUR packages and Flatpak app profiles (`flatpaks/default.txt` by default).
+8. Prepare first-run/post-install framework, initialize migration state, and offer reboot prompt.
 
 Validation and stabilization policy:
 - Host policy defaults to Artix-only (`AHR_HOST_POLICY=artix`) for `./install.sh`, `./scripts/doctor.sh`, `./scripts/smoke-framework.sh`, and `./scripts/check-hardware.sh`.
@@ -30,9 +31,10 @@ Validation and stabilization policy:
 
 Hardware detection v1:
 - Phase 2 auto-detects basic hardware profiles (`nvidia`, `intel`, `amd`, `laptop`) and maps them to optional package stubs under `config/hardware/<profile>/packages.txt`.
+- Phase 2 applies OpenRC-native hardware module actions from `config/hardware/<profile>/openrc-module.sh` when profile scripts are present.
 - Default mode is `recommend`: installer prints detected profile packages and asks whether to install them.
 - Use `--hardware-mode auto` to install detected profile packages without a prompt.
-- Use `--hardware-mode off` to disable hardware profile package handling.
+- Use `--hardware-mode off` to disable hardware profile package handling and OpenRC module actions.
 
 Phase 4 configuration strategy:
 - Use Omarchy as a reference and rewrite configs for Artix OpenRC portability.
@@ -79,7 +81,9 @@ Useful options:
     sudo ./install.sh --phase 6 --user <username> --flatpak-profile all
     sudo ./install.sh --phase 6 --user <username> --flatpak-profile none
     sudo ./install.sh --phase 7 --user <username>
+    sudo ./install.sh --from-phase 6 --phase 7 --user <username>
     sudo ./install.sh --host-policy vm --phase 1
+    AHR_INSTALL_STATE_DIR=/tmp/ahr-install-state sudo ./install.sh --phase 3
     AHR_INSTALL_LOG_FILE=/tmp/ahr-install.log sudo ./install.sh
     AHR_HOST_POLICY=vm ./scripts/doctor.sh
 
@@ -136,11 +140,15 @@ Emergency recovery (if keybinds do not load):
     sudo ./install.sh --phase 4 --user <username> -y
 
 Notes:
-- `packages/90-aur.txt` is consumed by phase 6.
+- `packages/90-*.txt` is the core AUR bucket consumed by phase 6 (fail-fast on install failure).
+- `packages/9[1-9]-*.txt` is the optional AUR bucket consumed by phase 6 (warn-and-continue on install failure).
 - `flatpaks/default.txt` and `flatpaks/optional.txt` are consumed by phase 6.
 - Hardware profile package stubs are in `config/hardware/<profile>/packages.txt`.
+- Hardware profile OpenRC modules are in `config/hardware/<profile>/openrc-module.sh`.
 - `services/openrc-boot.txt` is not managed by the desktop installer.
 - Installer preflight host policy supports `--host-policy artix|vm|any` (default: `artix`), and `AHR_HOST_POLICY` applies to helper validation scripts.
+- `scripts/check-openrc-portability.sh` fails on runtime-path use of `systemctl`, `loginctl`, `journalctl`, `systemd-run`, and `/run/systemd` (with documented exceptions for intentional fallback paths).
+- Installer state markers are persisted under `/var/lib/artix-hypr-remix/install-state` (`phase-<N>.started` and `phase-<N>.completed`), and resume windows can be selected with `--from-phase`.
 - Phase 4 always replaces existing target config paths with timestamp backups.
 - Phase 4 runs `xdg-user-dirs-update` for the target user when available.
 - Phase 5 supports `--startup-mode tty|greetd` and uses `~/.config/artix-hypr-remix/bin/start-hyprland-session.sh` as the shared session launcher.
@@ -149,7 +157,7 @@ Notes:
 - In `--startup-mode greetd`, phase 5 attempts to install `greetd`, `greetd-openrc`, and the available tuigreet package variant (`greetd-tuigreet` or `tuigreet`).
 - In `--startup-mode greetd`, phase 5 enables greetd for the next boot and does not start it immediately during installer execution.
 - greetd config is generated on VT7 to avoid input collisions with tty1 getty prompts.
-- `scripts/post-install-smoke.sh` validates required OpenRC service health (`dbus`, `elogind`, `NetworkManager`), startup mode state, session launcher executable state, and mode-specific startup wiring.
+- `scripts/post-install-smoke.sh` validates required OpenRC service health (`dbus`, `elogind`, `NetworkManager`), Hyprland runtime command dependencies (with optional warnings for `walker`/`elephant`), startup mode state, session launcher executable state, and mode-specific startup wiring.
 - Hardware profile snapshots are written to `/var/lib/artix-hypr-remix/hardware-profile.json` when installer runs as root.
 - Installer output is logged to `/var/log/artix-hypr-remix-install.log` by default (override with `AHR_INSTALL_LOG_FILE`, fallback under `/tmp` when needed).
 - Package installation phases refresh and upgrade package databases in a full `pacman -Syu` transaction before package-specific installs (avoids `-Sy` partial upgrade risk).

@@ -1,0 +1,10 @@
+# Optional AUR packages (phase 6 warns and continues on failure).
+walker-bin
+elephant
+elephant-clipboard
+elephant-desktopapplications
+elephant-files
+elephant-websearch
+
+# AUR helper bootstrap is handled in lib/aur.sh.
+# paru

@@ -168,6 +168,60 @@ hardware_collect_profile_packages() {
   done | awk '!seen[$0]++'
 }
 
+hardware_profile_module_path() {
+  local profile_root="$1"
+  local profile="$2"
+
+  printf '%s\n' "$profile_root/$profile/openrc-module.sh"
+}
+
+hardware_apply_profile_module() {
+  local profile_root="$1"
+  local profile="$2"
+  local dry_run="${3:-false}"
+  local module_script
+
+  module_script="$(hardware_profile_module_path "$profile_root" "$profile")"
+  if [[ ! -f "$module_script" ]]; then
+    return 0
+  fi
+
+  info "Applying hardware OpenRC module: $profile"
+  if [[ "$dry_run" == "true" ]]; then
+    info "Dry-run: would execute $module_script"
+    return 0
+  fi
+
+  if ! bash "$module_script" "$dry_run"; then
+    warn "Hardware module '$profile' reported a failure: $module_script"
+    return 1
+  fi
+
+  return 0
+}
+
+hardware_apply_profile_modules() {
+  local profile_root="$1"
+  local dry_run="${2:-false}"
+  shift 2
+  local profile
+  local had_failures=0
+
+  if [[ "$#" -eq 0 ]]; then
+    return 0
+  fi
+
+  for profile in "$@"; do
+    if ! hardware_apply_profile_module "$profile_root" "$profile" "$dry_run"; then
+      had_failures=1
+    fi
+  done
+
+  if [[ "$had_failures" -eq 1 ]]; then
+    warn "One or more hardware OpenRC modules failed; continuing install"
+  fi
+}
+
 hardware_default_profile_path() {
   if [[ "$EUID" -eq 0 ]]; then
     printf '%s\n' "/var/lib/artix-hypr-remix/hardware-profile.json"

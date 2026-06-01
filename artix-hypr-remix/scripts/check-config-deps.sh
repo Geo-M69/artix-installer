@@ -14,7 +14,7 @@ Usage: ./scripts/check-config-deps.sh [options]
 Checks commands referenced by repo config files against package manifests.
 
 Options:
-  --no-aur   Ignore packages/90-*.txt when validating dependencies
+  --no-aur   Ignore packages/9[0-9]-*.txt when validating dependencies
   -h, --help Show this help
 EOF
 }
@@ -52,7 +52,7 @@ fi
 declare -A pkg_sources=()
 while IFS= read -r package_file; do
   base_name="$(basename "$package_file")"
-  if [[ "$INCLUDE_AUR" == false ]] && [[ "$base_name" == 90-* ]]; then
+  if [[ "$INCLUDE_AUR" == false ]] && [[ "$base_name" == 9[0-9]-* ]]; then
     continue
   fi
 

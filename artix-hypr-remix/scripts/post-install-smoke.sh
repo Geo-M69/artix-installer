@@ -6,6 +6,12 @@ TTY_BLOCK_BEGIN="# >>> artix-hypr-remix tty hyprland >>>"
 
 declare -a REQUIRED_COMMANDS=(id getent rc-update rc-service)
 declare -a REQUIRED_SERVICES=(dbus elogind NetworkManager)
+declare -A OPTIONAL_HYPR_COMMANDS=(
+  [walker]=1
+  [elephant]=1
+)
+
+declare -A hypr_commands_seen=()
 
 target_user="${SUDO_USER:-}"
 target_home=""
@@ -25,6 +31,7 @@ Usage: ./scripts/post-install-smoke.sh [options]
 Validates critical post-install state for Artix Hypr Remix:
 - Required commands are present
 - Required OpenRC services are enabled in default runlevel and running
+- Hyprland runtime command dependencies are available (with optional-command warnings)
 - Startup-mode state exists and is valid (tty|greetd)
 - Session launcher exists and is executable
 - Startup-mode specific wiring (tty managed block or greetd service/config)
@@ -54,10 +61,67 @@ service_enabled_in_default_runlevel() {
   [[ -e "/etc/runlevels/default/$service" ]]
 }
 
+trim_whitespace() {
+  local text="$1"
+  text="${text#"${text%%[![:space:]]*}"}"
+  text="${text%"${text##*[![:space:]]}"}"
+  printf '%s' "$text"
+}
+
+normalize_first_token() {
+  local command_line="$1"
+  local token
+
+  command_line="${command_line%%|*}"
+  command_line="$(trim_whitespace "$command_line")"
+
+  # Drop leading env assignment (e.g. FOO=bar cmd).
+  while [[ "$command_line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do
+    command_line="${command_line#*=}"
+    command_line="$(trim_whitespace "$command_line")"
+  done
+
+  token="${command_line%%[[:space:]]*}"
+  token="${token#\"}"
+  token="${token%\"}"
+  token="${token#\'}"
+  token="${token%\'}"
+
+  printf '%s' "$token"
+}
+
+track_hypr_command_line() {
+  local command_line="$1"
+  local token
+
+  token="$(normalize_first_token "$command_line")"
+  [[ -z "$token" ]] && return 0
+
+  case "$token" in
+    if|then|else|fi|for|while|do|done|case|esac|"[["|true|false|return|export|source|alias|command|eval|builtin|activate|"#"*)
+      return 0
+      ;;
+  esac
+
+  [[ "$token" == '$'* ]] && return 0
+  hypr_commands_seen["$token"]=1
+}
+
+hypr_command_is_available() {
+  local command_token="$1"
+
+  if [[ "$command_token" == */* ]]; then
+    [[ -x "$command_token" ]]
+    return $?
+  fi
+
+  command -v "$command_token" >/dev/null 2>&1
+}
+
 check_required_commands() {
   local cmd
 
-  echo "[1/5] Checking required commands"
+  echo "[1/6] Checking required commands"
   for cmd in "${REQUIRED_COMMANDS[@]}"; do
     if command -v "$cmd" >/dev/null 2>&1; then
       pass "command available: $cmd"
@@ -74,7 +138,7 @@ check_required_commands() {
 resolve_target_user() {
   local current_user
 
-  echo "[2/5] Resolving target desktop user"
+  echo "[2/6] Resolving target desktop user"
 
   if [[ "$identity_commands_ok" != "true" ]]; then
     fail "cannot resolve target user because id/getent checks failed"
@@ -111,7 +175,7 @@ resolve_target_user() {
 check_required_openrc_services() {
   local service
 
-  echo "[3/5] Validating required OpenRC services"
+  echo "[3/6] Validating required OpenRC services"
 
   if [[ "$openrc_commands_ok" != "true" ]]; then
     fail "cannot validate OpenRC services because rc-update/rc-service checks failed"
@@ -140,11 +204,60 @@ check_required_openrc_services() {
   done
 }
 
+check_hyprland_command_dependencies() {
+  local hypr_conf
+  local line cmd command_token
+
+  echo "[4/6] Validating Hyprland command dependencies"
+
+  if [[ "$user_context_ready" != "true" ]]; then
+    fail "cannot validate Hyprland command dependencies because target user context is unavailable"
+    return
+  fi
+
+  hypr_conf="$target_home/.config/hypr/hyprland.conf"
+  if [[ ! -f "$hypr_conf" ]]; then
+    fail "Hyprland runtime config missing: $hypr_conf"
+    return
+  fi
+
+  hypr_commands_seen=()
+
+  while IFS= read -r line; do
+    cmd="$(sed -E 's/^\s*exec-once\s*=\s*(.*)\s*$/\1/' <<< "$line")"
+    track_hypr_command_line "$cmd"
+  done < <(grep -E '^\s*exec-once\s*=\s*.+$' "$hypr_conf" || true)
+
+  while IFS= read -r line; do
+    cmd="$(sed -E 's/^.*\bexec\s*,\s*(.*)\s*$/\1/' <<< "$line")"
+    track_hypr_command_line "$cmd"
+  done < <(grep -E '^\s*bind[a-z]*\s*=\s*.*\bexec\s*,\s*.+$' "$hypr_conf" || true)
+
+  if [[ "${#hypr_commands_seen[@]}" -eq 0 ]]; then
+    fail "no executable commands discovered in $hypr_conf"
+    return
+  fi
+
+  while IFS= read -r command_token; do
+    if hypr_command_is_available "$command_token"; then
+      pass "Hyprland command available: $command_token"
+      continue
+    fi
+
+    if [[ -n "${OPTIONAL_HYPR_COMMANDS[$command_token]:-}" ]]; then
+      warn_msg "optional Hyprland command missing: $command_token"
+      continue
+    fi
+
+    fail "required Hyprland command missing: $command_token"
+  done < <(printf '%s\n' "${!hypr_commands_seen[@]}" | sort)
+}
+
 check_startup_state_and_launcher() {
   local state_file
   local launcher
 
-  echo "[4/5] Validating startup mode state + launcher"
+  echo "[5/6] Validating startup mode state + launcher"
 
   if [[ "$user_context_ready" != "true" ]]; then
     fail "cannot validate startup state because target user context is unavailable"
@@ -181,7 +294,7 @@ check_mode_specific_state() {
   local profile
   local found_tty_block=false
 
-  echo "[5/5] Validating mode-specific startup wiring"
+  echo "[6/6] Validating mode-specific startup wiring"
 
   if [[ -z "$startup_mode" ]]; then
     fail "cannot run mode-specific checks because startup mode state is unavailable"
@@ -268,6 +381,7 @@ done
 check_required_commands
 resolve_target_user
 check_required_openrc_services
+check_hyprland_command_dependencies
 check_startup_state_and_launcher
 check_mode_specific_state
 

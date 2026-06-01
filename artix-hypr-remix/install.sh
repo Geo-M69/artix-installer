@@ -17,8 +17,11 @@ source "$LIB_DIR/tty.sh"
 source "$LIB_DIR/hardware.sh"
 source "$LIB_DIR/flatpak.sh"
 source "$LIB_DIR/post_install.sh"
+source "$LIB_DIR/state.sh"
 
 TARGET_PHASE=7
+FROM_PHASE=1
+FROM_PHASE_EXPLICIT=false
 ASSUME_YES=false
 DRY_RUN=false
 SKIP_AUR=false
@@ -31,6 +34,7 @@ TARGET_USER="${SUDO_USER:-}"
 TARGET_HOME=""
 HOST_POLICY="${AHR_HOST_POLICY:-artix}"
 INSTALL_LOG_FILE="${AHR_INSTALL_LOG_FILE:-/var/log/artix-hypr-remix-install.log}"
+INSTALL_STATE_DIR="${AHR_INSTALL_STATE_DIR:-/var/lib/artix-hypr-remix/install-state}"
 ACTIVE_INSTALL_LOG_FILE=""
 
 usage() {
@@ -48,6 +52,7 @@ Phases:
 
 Options:
 	--phase N     Run phases up to N (1-7). Default: 7
+	--from-phase N Start from phase N (1-7). Default: 1
 	--user NAME   Target non-root desktop user for phases 4-7
 	--startup-mode MODE  Startup mode for phase 5: tty (default) or greetd
 	--greetd-mode MODE   greetd session policy: autologin or greeter (default)
@@ -152,8 +157,12 @@ collect_package_files() {
 	find "$PACKAGES_DIR" -maxdepth 1 -type f -name '[0-8][0-9]-*.txt' | sort
 }
 
-collect_aur_package_files() {
-	find "$PACKAGES_DIR" -maxdepth 1 -type f -name '9[0-9]-*.txt' | sort
+collect_core_aur_package_files() {
+	find "$PACKAGES_DIR" -maxdepth 1 -type f -name '90-*.txt' | sort
+}
+
+collect_optional_aur_package_files() {
+	find "$PACKAGES_DIR" -maxdepth 1 -type f -name '9[1-9]-*.txt' | sort
 }
 
 collect_packages() {
@@ -165,7 +174,7 @@ collect_packages() {
 	done < <(collect_package_files) | awk '!seen[$0]++'
 }
 
-collect_aur_packages() {
+collect_core_aur_packages() {
 	local file pkg
 	while IFS= read -r file; do
 		while IFS= read -r pkg; do
@@ -173,7 +182,18 @@ collect_aur_packages() {
 			[[ "$pkg" == "paru" ]] && continue
 			printf '%s\n' "$pkg"
 		done < <(parse_list_file "$file")
-	done < <(collect_aur_package_files) | awk '!seen[$0]++'
+	done < <(collect_core_aur_package_files) | awk '!seen[$0]++'
+}
+
+collect_optional_aur_packages() {
+	local file pkg
+	while IFS= read -r file; do
+		while IFS= read -r pkg; do
+			[[ -z "$pkg" ]] && continue
+			[[ "$pkg" == "paru" ]] && continue
+			printf '%s\n' "$pkg"
+		done < <(parse_list_file "$file")
+	done < <(collect_optional_aur_package_files) | awk '!seen[$0]++'
 }
 
 collect_services() {
@@ -452,8 +472,12 @@ run_preflight() {
 run_package_phase() {
 	local -a packages=()
 	local -a hardware_packages=()
+	local -a matched_profiles=()
+	local profile_root
 	mapfile -t packages < <(collect_packages)
 	collect_hardware_recommended_packages hardware_packages
+	mapfile -t matched_profiles < <(hardware_detect_profiles)
+	profile_root="$CONFIG_DIR/hardware"
 
 	if [[ "${#hardware_packages[@]}" -gt 0 ]]; then
 		packages+=("${hardware_packages[@]}")
@@ -472,11 +496,31 @@ run_package_phase() {
 	if [[ "$DRY_RUN" == true ]]; then
 		info "Dry-run: would install ${#packages[@]} packages"
 		printf '  - %s\n' "${packages[@]}"
+
+		if [[ "$HARDWARE_MODE" == "off" ]]; then
+			info "Hardware OpenRC modules are disabled (--hardware-mode off)"
+		elif [[ "${#matched_profiles[@]}" -gt 0 ]]; then
+			hardware_apply_profile_modules "$profile_root" "$DRY_RUN" "${matched_profiles[@]}"
+		else
+			info "No detected hardware profiles to apply OpenRC modules"
+		fi
 		return 0
 	fi
 
 	refresh_package_databases
 	install_packages "${packages[@]}"
+
+	if [[ "$HARDWARE_MODE" == "off" ]]; then
+		info "Hardware OpenRC modules are disabled (--hardware-mode off)"
+		return 0
+	fi
+
+	if [[ "${#matched_profiles[@]}" -eq 0 ]]; then
+		info "No detected hardware profiles to apply OpenRC modules"
+		return 0
+	fi
+
+	hardware_apply_profile_modules "$profile_root" "$DRY_RUN" "${matched_profiles[@]}"
 }
 
 run_service_phase() {
@@ -524,25 +568,40 @@ run_service_phase() {
 }
 
 run_aur_phase() {
-	local -a packages=()
+	local -a core_packages=()
+	local -a optional_packages=()
 
 	if [[ "$SKIP_AUR" == true ]]; then
 		info "[Phase 6/7] Skipping AUR phase due to --skip-aur"
 		return 0
 	fi
 
-	mapfile -t packages < <(collect_aur_packages)
+	mapfile -t core_packages < <(collect_core_aur_packages)
+	mapfile -t optional_packages < <(collect_optional_aur_packages)
 
 	info "[Phase 6/7] Installing AUR packages"
 
-	if [[ "${#packages[@]}" -eq 0 ]]; then
-		warn "No AUR packages found under $PACKAGES_DIR/90-*.txt"
+	if [[ "${#core_packages[@]}" -eq 0 && "${#optional_packages[@]}" -eq 0 ]]; then
+		warn "No AUR packages found under $PACKAGES_DIR/9[0-9]-*.txt"
 		return 0
 	fi
 
 	resolve_target_user
 	ensure_paru_bootstrap "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
-	install_aur_packages "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN" "${packages[@]}"
+
+	if [[ "${#core_packages[@]}" -gt 0 ]]; then
+		if ! install_aur_packages "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN" "${core_packages[@]}"; then
+			error "Core AUR package installation failed. Resolve the failing package(s) and re-run --phase 6."
+		fi
+	else
+		info "No core AUR packages defined under $PACKAGES_DIR/90-*.txt"
+	fi
+
+	if [[ "${#optional_packages[@]}" -gt 0 ]]; then
+		install_aur_packages_optional "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN" "${optional_packages[@]}"
+	else
+		info "No optional AUR packages defined under $PACKAGES_DIR/9[1-9]-*.txt"
+	fi
 }
 
 run_flatpak_phase() {
@@ -646,6 +705,42 @@ run_post_install_phase() {
 	finish_post_install "$TARGET_USER" "$DRY_RUN" "$ASSUME_YES"
 }
 
+run_phase_by_number() {
+	local phase="$1"
+
+	state_mark_phase_started "$phase"
+
+	case "$phase" in
+		1)
+			run_preflight
+			;;
+		2)
+			run_package_phase
+			;;
+		3)
+			run_service_phase
+			;;
+		4)
+			run_dotfiles_phase
+			;;
+		5)
+			run_startup_phase
+			;;
+		6)
+			run_aur_phase
+			run_flatpak_phase
+			;;
+		7)
+			run_post_install_phase
+			;;
+		*)
+			error "Unsupported phase number: $phase"
+			;;
+	esac
+
+	state_mark_phase_completed "$phase"
+}
+
 while [[ "$#" -gt 0 ]]; do
 	case "$1" in
 		--phase)
@@ -653,6 +748,13 @@ while [[ "$#" -gt 0 ]]; do
 			[[ "$#" -gt 0 ]] || error "--phase requires a value (1-7)"
 			[[ "$1" =~ ^[1-7]$ ]] || error "Invalid phase '$1'. Use 1, 2, 3, 4, 5, 6, or 7."
 			TARGET_PHASE="$1"
+			;;
+		--from-phase)
+			shift
+			[[ "$#" -gt 0 ]] || error "--from-phase requires a value (1-7)"
+			[[ "$1" =~ ^[1-7]$ ]] || error "Invalid from-phase '$1'. Use 1, 2, 3, 4, 5, 6, or 7."
+			FROM_PHASE="$1"
+			FROM_PHASE_EXPLICIT=true
 			;;
 		--skip-aur)
 			SKIP_AUR=true
@@ -712,8 +814,27 @@ while [[ "$#" -gt 0 ]]; do
 	shift
 done
 
+if (( FROM_PHASE > TARGET_PHASE )); then
+	error "--from-phase ($FROM_PHASE) cannot be greater than --phase ($TARGET_PHASE)."
+fi
+
 setup_install_logging
 trap 'status=$?; printf "[%s] Installer exit status: %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$status" >> "$ACTIVE_INSTALL_LOG_FILE"' EXIT
+state_init "$INSTALL_STATE_DIR" "$DRY_RUN"
+
+last_completed_phase="$(state_last_completed_phase 7)"
+if [[ "$DRY_RUN" == "true" ]]; then
+	info "Dry-run mode: installer state markers are read-only (source: $INSTALL_STATE_DIR)"
+else
+	info "Installer state directory: $INSTALL_STATE_DIR"
+fi
+
+if (( last_completed_phase > 0 )); then
+	info "Last completed installer phase marker: $last_completed_phase"
+	if [[ "$FROM_PHASE_EXPLICIT" == "false" ]] && (( TARGET_PHASE > last_completed_phase )); then
+		info "Resume hint: use --from-phase $((last_completed_phase + 1)) to continue from prior progress"
+	fi
+fi
 
 if [[ "$STARTUP_MODE" != "greetd" && "$GREETD_MODE" != "greeter" ]]; then
 	warn "Ignoring --greetd-mode '$GREETD_MODE' because startup mode is '$STARTUP_MODE'"
@@ -725,28 +846,32 @@ fi
 
 if [[ "$ASSUME_YES" == false ]]; then
 	info "Installer will run up to phase $TARGET_PHASE"
-	if (( TARGET_PHASE >= 4 )); then
+	if (( FROM_PHASE > 1 )); then
+		info "Installer start phase: $FROM_PHASE"
+	fi
+	if (( TARGET_PHASE >= 4 && FROM_PHASE <= 7 )); then
 		info "Target desktop user for phases 4-7: ${TARGET_USER:-<unset>}"
 	fi
-	if (( TARGET_PHASE >= 6 )) && [[ "$SKIP_AUR" == true ]]; then
+	if (( TARGET_PHASE >= 6 && FROM_PHASE <= 6 )) && [[ "$SKIP_AUR" == true ]]; then
 		info "AUR phase will be skipped (--skip-aur)"
 	fi
-	if (( TARGET_PHASE >= 6 )); then
+	if (( TARGET_PHASE >= 6 && FROM_PHASE <= 6 )); then
 		if [[ "$SKIP_FLATPAK" == true ]]; then
 			info "Flatpak install will be skipped (--skip-flatpak)"
 		else
 			info "Flatpak profile mode for phase 6: $FLATPAK_PROFILE"
 		fi
 	fi
-	if (( TARGET_PHASE >= 5 )); then
+	if (( TARGET_PHASE >= 5 && FROM_PHASE <= 5 )); then
 		info "Startup mode for phase 5: $STARTUP_MODE"
 		if [[ "$STARTUP_MODE" == "greetd" ]]; then
 			info "greetd session policy: $GREETD_MODE"
 		fi
 	fi
-	if (( TARGET_PHASE >= 2 )); then
+	if (( TARGET_PHASE >= 2 && FROM_PHASE <= 2 )); then
 		info "Hardware package mode for phase 2: $HARDWARE_MODE"
 	fi
+	info "Execution phase window: $FROM_PHASE..$TARGET_PHASE"
 	read -r -p "Continue? [y/N]: " response
 	case "${response,,}" in
 		y|yes) ;;
@@ -754,28 +879,9 @@ if [[ "$ASSUME_YES" == false ]]; then
 	esac
 fi
 
-if (( TARGET_PHASE >= 1 )); then
-	run_preflight
-fi
-if (( TARGET_PHASE >= 2 )); then
-	run_package_phase
-fi
-if (( TARGET_PHASE >= 3 )); then
-	run_service_phase
-fi
-if (( TARGET_PHASE >= 4 )); then
-	run_dotfiles_phase
-fi
-if (( TARGET_PHASE >= 5 )); then
-	run_startup_phase
-fi
-if (( TARGET_PHASE >= 6 )); then
-	run_aur_phase
-	run_flatpak_phase
-fi
-if (( TARGET_PHASE >= 7 )); then
-	run_post_install_phase
-fi
+for (( phase=FROM_PHASE; phase<=TARGET_PHASE; phase++ )); do
+	run_phase_by_number "$phase"
+done
 
-info "Completed requested phases (1..$TARGET_PHASE)"
+info "Completed requested phases ($FROM_PHASE..$TARGET_PHASE)"
 info "Installer phase run finished"
