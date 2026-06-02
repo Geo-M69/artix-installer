@@ -50,7 +50,7 @@ return {
   { mods = { "SUPER", "SHIFT", "ALT" }, key = "5", action = "exec", command = "hyprctl dispatch movetoworkspacesilent 5" },
 
   -- Clipboard.
-  { mods = { "SUPER" }, key = "P", action = "exec", command = "cliphist list | walker -d | cliphist decode | wl-copy" },
+  { mods = { "SUPER" }, key = "P", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-clipboard-picker" },
 
   -- Notifications.
   { mods = { "SUPER" }, key = "COMMA", action = "exec", command = "makoctl dismiss" },

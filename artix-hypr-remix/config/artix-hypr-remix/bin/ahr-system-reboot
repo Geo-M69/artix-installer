@@ -7,12 +7,12 @@ if ahr_has_cmd reboot; then
   exec reboot
 fi
 
-if ahr_has_cmd loginctl; then
-  exec loginctl reboot
+if ahr_has_cmd shutdown; then
+  exec shutdown -r now
 fi
 
-if ahr_has_cmd systemctl; then
-  exec systemctl reboot
+if ahr_has_cmd openrc-shutdown; then
+  exec openrc-shutdown -r now
 fi
 
 ahr_fail "No reboot command found"

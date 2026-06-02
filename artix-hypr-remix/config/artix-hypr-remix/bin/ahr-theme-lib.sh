@@ -448,6 +448,28 @@ ahr_theme_bg_set() {
   ahr_theme_mkdir_state
   ln -sfn "$resolved" "$AHR_THEME_BACKGROUND_LINK"
 
+  ahr_theme_apply_background_file "$resolved" || true
+}
+
+ahr_theme_current_background() {
+  if [[ -L "$AHR_THEME_BACKGROUND_LINK" ]]; then
+    readlink -f "$AHR_THEME_BACKGROUND_LINK" 2>/dev/null || true
+    return 0
+  fi
+
+  return 1
+}
+
+ahr_theme_apply_background_file() {
+  local resolved="$1"
+
+  [[ -f "$resolved" ]] || return 1
+
+  if ahr_has_cmd swww-daemon && ! pgrep -x swww-daemon >/dev/null 2>&1; then
+    setsid swww-daemon >/dev/null 2>&1 &
+    sleep 0.2
+  fi
+
   if ahr_has_cmd swww; then
     swww img "$resolved" --transition-type simple --transition-duration 0.4 >/dev/null 2>&1 || true
     return 0
@@ -458,6 +480,17 @@ ahr_theme_bg_set() {
     setsid swaybg -i "$resolved" -m fill >/dev/null 2>&1 &
     return 0
   fi
+
+  return 1
+}
+
+ahr_theme_apply_current_background() {
+  local current_background=""
+
+  current_background="$(ahr_theme_current_background)"
+  [[ -n "$current_background" ]] || return 0
+
+  ahr_theme_apply_background_file "$current_background"
 }
 
 ahr_theme_bg_next() {

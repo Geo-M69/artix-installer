@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if ahr_has_cmd elephant; then
+  exec elephant
+fi
+
+exit 0
+

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if ! ahr_has_cmd cliphist; then
+  ahr_fail "cliphist is not installed"
+fi
+
+pick_command() {
+  if ahr_has_cmd walker; then
+    walker --dmenu -p "Clipboard"
+    return 0
+  fi
+
+  if ahr_has_cmd wofi; then
+    wofi --dmenu --prompt "Clipboard"
+    return 0
+  fi
+
+  if ahr_has_cmd rofi; then
+    rofi -dmenu -p "Clipboard"
+    return 0
+  fi
+
+  return 1
+}
+
+if ! selection="$(cliphist list | pick_command)"; then
+  ahr_fail "No clipboard picker found (walker/wofi/rofi)"
+fi
+
+if [[ -z "${selection:-}" ]]; then
+  exit 0
+fi
+
+cliphist decode <<< "$selection" | wl-copy
+

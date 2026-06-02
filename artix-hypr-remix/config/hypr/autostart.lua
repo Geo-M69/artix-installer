@@ -2,9 +2,9 @@
 return {
   "waybar",
   "mako",
-  "elephant",
-  "walker --gapplication-service",
-  "swww-daemon",
+  "bash ~/.config/artix-hypr-remix/bin/ahr-optional-elephant",
+  "bash ~/.config/artix-hypr-remix/bin/ahr-launcher-service",
+  "bash ~/.config/artix-hypr-remix/bin/ahr-launch-wallpaper-session",
   "hypridle",
   "wl-paste --type text --watch cliphist store",
   "wl-paste --type image --watch cliphist store",

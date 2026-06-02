@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGES_DIR="$SCRIPT_DIR/packages"
@@ -43,6 +43,19 @@ HOST_POLICY="${AHR_HOST_POLICY:-artix}"
 INSTALL_LOG_FILE="${AHR_INSTALL_LOG_FILE:-/var/log/artix-hypr-remix-install.log}"
 INSTALL_STATE_DIR="${AHR_INSTALL_STATE_DIR:-/var/lib/artix-hypr-remix/install-state}"
 ACTIVE_INSTALL_LOG_FILE=""
+
+install_error_trap() {
+	local line_no="${1:-unknown}"
+	local command_text="${2:-<unknown>}"
+	local exit_status="$?"
+
+	if [[ -n "$ACTIVE_INSTALL_LOG_FILE" ]]; then
+		printf '[%s] Installer error at line %s (exit %s): %s\n' \
+			"$(date '+%Y-%m-%d %H:%M:%S')" "$line_no" "$exit_status" "$command_text" >> "$ACTIVE_INSTALL_LOG_FILE"
+	fi
+
+	warn "Installer failed at line $line_no (exit $exit_status). Review $ACTIVE_INSTALL_LOG_FILE for details."
+}
 
 usage() {
 	cat <<EOF
@@ -201,6 +214,13 @@ collect_core_aur_package_files() {
 
 collect_optional_aur_package_files() {
 	find "$PACKAGES_DIR" -maxdepth 1 -type f -name '9[1-9]-*.txt' | sort
+}
+
+phase_window_overlaps() {
+	local start_phase="$1"
+	local end_phase="$2"
+
+	! (( TARGET_PHASE < start_phase || FROM_PHASE > end_phase ))
 }
 
 collect_docker_profile_packages() {
@@ -570,7 +590,7 @@ collect_hardware_recommended_packages() {
 }
 
 run_preflight() {
-	info "[Phase 1/7] Running preflight checks"
+	info "[Phase 1/8] Running preflight checks"
 	local allow_non_vm="${AHR_ALLOW_NON_VM_TESTING:-0}"
 	local effective_host_policy="$HOST_POLICY"
 
@@ -616,6 +636,37 @@ run_preflight() {
 	require_command rc-service
 	require_command id
 	require_command getent
+	require_command bash
+
+	if phase_window_overlaps 2 2; then
+		[[ -d "$PACKAGES_DIR" ]] || error "Packages directory is missing: $PACKAGES_DIR"
+	fi
+
+	if phase_window_overlaps 3 3; then
+		[[ -f "$SERVICES_DIR/openrc-default.txt" ]] || error "Required OpenRC service manifest is missing: $SERVICES_DIR/openrc-default.txt"
+	fi
+
+	if phase_window_overlaps 4 8; then
+		[[ -d "$CONFIG_DIR" ]] || error "Config source directory is missing: $CONFIG_DIR"
+		resolve_target_user
+
+		if [[ "$TARGET_HOME" == "/" ]]; then
+			error "Refusing to target home directory '/'. Re-run with a real desktop user via --user <name>."
+		fi
+
+		if [[ ! -d "$TARGET_HOME" ]]; then
+			error "Resolved target home is not a directory: $TARGET_HOME"
+		fi
+	fi
+
+	if phase_window_overlaps 5 8; then
+		[[ -f "$CONFIG_DIR/artix-hypr-remix/bin/start-hyprland-session.sh" ]] || error "Shared Hyprland session launcher source is missing from repo config/"
+	fi
+
+	if phase_window_overlaps 7 8; then
+		[[ -f "$SCRIPT_DIR/scripts/post-install-smoke.sh" ]] || error "Post-install validation script is missing: $SCRIPT_DIR/scripts/post-install-smoke.sh"
+		[[ -f "$CONFIG_DIR/artix-hypr-remix/bin/first-run.sh" ]] || error "First-run framework source is missing from repo config/"
+	fi
 
 	info "Preflight checks passed"
 }
@@ -654,7 +705,7 @@ run_package_phase() {
 		validate_required_printing_profile_packages_declared "${printing_profile_packages[@]}"
 	fi
 
-	info "[Phase 2/7] Installing packages"
+	info "[Phase 2/8] Installing packages"
 
 	if [[ "${#packages[@]}" -eq 0 ]]; then
 		warn "No packages found under $PACKAGES_DIR"
@@ -748,7 +799,7 @@ run_service_phase() {
 
 	mapfile -t services < <(printf '%s\n' "${services[@]}" | awk '!seen[$0]++')
 
-	info "[Phase 3/7] Enabling safe OpenRC services"
+	info "[Phase 3/8] Enabling safe OpenRC services"
 
 	if [[ "${#services[@]}" -eq 0 ]]; then
 		warn "No services found in $SERVICES_DIR/openrc-default.txt"
@@ -795,14 +846,14 @@ run_aur_phase() {
 	local -a optional_packages=()
 
 	if [[ "$SKIP_AUR" == true ]]; then
-		info "[Phase 6/7] Skipping AUR phase due to --skip-aur"
+		info "[Phase 6/8] Skipping AUR phase due to --skip-aur"
 		return 0
 	fi
 
 	mapfile -t core_packages < <(collect_core_aur_packages)
 	mapfile -t optional_packages < <(collect_optional_aur_packages)
 
-	info "[Phase 6/7] Installing AUR packages"
+	info "[Phase 6/8] Installing AUR packages"
 
 	if [[ "${#core_packages[@]}" -eq 0 && "${#optional_packages[@]}" -eq 0 ]]; then
 		warn "No AUR packages found under $PACKAGES_DIR/9[0-9]-*.txt"
@@ -831,18 +882,27 @@ run_flatpak_phase() {
 	local profile_root="$SCRIPT_DIR/flatpaks"
 
 	if [[ "$SKIP_FLATPAK" == true || "$FLATPAK_PROFILE" == "none" ]]; then
-		info "[Phase 6/7] Skipping Flatpak profile install"
+		info "[Phase 6/8] Skipping Flatpak profile install"
 		return 0
 	fi
 
-	info "[Phase 6/7] Installing Flatpak profile '$FLATPAK_PROFILE'"
+	info "[Phase 6/8] Installing Flatpak profile '$FLATPAK_PROFILE'"
 	install_flatpak_profile "$profile_root" "$FLATPAK_PROFILE" "$DRY_RUN"
 }
 
 resolve_target_user() {
+	local current_user
+
 	if [[ -z "$TARGET_USER" || "$TARGET_USER" == "root" ]]; then
 		if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
 			TARGET_USER="$SUDO_USER"
+		fi
+	fi
+
+	if [[ -z "$TARGET_USER" || "$TARGET_USER" == "root" ]]; then
+		current_user="$(id -un)"
+		if [[ "$current_user" != "root" ]]; then
+			TARGET_USER="$current_user"
 		fi
 	fi
 
@@ -860,9 +920,44 @@ resolve_target_user() {
 	fi
 }
 
+confirm_dotfile_overwrite_window() {
+	local -a existing_paths=()
+	local response
+
+	mapfile -t existing_paths < <(collect_existing_config_destinations "$CONFIG_DIR" "$TARGET_HOME")
+
+	if [[ "${#existing_paths[@]}" -eq 0 ]]; then
+		return 0
+	fi
+
+	warn "Phase 4 will back up and replace ${#existing_paths[@]} existing config path(s) under $TARGET_HOME/.config:"
+	printf '  - %s\n' "${existing_paths[@]}"
+
+	if [[ "$DRY_RUN" == "true" ]]; then
+		info "Dry-run: overwrite confirmation skipped because no files will be changed"
+		return 0
+	fi
+
+	if [[ "$ASSUME_YES" == "true" ]]; then
+		info "Proceeding with backup-and-replace behavior because --yes was provided"
+		return 0
+	fi
+
+	if [[ ! -t 0 ]]; then
+		error "Phase 4 requires confirmation before replacing existing user config. Re-run interactively or pass --yes to accept backup-and-replace behavior."
+	fi
+
+	read -r -p "Back up and replace these existing config paths? [y/N]: " response
+	case "${response,,}" in
+		y|yes) ;;
+		*) error "Phase 4 aborted before modifying existing user config." ;;
+	esac
+}
+
 run_dotfiles_phase() {
-	info "[Phase 4/7] Deploying dotfiles to target user"
+	info "[Phase 4/8] Deploying dotfiles to target user"
 	resolve_target_user
+	confirm_dotfile_overwrite_window
 	deploy_config_tree "$CONFIG_DIR" "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 	initialize_xdg_user_dirs "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }
@@ -914,17 +1009,30 @@ ensure_startup_mode_packages() {
 }
 
 run_startup_phase() {
-	info "[Phase 5/7] Configuring startup mode '$STARTUP_MODE' for Hyprland"
+	info "[Phase 5/8] Configuring startup mode '$STARTUP_MODE' for Hyprland"
 	resolve_target_user
 	ensure_startup_mode_packages
 	startup_mode_preflight "$STARTUP_MODE" "$TARGET_HOME" "$DRY_RUN"
 	configure_startup_mode "$STARTUP_MODE" "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN" "$GREETD_MODE"
 }
 
+run_post_install_validation() {
+	if [[ "$DRY_RUN" == "true" ]]; then
+		info "Dry-run: would run post-install validation for '$TARGET_USER'"
+		return 0
+	fi
+
+	info "Running post-install validation checks"
+	if ! bash "$SCRIPT_DIR/scripts/post-install-smoke.sh" --user "$TARGET_USER"; then
+		error "Post-install validation failed. Review the reported checks above, fix the issue, then re-run the required phases."
+	fi
+}
+
 run_post_install_phase() {
-	info "[Phase 7/7] Preparing first-run + post-install framework"
+	info "[Phase 7/8] Preparing first-run + post-install framework"
 	resolve_target_user
 	prepare_post_install_framework "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
+	run_post_install_validation
 	finish_post_install "$TARGET_USER" "$DRY_RUN" "$ASSUME_YES"
 }
 
@@ -1074,6 +1182,7 @@ if (( FROM_PHASE > TARGET_PHASE )); then
 fi
 
 setup_install_logging
+trap 'install_error_trap "${LINENO}" "$BASH_COMMAND"' ERR
 trap 'status=$?; printf "[%s] Installer exit status: %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$status" >> "$ACTIVE_INSTALL_LOG_FILE"' EXIT
 state_init "$INSTALL_STATE_DIR" "$DRY_RUN"
 

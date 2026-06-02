@@ -74,7 +74,6 @@ declare -A cmd_package_map=(
   [makoctl]=mako
   [playerctl]=playerctl
   [polkit-gnome-authentication-agent-1]=polkit-gnome
-  [swww-daemon]=swww
   [wl-paste]=wl-clipboard
   [wl-copy]=wl-clipboard
   [walker]=walker-bin

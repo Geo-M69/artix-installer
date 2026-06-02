@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if ahr_has_cmd walker; then
+  exec walker --gapplication-service
+fi
+
+# Wofi/rofi do not require a background service; treat this as a no-op.
+exit 0
+

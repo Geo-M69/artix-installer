@@ -21,19 +21,10 @@ declare -a RULE_MESSAGES=(
   "/run/systemd paths are not supported in OpenRC runtime paths"
 )
 
-# Documented exceptions:
-# - ahr-system-reboot keeps logind/systemd fallbacks for broader host compatibility.
-declare -a EXCEPTION_PATH_FRAGMENTS=(
-  "config/artix-hypr-remix/bin/ahr-system-reboot"
-)
-
-declare -a EXCEPTION_LINE_REGEXES=(
-  '(^|[^[:alnum:]_])(systemctl|loginctl)([^[:alnum:]_]|$)'
-)
-
-declare -a EXCEPTION_REASONS=(
-  "Intentional reboot fallback path"
-)
+# No exceptions are currently allowed in runtime paths.
+declare -a EXCEPTION_PATH_FRAGMENTS=()
+declare -a EXCEPTION_LINE_REGEXES=()
+declare -a EXCEPTION_REASONS=()
 
 should_ignore_hit() {
   local pattern="$1"

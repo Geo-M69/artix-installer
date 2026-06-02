@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_THEME_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-theme-lib.sh}"
+
+ahr_theme_apply_current_background || true
+

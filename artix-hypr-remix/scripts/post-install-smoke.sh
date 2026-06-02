@@ -253,6 +253,21 @@ check_hyprland_command_dependencies() {
   done < <(printf '%s\n' "${!hypr_commands_seen[@]}" | sort)
 }
 
+check_wallpaper_backend() {
+  echo "[4b/6] Validating wallpaper backend"
+
+  if command -v swww >/dev/null 2>&1 || command -v swaybg >/dev/null 2>&1; then
+    if command -v swww >/dev/null 2>&1; then
+      pass "wallpaper backend available: swww"
+    else
+      pass "wallpaper backend available: swaybg"
+    fi
+    return
+  fi
+
+  fail "no supported wallpaper backend is installed (expected swww or swaybg)"
+}
+
 check_startup_state_and_launcher() {
   local state_file
   local launcher
@@ -382,6 +397,7 @@ check_required_commands
 resolve_target_user
 check_required_openrc_services
 check_hyprland_command_dependencies
+check_wallpaper_backend
 check_startup_state_and_launcher
 check_mode_specific_state
 

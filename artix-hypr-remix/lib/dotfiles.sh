@@ -21,6 +21,28 @@ backup_path_if_exists() {
   info "Backed up $target_path -> $backup_path"
 }
 
+collect_existing_config_destinations() {
+  local source_config_dir="$1"
+  local target_home="$2"
+  local target_config_dir="$target_home/.config"
+  local entry entry_name destination
+
+  if [[ ! -d "$source_config_dir" ]]; then
+    return 0
+  fi
+
+  shopt -s dotglob nullglob
+  for entry in "$source_config_dir"/*; do
+    entry_name="$(basename "$entry")"
+    destination="$target_config_dir/$entry_name"
+
+    if [[ -e "$destination" || -L "$destination" ]]; then
+      printf '%s\n' "$destination"
+    fi
+  done
+  shopt -u dotglob nullglob
+}
+
 deploy_config_tree() {
   local source_config_dir="$1"
   local target_user="$2"

@@ -98,6 +98,15 @@ for cmd in pacman slurp grim hyprctl; do
   fi
 done
 
+if command -v swww >/dev/null 2>&1; then
+  echo "OK: swww"
+elif command -v swaybg >/dev/null 2>&1; then
+  echo "OK: swaybg"
+else
+  echo "MISSING: wallpaper backend (swww or swaybg)"
+  overall_status=1
+fi
+
 # AUR helper is optional for runtime health checks.
 if command -v paru >/dev/null 2>&1; then
   echo "OK: paru"

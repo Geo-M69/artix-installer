@@ -2,6 +2,24 @@
 
 Opinionated Artix Linux installer remix focused on Hyprland and OpenRC.
 
+Project target:
+- An Artix OpenRC-native Omarchy-equivalent Hyprland desktop with a safe, repeatable installer and a polished first-login experience.
+
+Supported base system:
+- Artix Linux with OpenRC
+- Fresh or minimal working base install with `pacman`, network access, and a non-root desktop user already created
+- Installer shell: `bash`
+- Supported user shells for startup wiring: `bash` and `zsh`
+- Supported session flow: `tty` by default, optional `greetd`
+- GPU support target: Intel, AMD, and NVIDIA through Artix/OpenRC-safe adaptations and hardware profile stubs
+
+Out of scope for current beta work:
+- systemd-based hosts
+- display managers other than `greetd`
+- a line-for-line Omarchy clone
+- ISO/profile distribution work before the script installer is reliable
+- unsupported hardware promises beyond tested Artix OpenRC paths
+
 Structure:
 - `install.sh` - top-level installer entrypoint (phase-based)
 - `lib/` - helper scripts
@@ -9,6 +27,7 @@ Structure:
 - `services/` - openrc service lists
 - `config/` - source-of-truth config snippets (Hyprland source is Lua)
 - `scripts/` - small helper scripts
+- `ROADMAP.md` - milestone plan, beta path, blockers, and definition of done
 
 Hypr config source:
 - `config/hypr/hyprland.conf` is the runtime config consumed directly by Hyprland.
@@ -24,6 +43,12 @@ Current installer milestone:
 7. Install AUR packages and Flatpak app profiles (`flatpaks/default.txt` by default).
 8. Prepare first-run/post-install framework, initialize migration state, and offer reboot prompt.
 9. Optionally apply a guarded Git/GPG/SSH baseline for the target user (disabled by default).
+
+Milestone 0 and 1 status:
+- Support assumptions, beta scope, and intentional OpenRC direction are documented here and in `ROADMAP.md`.
+- Phase 1 preflight now validates host policy, required commands, repo inputs, and target-user context when later phases need it.
+- Phase 4 now asks before backing up and replacing existing user config unless `--yes` is used.
+- Phase 7 now runs post-install smoke validation before offering the reboot prompt.
 
 Validation and stabilization policy:
 - Host policy defaults to Artix-only (`AHR_HOST_POLICY=artix`) for `./install.sh`, `./scripts/doctor.sh`, `./scripts/smoke-framework.sh`, and `./scripts/check-hardware.sh`.
@@ -168,7 +193,7 @@ Notes:
 - Hardware profile OpenRC modules are in `config/hardware/<profile>/openrc-module.sh`.
 - `services/openrc-boot.txt` is not managed by the desktop installer.
 - Installer preflight host policy supports `--host-policy artix|vm|any` (default: `artix`), and `AHR_HOST_POLICY` applies to helper validation scripts.
-- `scripts/check-openrc-portability.sh` fails on runtime-path use of `systemctl`, `loginctl`, `journalctl`, `systemd-run`, and `/run/systemd` (with documented exceptions for intentional fallback paths).
+- `scripts/check-openrc-portability.sh` fails on runtime-path use of `systemctl`, `loginctl`, `journalctl`, `systemd-run`, and `/run/systemd`.
 - `scripts/check-docker-profile.sh` verifies `--docker-profile` CLI coverage, phase 2 package injection, and phase 3 docker service toggle behavior.
 - Installer state markers are persisted under `/var/lib/artix-hypr-remix/install-state` (`phase-<N>.started` and `phase-<N>.completed`), and resume windows can be selected with `--from-phase`.
 - Phase 4 always replaces existing target config paths with timestamp backups.
@@ -179,7 +204,7 @@ Notes:
 - In `--startup-mode greetd`, phase 5 attempts to install `greetd`, `greetd-openrc`, and the available tuigreet package variant (`greetd-tuigreet` or `tuigreet`).
 - In `--startup-mode greetd`, phase 5 enables greetd for the next boot and does not start it immediately during installer execution.
 - greetd config is generated on VT7 to avoid input collisions with tty1 getty prompts.
-- `scripts/post-install-smoke.sh` validates required OpenRC service health (`dbus`, `elogind`, `NetworkManager`), Hyprland runtime command dependencies (with optional warnings for `walker`/`elephant`), startup mode state, session launcher executable state, and mode-specific startup wiring.
+- `scripts/post-install-smoke.sh` validates required OpenRC service health (`dbus`, `elogind`, `NetworkManager`), Hyprland runtime command dependencies (with optional warnings for `walker`/`elephant`), wallpaper backend availability (`swww` or `swaybg`), startup mode state, session launcher executable state, and mode-specific startup wiring.
 - Hardware profile snapshots are written to `/var/lib/artix-hypr-remix/hardware-profile.json` when installer runs as root.
 - Installer output is logged to `/var/log/artix-hypr-remix-install.log` by default (override with `AHR_INSTALL_LOG_FILE`, fallback under `/tmp` when needed).
 - Package installation phases refresh and upgrade package databases in a full `pacman -Syu` transaction before package-specific installs (avoids `-Sy` partial upgrade risk).
