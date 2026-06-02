@@ -43,6 +43,30 @@ collect_existing_config_destinations() {
   shopt -u dotglob nullglob
 }
 
+normalize_framework_bin_permissions() {
+  local target_user="$1"
+  local target_home="$2"
+  local dry_run="${3:-false}"
+  local framework_bin_dir="$target_home/.config/artix-hypr-remix/bin"
+  local file_path
+
+  [[ -d "$framework_bin_dir" ]] || return 0
+
+  shopt -s nullglob
+  for file_path in "$framework_bin_dir"/*; do
+    [[ -f "$file_path" ]] || continue
+
+    if [[ "$dry_run" == "true" ]]; then
+      info "Dry-run: would ensure executable bit on $file_path"
+      continue
+    fi
+
+    chmod 0755 "$file_path"
+    chown "$target_user:$target_user" "$file_path"
+  done
+  shopt -u nullglob
+}
+
 deploy_config_tree() {
   local source_config_dir="$1"
   local target_user="$2"
@@ -84,6 +108,8 @@ deploy_config_tree() {
   if [[ "$dry_run" == "false" ]]; then
     chown "$target_user:$target_user" "$target_config_dir"
   fi
+
+  normalize_framework_bin_permissions "$target_user" "$target_home" "$dry_run"
 }
 
 run_as_user() {
