@@ -149,9 +149,9 @@ doctor_fail_count="$(grep -cE '^MISSING:|^Doctor checks failed' "$doctor_log" ||
 smoke_fail_count="$(grep -c '^FAIL:' "$smoke_log" || true)"
 smoke_warn_count="$(grep -c '^WARN:' "$smoke_log" || true)"
 
-service_anomalies="$(grep -E '^MISSING: service|^MISSING: /etc/init.d/|^MISSING: service not running|^MISSING: service not enabled|^FAIL: .*service' "$doctor_log" "$smoke_log" || true)"
-package_anomalies="$(grep -E '^MISSING .* ->|Dependency check failed' "$doctor_log" || true)"
-portal_polkit_anomalies="$(grep -E 'polkit-gnome-authentication-agent-1|xdg-desktop-portal|xdg-desktop-portal-hyprland' "$doctor_log" "$smoke_log" | grep -E 'MISSING:|FAIL:' || true)"
+service_anomalies="$(grep -hE '^MISSING: service|^MISSING: /etc/init.d/|^MISSING: service not running|^MISSING: service not enabled|^FAIL: .*service' "$doctor_log" "$smoke_log" | sort -u || true)"
+package_anomalies="$(grep -hE '^MISSING .* ->|Dependency check failed' "$doctor_log" | sort -u || true)"
+portal_polkit_anomalies="$(grep -hE 'polkit-gnome-authentication-agent-1|xdg-desktop-portal|xdg-desktop-portal-hyprland' "$doctor_log" "$smoke_log" | grep -hE 'MISSING:|FAIL:' | sort -u || true)"
 
 if [[ -z "$host_id" ]]; then
   host_id="$host_name"
