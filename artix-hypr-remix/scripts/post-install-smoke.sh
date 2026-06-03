@@ -5,7 +5,13 @@ STARTUP_MODE_STATE_REL=".local/state/artix-hypr-remix/startup.mode"
 TTY_BLOCK_BEGIN="# >>> artix-hypr-remix tty hyprland >>>"
 
 declare -a REQUIRED_COMMANDS=(id getent rc-update rc-service)
-declare -a REQUIRED_SERVICES=(dbus elogind NetworkManager)
+declare -a REQUIRED_SERVICES=(dbus elogind NetworkManager bluetoothd)
+declare -a REQUIRED_DESKTOP_COMMANDS=(
+  polkit-gnome-authentication-agent-1
+  xdg-desktop-portal
+  xdg-desktop-portal-hyprland
+)
+declare -a PRINTING_SERVICES=(cupsd avahi-daemon)
 declare -A OPTIONAL_HYPR_COMMANDS=(
   [walker]=1
   [elephant]=1
@@ -20,6 +26,7 @@ identity_commands_ok=true
 openrc_commands_ok=true
 user_context_ready=false
 startup_mode=""
+expect_printing="auto"
 
 declare -a failures=()
 declare -a warnings=()
@@ -38,6 +45,7 @@ Validates critical post-install state for Artix Hypr Remix:
 
 Options:
   --user NAME   Target desktop user (default: SUDO_USER, else current non-root user)
+  --expect-printing MODE  Printing validation mode: auto (default), on, or off
   -h, --help    Show this help
 EOF
 }
@@ -59,6 +67,11 @@ warn_msg() {
 service_enabled_in_default_runlevel() {
   local service="$1"
   [[ -e "/etc/runlevels/default/$service" ]]
+}
+
+service_script_present() {
+  local service="$1"
+  [[ -x "/etc/init.d/$service" ]]
 }
 
 trim_whitespace() {
@@ -183,7 +196,7 @@ check_required_openrc_services() {
   fi
 
   for service in "${REQUIRED_SERVICES[@]}"; do
-    if [[ ! -x "/etc/init.d/$service" ]]; then
+    if ! service_script_present "$service"; then
       fail "required service script missing: /etc/init.d/$service"
       continue
     fi
@@ -204,11 +217,90 @@ check_required_openrc_services() {
   done
 }
 
+check_desktop_runtime_commands() {
+  local cmd
+
+  echo "[4/8] Validating desktop runtime commands"
+  for cmd in "${REQUIRED_DESKTOP_COMMANDS[@]}"; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+      pass "desktop runtime command available: $cmd"
+    else
+      fail "missing required desktop runtime command: $cmd"
+    fi
+  done
+}
+
+check_printing_services() {
+  local service
+  local enforce_printing=false
+  local all_scripts_present=true
+
+  echo "[5/8] Validating optional printing service state"
+
+  case "$expect_printing" in
+    on)
+      enforce_printing=true
+      ;;
+    off)
+      pass "printing validation skipped by --expect-printing off"
+      return
+      ;;
+    auto)
+      for service in "${PRINTING_SERVICES[@]}"; do
+        if ! service_script_present "$service"; then
+          all_scripts_present=false
+        fi
+      done
+
+      if [[ "$all_scripts_present" == "true" ]]; then
+        enforce_printing=true
+      else
+        pass "printing services not detected; skipping printing service checks"
+        return
+      fi
+      ;;
+    *)
+      fail "invalid --expect-printing mode: $expect_printing"
+      return
+      ;;
+  esac
+
+  if [[ "$openrc_commands_ok" != "true" ]]; then
+    fail "cannot validate printing services because rc-update/rc-service checks failed"
+    return
+  fi
+
+  if [[ "$enforce_printing" != "true" ]]; then
+    return
+  fi
+
+  for service in "${PRINTING_SERVICES[@]}"; do
+    if ! service_script_present "$service"; then
+      fail "printing service script missing: /etc/init.d/$service"
+      continue
+    fi
+
+    pass "printing service script present: /etc/init.d/$service"
+
+    if service_enabled_in_default_runlevel "$service"; then
+      pass "printing service enabled in default runlevel: $service"
+    else
+      fail "printing service not enabled in default runlevel: $service"
+    fi
+
+    if rc-service "$service" status >/dev/null 2>&1; then
+      pass "printing service running: $service"
+    else
+      fail "printing service not running: $service"
+    fi
+  done
+}
+
 check_hyprland_command_dependencies() {
   local hypr_conf
   local line cmd command_token
 
-  echo "[4/6] Validating Hyprland command dependencies"
+  echo "[6/8] Validating Hyprland command dependencies"
 
   if [[ "$user_context_ready" != "true" ]]; then
     fail "cannot validate Hyprland command dependencies because target user context is unavailable"
@@ -254,7 +346,7 @@ check_hyprland_command_dependencies() {
 }
 
 check_wallpaper_backend() {
-  echo "[4b/6] Validating wallpaper backend"
+  echo "[6b/8] Validating wallpaper backend"
 
   if command -v swww >/dev/null 2>&1 || command -v swaybg >/dev/null 2>&1; then
     if command -v swww >/dev/null 2>&1; then
@@ -272,7 +364,7 @@ check_startup_state_and_launcher() {
   local state_file
   local launcher
 
-  echo "[5/6] Validating startup mode state + launcher"
+  echo "[7/8] Validating startup mode state + launcher"
 
   if [[ "$user_context_ready" != "true" ]]; then
     fail "cannot validate startup state because target user context is unavailable"
@@ -309,7 +401,7 @@ check_mode_specific_state() {
   local profile
   local found_tty_block=false
 
-  echo "[6/6] Validating mode-specific startup wiring"
+  echo "[8/8] Validating mode-specific startup wiring"
 
   if [[ -z "$startup_mode" ]]; then
     fail "cannot run mode-specific checks because startup mode state is unavailable"
@@ -380,6 +472,19 @@ while [[ "$#" -gt 0 ]]; do
       [[ "$#" -gt 0 ]] || { echo "--user requires a value" >&2; exit 1; }
       target_user="$1"
       ;;
+    --expect-printing)
+      shift
+      [[ "$#" -gt 0 ]] || { echo "--expect-printing requires a value" >&2; exit 1; }
+      case "$1" in
+        auto|on|off)
+          expect_printing="$1"
+          ;;
+        *)
+          echo "Invalid --expect-printing mode: $1 (use auto, on, or off)" >&2
+          exit 1
+          ;;
+      esac
+      ;;
     -h|--help)
       usage
       exit 0
@@ -396,6 +501,8 @@ done
 check_required_commands
 resolve_target_user
 check_required_openrc_services
+check_desktop_runtime_commands
+check_printing_services
 check_hyprland_command_dependencies
 check_wallpaper_backend
 check_startup_state_and_launcher

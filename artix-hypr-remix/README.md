@@ -152,6 +152,8 @@ Targeted validation helpers:
     ./scripts/check-openrc-portability.sh
     ./scripts/check-first-run-idempotency.sh
     ./scripts/check-docker-profile.sh
+    ./scripts/milestone2-validate.sh --user <username>
+    ./scripts/milestone2-validate.sh --user <username> --expect-printing on --host-id host-a --gpu-profile intel --startup-modes "tty,greetd"
 
 Printing profile validation (host-independent dry-run):
 
@@ -163,6 +165,7 @@ Post-install smoke validation:
 
     ./scripts/post-install-smoke.sh
     ./scripts/post-install-smoke.sh --user <username>
+    ./scripts/post-install-smoke.sh --user <username> --expect-printing on
     sudo ./scripts/post-install-smoke.sh --user <username>
 
 Hardware detection check:
@@ -204,7 +207,8 @@ Notes:
 - In `--startup-mode greetd`, phase 5 attempts to install `greetd`, `greetd-openrc`, and the available tuigreet package variant (`greetd-tuigreet` or `tuigreet`).
 - In `--startup-mode greetd`, phase 5 enables greetd for the next boot and does not start it immediately during installer execution.
 - greetd config is generated on VT7 to avoid input collisions with tty1 getty prompts.
-- `scripts/post-install-smoke.sh` validates required OpenRC service health (`dbus`, `elogind`, `NetworkManager`), Hyprland runtime command dependencies (with optional warnings for `walker`/`elephant`), wallpaper backend availability (`swww` or `swaybg`), startup mode state, session launcher executable state, and mode-specific startup wiring.
+- `scripts/post-install-smoke.sh` validates required OpenRC service health (`dbus`, `elogind`, `NetworkManager`, `bluetoothd`), desktop runtime command dependencies (`polkit-gnome-authentication-agent-1`, `xdg-desktop-portal`, `xdg-desktop-portal-hyprland`), Hyprland runtime command dependencies (with optional warnings for `walker`/`elephant`), wallpaper backend availability (`swww` or `swaybg`), startup mode state, session launcher executable state, and mode-specific startup wiring. Use `--expect-printing on|off|auto` (default: `auto`) to control printing service checks.
+- Milestone 2 real-host validation checklist is documented in `MILESTONE2_VALIDATION_MATRIX.md`.
 - Hardware profile snapshots are written to `/var/lib/artix-hypr-remix/hardware-profile.json` when installer runs as root.
 - Installer output is logged to `/var/log/artix-hypr-remix-install.log` by default (override with `AHR_INSTALL_LOG_FILE`, fallback under `/tmp` when needed).
 - Package installation phases refresh and upgrade package databases in a full `pacman -Syu` transaction before package-specific installs (avoids `-Sy` partial upgrade risk).
