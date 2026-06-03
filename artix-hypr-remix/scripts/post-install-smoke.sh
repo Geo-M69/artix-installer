@@ -4,7 +4,7 @@ set -euo pipefail
 STARTUP_MODE_STATE_REL=".local/state/artix-hypr-remix/startup.mode"
 TTY_BLOCK_BEGIN="# >>> artix-hypr-remix tty hyprland >>>"
 
-declare -a REQUIRED_COMMANDS=(id getent rc-update rc-service)
+declare -a REQUIRED_COMMANDS=(id getent rc-update rc-service pgrep)
 declare -a REQUIRED_SERVICES=(dbus elogind NetworkManager bluetoothd)
 declare -a REQUIRED_DESKTOP_COMMANDS=(
   polkit-gnome-authentication-agent-1
@@ -159,7 +159,7 @@ desktop_command_is_available() {
 check_required_commands() {
   local cmd
 
-  echo "[1/6] Checking required commands"
+  echo "[1/9] Checking required commands"
   for cmd in "${REQUIRED_COMMANDS[@]}"; do
     if command -v "$cmd" >/dev/null 2>&1; then
       pass "command available: $cmd"
@@ -176,7 +176,7 @@ check_required_commands() {
 resolve_target_user() {
   local current_user
 
-  echo "[2/6] Resolving target desktop user"
+  echo "[2/9] Resolving target desktop user"
 
   if [[ "$identity_commands_ok" != "true" ]]; then
     fail "cannot resolve target user because id/getent checks failed"
@@ -213,7 +213,7 @@ resolve_target_user() {
 check_required_openrc_services() {
   local service
 
-  echo "[3/6] Validating required OpenRC services"
+  echo "[3/9] Validating required OpenRC services"
 
   if [[ "$openrc_commands_ok" != "true" ]]; then
     fail "cannot validate OpenRC services because rc-update/rc-service checks failed"
@@ -245,7 +245,7 @@ check_required_openrc_services() {
 check_desktop_runtime_commands() {
   local cmd
 
-  echo "[4/8] Validating desktop runtime commands"
+  echo "[4/9] Validating desktop runtime commands"
   for cmd in "${REQUIRED_DESKTOP_COMMANDS[@]}"; do
     if desktop_command_is_available "$cmd"; then
       pass "desktop runtime command available: $cmd"
@@ -260,7 +260,7 @@ check_printing_services() {
   local enforce_printing=false
   local all_scripts_present=true
 
-  echo "[5/8] Validating optional printing service state"
+  echo "[5/9] Validating optional printing service state"
 
   case "$expect_printing" in
     on)
@@ -325,7 +325,7 @@ check_hyprland_command_dependencies() {
   local hypr_conf
   local line cmd command_token
 
-  echo "[6/8] Validating Hyprland command dependencies"
+  echo "[7/9] Validating Hyprland command dependencies"
 
   if [[ "$user_context_ready" != "true" ]]; then
     fail "cannot validate Hyprland command dependencies because target user context is unavailable"
@@ -371,7 +371,7 @@ check_hyprland_command_dependencies() {
 }
 
 check_wallpaper_backend() {
-  echo "[6b/8] Validating wallpaper backend"
+  echo "[7b/9] Validating wallpaper backend"
 
   if command -v swww >/dev/null 2>&1 || command -v swaybg >/dev/null 2>&1; then
     if command -v swww >/dev/null 2>&1; then
@@ -389,7 +389,7 @@ check_startup_state_and_launcher() {
   local state_file
   local launcher
 
-  echo "[7/8] Validating startup mode state + launcher"
+  echo "[8/9] Validating startup mode state + launcher"
 
   if [[ "$user_context_ready" != "true" ]]; then
     fail "cannot validate startup state because target user context is unavailable"
@@ -426,7 +426,7 @@ check_mode_specific_state() {
   local profile
   local found_tty_block=false
 
-  echo "[8/8] Validating mode-specific startup wiring"
+  echo "[9/9] Validating mode-specific startup wiring"
 
   if [[ -z "$startup_mode" ]]; then
     fail "cannot run mode-specific checks because startup mode state is unavailable"
@@ -490,6 +490,42 @@ check_mode_specific_state() {
   esac
 }
 
+check_session_runtime_stack() {
+  local -a runtime_checks=(
+    "xdg-desktop-portal:xdg-desktop-portal"
+    "xdg-desktop-portal-hyprland:xdg-desktop-portal-hyprland"
+    "pipewire:pipewire"
+    "wireplumber:wireplumber"
+  )
+  local entry label pattern
+
+  echo "[6/9] Validating session runtime stack"
+
+  if [[ "$user_context_ready" != "true" ]]; then
+    fail "cannot validate session runtime stack because target user context is unavailable"
+    return
+  fi
+
+  # These processes are expected only when a user session is active.
+  if ! pgrep -u "$target_user" -x Hyprland >/dev/null 2>&1; then
+    warn_msg "Hyprland is not running for $target_user; skipping process-health checks for portal and media stack"
+    return
+  fi
+
+  pass "Hyprland session detected for $target_user"
+
+  for entry in "${runtime_checks[@]}"; do
+    label="${entry%%:*}"
+    pattern="${entry#*:}"
+
+    if pgrep -u "$target_user" -f "$pattern" >/dev/null 2>&1; then
+      pass "session process running: $label"
+    else
+      fail "session process missing: $label"
+    fi
+  done
+}
+
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --user)
@@ -528,6 +564,7 @@ resolve_target_user
 check_required_openrc_services
 check_desktop_runtime_commands
 check_printing_services
+check_session_runtime_stack
 check_hyprland_command_dependencies
 check_wallpaper_backend
 check_startup_state_and_launcher

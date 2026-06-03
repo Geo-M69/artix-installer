@@ -134,3 +134,47 @@ Portal/polkit anomalies:
 Final status: PASS|FAIL
 Follow-ups:
 ```
+
+## Validation Results
+
+### Entry 1: Artix VM (PASS)
+
+```text
+Host ID: geoartix
+Date: 2026-06-03T14:50:31Z
+GPU/Profile: not recorded (VM)
+Startup mode tested: unknown
+Install command: not recorded
+Doctor result: PASS (issues: 0)
+Post-install smoke result: PASS (issues: 0, warnings: 0)
+Printing expected (on/off/auto): auto
+OpenRC service anomalies:
+none
+Package manifest anomalies:
+none
+Portal/polkit anomalies:
+none
+Final status: PASS
+Follow-ups: none
+```
+
+### Entry 2: NVIDIA Laptop (pending)
+
+```text
+Host ID: <fill>
+Date: <fill>
+GPU/Profile: nvidia laptop
+Startup mode tested: <fill>
+Install command: <fill>
+Doctor result: <fill>
+Post-install smoke result: <fill>
+Printing expected (on/off/auto): auto
+OpenRC service anomalies:
+<fill>
+Package manifest anomalies:
+<fill>
+Portal/polkit anomalies:
+<fill>
+Final status: <fill>
+Follow-ups: run milestone2-validate with --gpu-profile "nvidia laptop" and record startup mode coverage
+```

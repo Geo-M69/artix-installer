@@ -28,6 +28,7 @@ Structure:
 - `config/` - source-of-truth config snippets (Hyprland source is Lua)
 - `scripts/` - small helper scripts
 - `ROADMAP.md` - milestone plan, beta path, blockers, and definition of done
+- `MILESTONE3_KICKOFF.md` - prioritized Milestone 3 implementation checklist and validation plan
 
 Hypr config source:
 - `config/hypr/hyprland.conf` is the runtime config consumed directly by Hyprland.
@@ -207,7 +208,7 @@ Notes:
 - In `--startup-mode greetd`, phase 5 attempts to install `greetd`, `greetd-openrc`, and the available tuigreet package variant (`greetd-tuigreet` or `tuigreet`).
 - In `--startup-mode greetd`, phase 5 enables greetd for the next boot and does not start it immediately during installer execution.
 - greetd config is generated on VT7 to avoid input collisions with tty1 getty prompts.
-- `scripts/post-install-smoke.sh` validates required OpenRC service health (`dbus`, `elogind`, `NetworkManager`, `bluetoothd`), desktop runtime command dependencies (`polkit-gnome-authentication-agent-1`, `xdg-desktop-portal`, `xdg-desktop-portal-hyprland`), Hyprland runtime command dependencies (with optional warnings for `walker`/`elephant`), wallpaper backend availability (`swww` or `swaybg`), startup mode state, session launcher executable state, and mode-specific startup wiring. Use `--expect-printing on|off|auto` (default: `auto`) to control printing service checks.
+- `scripts/post-install-smoke.sh` validates required OpenRC service health (`dbus`, `elogind`, `NetworkManager`, `bluetoothd`), desktop runtime command dependencies (`polkit-gnome-authentication-agent-1`, `xdg-desktop-portal`, `xdg-desktop-portal-hyprland`), active session runtime processes (`xdg-desktop-portal`, `xdg-desktop-portal-hyprland`, `pipewire`, `wireplumber`) when a Hyprland session is running, Hyprland runtime command dependencies (with optional warnings for `walker`/`elephant`), wallpaper backend availability (`swww` or `swaybg`), startup mode state, session launcher executable state, and mode-specific startup wiring. Use `--expect-printing on|off|auto` (default: `auto`) to control printing service checks.
 - Milestone 2 real-host validation checklist is documented in `MILESTONE2_VALIDATION_MATRIX.md`.
 - Hardware profile snapshots are written to `/var/lib/artix-hypr-remix/hardware-profile.json` when installer runs as root.
 - Installer output is logged to `/var/log/artix-hypr-remix-install.log` by default (override with `AHR_INSTALL_LOG_FILE`, fallback under `/tmp` when needed).

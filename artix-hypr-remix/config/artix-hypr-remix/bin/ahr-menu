@@ -100,10 +100,11 @@ menu_backend() {
     esac
   fi
 
-  if ahr_has_cmd walker; then
-    MENU_BACKEND="walker"
-  elif ahr_has_cmd wofi; then
+  # Prefer core launcher tooling first; walker is optional in no-AUR installs.
+  if ahr_has_cmd wofi; then
     MENU_BACKEND="wofi"
+  elif ahr_has_cmd walker; then
+    MENU_BACKEND="walker"
   elif ahr_has_cmd rofi; then
     MENU_BACKEND="rofi"
   elif [[ -t 0 && -t 1 ]]; then
@@ -171,12 +172,12 @@ confirm_yes() {
 }
 
 open_application_launcher() {
-  if ahr_has_cmd walker; then
-    exec walker
-  fi
-
   if ahr_has_cmd wofi; then
     exec wofi --show drun
+  fi
+
+  if ahr_has_cmd walker; then
+    exec walker
   fi
 
   if ahr_has_cmd rofi; then
