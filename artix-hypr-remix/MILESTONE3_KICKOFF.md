@@ -40,12 +40,15 @@ Exit criteria:
 
 ### B1. Hyprland + portal + media stack
 
-- [ ] Validate `xdg-desktop-portal` + `xdg-desktop-portal-hyprland` process health.
-- [ ] Validate PipeWire and WirePlumber active status in session.
+- [x] Validate `xdg-desktop-portal` + `xdg-desktop-portal-hyprland` process health.
+- [x] Validate PipeWire and WirePlumber active status in session.
 - [ ] Validate screenshot and capture path end-to-end (`grim`, `slurp`, recorder path).
 
 Exit criteria:
 - Portal and audio/capture stack are stable immediately after first login.
+
+Progress note:
+- `post-install-smoke.sh` passed with session runtime process checks (portal + media stack).
 
 ### B2. Startup mode parity (`tty` and `greetd`)
 
