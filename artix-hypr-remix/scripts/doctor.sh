@@ -124,6 +124,31 @@ check_openrc_service_health() {
   fi
 }
 
+desktop_command_available() {
+  local cmd="$1"
+
+  if command -v "$cmd" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  case "$cmd" in
+    polkit-gnome-authentication-agent-1)
+      [[ -x /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 ]]
+      return $?
+      ;;
+    xdg-desktop-portal)
+      [[ -x /usr/lib/xdg-desktop-portal ]]
+      return $?
+      ;;
+    xdg-desktop-portal-hyprland)
+      [[ -x /usr/lib/xdg-desktop-portal-hyprland ]]
+      return $?
+      ;;
+  esac
+
+  return 1
+}
+
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --no-aur)
@@ -157,7 +182,7 @@ done
 echo
 echo "Running desktop runtime command checks"
 for cmd in "${REQUIRED_DESKTOP_COMMANDS[@]}"; do
-  if command -v "$cmd" >/dev/null 2>&1; then
+  if desktop_command_available "$cmd"; then
     echo "OK: $cmd"
   else
     echo "MISSING: $cmd"

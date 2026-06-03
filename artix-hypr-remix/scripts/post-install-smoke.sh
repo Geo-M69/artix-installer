@@ -131,6 +131,31 @@ hypr_command_is_available() {
   command -v "$command_token" >/dev/null 2>&1
 }
 
+desktop_command_is_available() {
+  local cmd="$1"
+
+  if command -v "$cmd" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  case "$cmd" in
+    polkit-gnome-authentication-agent-1)
+      [[ -x /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 ]]
+      return $?
+      ;;
+    xdg-desktop-portal)
+      [[ -x /usr/lib/xdg-desktop-portal ]]
+      return $?
+      ;;
+    xdg-desktop-portal-hyprland)
+      [[ -x /usr/lib/xdg-desktop-portal-hyprland ]]
+      return $?
+      ;;
+  esac
+
+  return 1
+}
+
 check_required_commands() {
   local cmd
 
@@ -222,7 +247,7 @@ check_desktop_runtime_commands() {
 
   echo "[4/8] Validating desktop runtime commands"
   for cmd in "${REQUIRED_DESKTOP_COMMANDS[@]}"; do
-    if command -v "$cmd" >/dev/null 2>&1; then
+    if desktop_command_is_available "$cmd"; then
       pass "desktop runtime command available: $cmd"
     else
       fail "missing required desktop runtime command: $cmd"
