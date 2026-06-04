@@ -31,6 +31,10 @@ zen) desktop_id="zen.desktop"; name="Zen" ;;
   ;;
 esac
 
+if ! ahr_desktop_entry_exists "$desktop_id"; then
+  ahr_fail "Desktop entry not found for $name ($desktop_id)"
+fi
+
 xdg-settings set default-web-browser "$desktop_id"
 xdg-mime default "$desktop_id" x-scheme-handler/http
 xdg-mime default "$desktop_id" x-scheme-handler/https

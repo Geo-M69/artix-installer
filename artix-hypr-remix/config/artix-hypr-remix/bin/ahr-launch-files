@@ -5,6 +5,12 @@ source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
 target_path="${1:-$HOME}"
 
+if ahr_has_cmd xdg-open; then
+  if xdg-open "$target_path" >/dev/null 2>&1; then
+    exit 0
+  fi
+fi
+
 if ahr_has_cmd nautilus; then
   exec nautilus "$target_path"
 fi
@@ -15,10 +21,6 @@ fi
 
 if ahr_has_cmd dolphin; then
   exec dolphin "$target_path"
-fi
-
-if ahr_has_cmd xdg-open; then
-  exec xdg-open "$target_path"
 fi
 
 if ahr_has_cmd yazi; then

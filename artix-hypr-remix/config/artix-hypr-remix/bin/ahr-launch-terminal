@@ -3,24 +3,17 @@ set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
-if ahr_has_cmd ghostty; then
-  exec ghostty "$@"
+if [[ "${1:-}" == "-e" ]]; then
+  shift
+  (($# > 0)) || ahr_fail "Usage: ahr-launch-terminal [-e command [args...]]"
+  if ahr_exec_terminal_app "$@"; then
+    exit 0
+  fi
+  ahr_fail "No terminal emulator found"
 fi
 
-if ahr_has_cmd foot; then
-  exec foot "$@"
-fi
-
-if ahr_has_cmd kitty; then
-  exec kitty "$@"
-fi
-
-if ahr_has_cmd alacritty; then
-  exec alacritty "$@"
-fi
-
-if ahr_has_cmd xterm; then
-  exec xterm "$@"
+if ahr_exec_terminal "$@"; then
+  exit 0
 fi
 
 ahr_fail "No terminal emulator found"

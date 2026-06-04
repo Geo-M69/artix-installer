@@ -6,7 +6,9 @@ source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 target_url="${1:-https://duckduckgo.com}"
 
 if ahr_has_cmd xdg-open; then
-  exec xdg-open "$target_url"
+  if xdg-open "$target_url" >/dev/null 2>&1; then
+    exit 0
+  fi
 fi
 
 if ahr_has_cmd firefox; then

@@ -4,32 +4,13 @@ set -euo pipefail
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
 config_file="${XDG_CONFIG_HOME:-$HOME/.config}/voxtype/config.toml"
+terminal_launcher="${AHR_TERMINAL_LAUNCHER:-$HOME/.config/artix-hypr-remix/bin/ahr-launch-terminal}"
 
 launch_terminal_editor() {
   local editor_cmd="$1"
 
-  if ahr_has_cmd ghostty; then
-    setsid ghostty -e "$editor_cmd" "$config_file" >/dev/null 2>&1 &
-    return 0
-  fi
-
-  if ahr_has_cmd foot; then
-    setsid foot "$editor_cmd" "$config_file" >/dev/null 2>&1 &
-    return 0
-  fi
-
-  if ahr_has_cmd kitty; then
-    setsid kitty "$editor_cmd" "$config_file" >/dev/null 2>&1 &
-    return 0
-  fi
-
-  if ahr_has_cmd alacritty; then
-    setsid alacritty -e "$editor_cmd" "$config_file" >/dev/null 2>&1 &
-    return 0
-  fi
-
-  if ahr_has_cmd xterm; then
-    setsid xterm -e "$editor_cmd" "$config_file" >/dev/null 2>&1 &
+  if [[ -x "$terminal_launcher" ]]; then
+    setsid "$terminal_launcher" -e "$editor_cmd" "$config_file" >/dev/null 2>&1 &
     return 0
   fi
 

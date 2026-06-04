@@ -71,6 +71,9 @@ Exit criteria:
 Exit criteria:
 - Fresh login feels complete and consistent, not partially configured.
 
+Progress note:
+- Runtime launchers now route through `ahr-*` wrappers, preferred terminal/file-manager/browser defaults are initialized on first run, and default-theme setup now seeds wallpaper state on fresh login. Live validation is still pending.
+
 ### C2. Theme/font/icon/cursor coherence
 
 - [ ] Validate theme assets present and active at first login.

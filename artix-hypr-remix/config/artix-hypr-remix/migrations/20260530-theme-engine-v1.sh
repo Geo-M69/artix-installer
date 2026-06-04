@@ -23,5 +23,5 @@ if [[ -s "$theme_state" ]]; then
   exit 0
 fi
 
-"$theme_setter" --quiet --skip-background "$default_theme"
+"$theme_setter" --quiet "$default_theme"
 echo "Theme engine migration complete: applied $default_theme"

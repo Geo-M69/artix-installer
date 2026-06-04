@@ -9,6 +9,6 @@ if [[ ! -x "$theme_cmd" ]]; then
   exit 0
 fi
 
-if ! "$theme_cmd" --quiet --skip-background "$default_theme"; then
+if ! "$theme_cmd" --quiet "$default_theme"; then
   echo "Skipping default theme setup: failed to apply $default_theme"
 fi

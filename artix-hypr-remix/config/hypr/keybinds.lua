@@ -1,11 +1,11 @@
 -- Hyprland keybind source-of-truth (Lua).
 return {
   -- Launchers and core apps.
-  { mods = { "SUPER" }, key = "RETURN", action = "exec", command = "ghostty" },
+  { mods = { "SUPER" }, key = "RETURN", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-launch-terminal" },
   { mods = { "SUPER" }, key = "SPACE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu" },
   { mods = { "SUPER", "ALT" }, key = "SPACE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu" },
-  { mods = { "SUPER", "SHIFT" }, key = "RETURN", action = "exec", command = "firefox" },
-  { mods = { "SUPER", "SHIFT" }, key = "F", action = "exec", command = "nautilus" },
+  { mods = { "SUPER", "SHIFT" }, key = "RETURN", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-launch-browser" },
+  { mods = { "SUPER", "SHIFT" }, key = "F", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-launch-files" },
 
   -- Window controls.
   { mods = { "SUPER" }, key = "W", action = "close_window" },
@@ -17,8 +17,8 @@ return {
   { mods = { "SUPER" }, key = "J", action = "toggle_split" },
   { mods = { "SUPER" }, key = "V", action = "toggle_floating" },
   { mods = { "SUPER" }, key = "T", action = "toggle_floating" },
-  { mods = { "SUPER", "CTRL" }, key = "T", action = "exec", command = "ghostty -e btop" },
-  { mods = { "SUPER", "CTRL" }, key = "L", action = "exec", command = "hyprlock" },
+  { mods = { "SUPER", "CTRL" }, key = "T", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-launch-terminal -e btop" },
+  { mods = { "SUPER", "CTRL" }, key = "L", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-system-lock" },
   { mods = { "SUPER" }, key = "O", action = "exec", command = "hyprctl dispatch togglefloating && hyprctl dispatch pin" },
   { mods = { "SUPER" }, key = "S", action = "exec", command = "hyprctl dispatch togglespecialworkspace scratchpad" },
   { mods = { "SUPER", "ALT" }, key = "S", action = "exec", command = "hyprctl dispatch movetoworkspace special:scratchpad" },

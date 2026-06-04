@@ -12,7 +12,7 @@
   "custom/remix": {
     "format": "",
     "on-click": "bash ~/.config/artix-hypr-remix/bin/ahr-menu",
-    "on-click-right": "nautilus",
+    "on-click-right": "bash ~/.config/artix-hypr-remix/bin/ahr-launch-files",
     "tooltip-format": "artix-hypr-remix"
   },
 
@@ -26,7 +26,7 @@
   "custom/update": {
     "exec": "bash ~/.config/artix-hypr-remix/bin/ahr-waybar-update-status",
     "return-type": "json",
-    "on-click": "ghostty -e ~/.config/artix-hypr-remix/bin/ahr-update",
+    "on-click": "bash ~/.config/artix-hypr-remix/bin/ahr-launch-terminal -e ~/.config/artix-hypr-remix/bin/ahr-update",
     "signal": 7,
     "interval": 600
   },
@@ -93,8 +93,8 @@
   "cpu": {
     "interval": 5,
     "format": "󰍛",
-    "on-click": "ghostty -e btop",
-    "on-click-right": "ghostty"
+    "on-click": "bash ~/.config/artix-hypr-remix/bin/ahr-launch-terminal -e btop",
+    "on-click-right": "bash ~/.config/artix-hypr-remix/bin/ahr-launch-terminal"
   },
 
   "clock#horizontal": {
