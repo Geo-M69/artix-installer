@@ -312,7 +312,7 @@ required_openrc_services() {
 }
 
 required_printing_profile_packages() {
-	printf '%s\n' "cups" "avahi"
+	printf '%s\n' "cups" "avahi" "cups-openrc" "avahi-openrc"
 }
 
 required_printing_services() {

@@ -1,3 +1,5 @@
 # Optional printing profile packages (installer --printing-profile on).
 cups
 avahi
+cups-openrc
+avahi-openrc
