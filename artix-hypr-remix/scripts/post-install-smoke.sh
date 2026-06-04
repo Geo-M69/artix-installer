@@ -74,6 +74,29 @@ service_script_present() {
   [[ -x "/etc/init.d/$service" ]]
 }
 
+network_default_route_present() {
+  if command -v ip >/dev/null 2>&1; then
+    ip route show default 2>/dev/null | grep -q '^default'
+    return $?
+  fi
+
+  awk 'NR > 1 && $2 == "00000000" { found=1 } END { exit(found ? 0 : 1) }' /proc/net/route 2>/dev/null
+}
+
+service_runtime_exception_applies() {
+  local service="$1"
+
+  case "$service" in
+    NetworkManager)
+      network_default_route_present
+      return $?
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 trim_whitespace() {
   local text="$1"
   text="${text#"${text%%[![:space:]]*}"}"
@@ -237,6 +260,11 @@ check_required_openrc_services() {
     if rc-service "$service" status >/dev/null 2>&1; then
       pass "service running: $service"
     else
+      if service_runtime_exception_applies "$service"; then
+        warn_msg "service not running: $service (default route already present outside NetworkManager)"
+        continue
+      fi
+
       fail "service not running: $service"
     fi
   done

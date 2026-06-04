@@ -85,6 +85,29 @@ service_enabled_in_default_runlevel() {
   [[ -e "/etc/runlevels/default/$service" ]]
 }
 
+network_default_route_present() {
+  if command -v ip >/dev/null 2>&1; then
+    ip route show default 2>/dev/null | grep -q '^default'
+    return $?
+  fi
+
+  awk 'NR > 1 && $2 == "00000000" { found=1 } END { exit(found ? 0 : 1) }' /proc/net/route 2>/dev/null
+}
+
+service_runtime_exception_applies() {
+  local service="$1"
+
+  case "$service" in
+    NetworkManager)
+      network_default_route_present
+      return $?
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 check_openrc_service_health() {
   local service="$1"
   local required="${2:-true}"
@@ -115,6 +138,11 @@ check_openrc_service_health() {
   if rc-service "$service" status >/dev/null 2>&1; then
     echo "OK: service running: $service"
   else
+    if service_runtime_exception_applies "$service"; then
+      echo "WARN: service not running: $service (default route already present outside NetworkManager)"
+      return
+    fi
+
     if [[ "$required" == "true" ]]; then
       echo "MISSING: service not running: $service"
       mark_missing
