@@ -471,14 +471,19 @@ ahr_theme_apply_background_file() {
   fi
 
   if ahr_has_cmd swww; then
-    swww img "$resolved" --transition-type simple --transition-duration 0.4 >/dev/null 2>&1 || true
-    return 0
+    if swww img "$resolved" --transition-type simple --transition-duration 0.4 >/dev/null 2>&1; then
+      return 0
+    fi
   fi
 
   if ahr_has_cmd swaybg; then
     pkill -x swaybg >/dev/null 2>&1 || true
     setsid swaybg -i "$resolved" -m fill >/dev/null 2>&1 &
-    return 0
+    sleep 0.2
+
+    if pgrep -x swaybg >/dev/null 2>&1; then
+      return 0
+    fi
   fi
 
   return 1
