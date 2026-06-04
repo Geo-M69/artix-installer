@@ -380,6 +380,40 @@ ahr_theme_apply_gnome() {
   fi
 }
 
+ahr_theme_read_color_value() {
+  local theme_dir="$1"
+  local key_name="$2"
+  local colors_file="$theme_dir/colors.toml"
+  local raw key value
+
+  [[ -f "$colors_file" ]] || return 1
+
+  while IFS= read -r raw || [[ -n "$raw" ]]; do
+    raw="$(ahr_theme_trim "$raw")"
+    [[ -n "$raw" ]] || continue
+    [[ "$raw" == \#* ]] && continue
+    [[ "$raw" == *=* ]] || continue
+
+    key="$(ahr_theme_trim "${raw%%=*}")"
+    [[ "$key" == "$key_name" ]] || continue
+
+    value="$(ahr_theme_trim "${raw#*=}")"
+    if [[ "$value" == \"*\" ]]; then
+      value="${value#\"}"
+      value="${value%\"}"
+    elif [[ "$value" == "'"*"'" ]]; then
+      value="${value#"'"}"
+      value="${value%"'"}"
+    fi
+
+    [[ -n "$value" ]] || return 1
+    printf '%s\n' "$value"
+    return 0
+  done < "$colors_file"
+
+  return 1
+}
+
 ahr_theme_reload_services() {
   if pgrep -x waybar >/dev/null 2>&1; then
     pkill -x waybar >/dev/null 2>&1 || true
@@ -489,13 +523,45 @@ ahr_theme_apply_background_file() {
   return 1
 }
 
+ahr_theme_apply_background_color() {
+  local color="$1"
+
+  [[ "$color" =~ ^#?[0-9A-Fa-f]{6}$ ]] || return 1
+  [[ "$color" == \#* ]] || color="#$color"
+
+  if ahr_has_cmd swaybg; then
+    pkill -x swaybg >/dev/null 2>&1 || true
+    setsid swaybg -c "$color" >/dev/null 2>&1 &
+    sleep 0.2
+
+    if pgrep -x swaybg >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+ahr_theme_apply_current_background_fallback() {
+  local color=""
+
+  [[ -d "$AHR_THEME_CURRENT_THEME_DIR" ]] || return 1
+  color="$(ahr_theme_read_color_value "$AHR_THEME_CURRENT_THEME_DIR" background 2>/dev/null || true)"
+  [[ -n "$color" ]] || return 1
+
+  ahr_theme_apply_background_color "$color"
+}
+
 ahr_theme_apply_current_background() {
   local current_background=""
 
-  current_background="$(ahr_theme_current_background)"
-  [[ -n "$current_background" ]] || return 0
+  current_background="$(ahr_theme_current_background 2>/dev/null || true)"
 
-  ahr_theme_apply_background_file "$current_background"
+  if [[ -n "$current_background" ]] && ahr_theme_apply_background_file "$current_background"; then
+    return 0
+  fi
+
+  ahr_theme_apply_current_background_fallback
 }
 
 ahr_theme_bg_next() {
@@ -510,7 +576,8 @@ ahr_theme_bg_next() {
   [[ -n "$theme_name" ]] || return 0
 
   if ! ahr_theme_collect_backgrounds "$theme_name" backgrounds; then
-    ahr_theme_warn "No backgrounds found for theme: $theme_name"
+    ahr_theme_warn "No backgrounds found for theme: $theme_name; using theme background color"
+    ahr_theme_apply_current_background_fallback || true
     return 0
   fi
 
