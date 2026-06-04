@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if ahr_has_cmd rfkill; then
+  rfkill unblock bluetooth >/dev/null 2>&1 || true
+fi
+
+if ahr_has_cmd blueman-manager; then
+  exec blueman-manager
+fi
+
+if ahr_has_cmd bluetui; then
+  if ahr_exec_terminal_app bluetui; then
+    exit 0
+  fi
+fi
+
+if ahr_has_cmd bluetoothctl; then
+  if ahr_exec_terminal_app bluetoothctl; then
+    exit 0
+  fi
+fi
+
+ahr_fail "No Bluetooth control app found"

@@ -24,21 +24,29 @@ usage() {
 Usage: ahr <command> [args]
 
 Commands:
-  menu                Open command menu (setup/install/remove/update/system)
+  menu                Open command menu (learn/trigger/style/setup/install/remove/update/system)
+  menu-keybindings    Show Hyprland keybinding help
   theme               Theme engine command group
   launch-terminal     Open terminal
+  launch-apps         Open application launcher
   launch-browser      Open browser
   launch-files        Open file manager
   launch-audio        Open audio control
+  launch-bluetooth    Open Bluetooth control
   launch-wifi         Open network control
   default-browser     Inspect or set default browser
   default-terminal    Inspect or set default terminal
   update              System + AUR update helper
   update-available    Check whether updates are available (for status bars)
+  repair              Check and apply safe framework repairs
   voxtype-model       Open voxtype model setup
   voxtype-config      Open voxtype configuration file
   toggle-idle         Toggle hypridle daemon state
   toggle-notifications Toggle notification silencing mode
+  toggle-waybar       Toggle Waybar visibility
+  notification-dismiss Dismiss a mako notification
+  restart-mako        Restart Mako notification daemon
+  restart-waybar      Restart Waybar
   restart-walker      Restart Walker launcher service
   migrate             Run or inspect pending framework migrations
   system-lock         Lock session
@@ -56,20 +64,28 @@ dispatch() {
 
   case "$subcommand" in
     menu) exec_ahr_command ahr-menu "$@" ;;
+    menu-keybindings) exec_ahr_command ahr-menu-keybindings "$@" ;;
     theme) exec_ahr_command ahr-theme "$@" ;;
     launch-terminal) exec_ahr_command ahr-launch-terminal "$@" ;;
+    launch-apps) exec_ahr_command ahr-launch-apps "$@" ;;
     launch-browser) exec_ahr_command ahr-launch-browser "$@" ;;
     launch-files) exec_ahr_command ahr-launch-files "$@" ;;
     launch-audio) exec_ahr_command ahr-launch-audio "$@" ;;
+    launch-bluetooth) exec_ahr_command ahr-launch-bluetooth "$@" ;;
     launch-wifi) exec_ahr_command ahr-launch-wifi "$@" ;;
     default-browser) exec_ahr_command ahr-default-browser "$@" ;;
     default-terminal) exec_ahr_command ahr-default-terminal "$@" ;;
     update) exec_ahr_command ahr-update "$@" ;;
     update-available) exec_ahr_command ahr-update-available "$@" ;;
+    repair) exec_ahr_command ahr-repair "$@" ;;
     voxtype-model) exec_ahr_command ahr-voxtype-model "$@" ;;
     voxtype-config) exec_ahr_command ahr-voxtype-config "$@" ;;
     toggle-idle) exec_ahr_command ahr-toggle-idle "$@" ;;
     toggle-notifications) exec_ahr_command ahr-toggle-notification-silencing "$@" ;;
+    toggle-waybar) exec_ahr_command ahr-toggle-waybar "$@" ;;
+    notification-dismiss) exec_ahr_command ahr-notification-dismiss "$@" ;;
+    restart-mako) exec_ahr_command ahr-restart-mako "$@" ;;
+    restart-waybar) exec_ahr_command ahr-restart-waybar "$@" ;;
     restart-walker) exec_ahr_command ahr-restart-walker "$@" ;;
     migrate) exec_ahr_command ahr-migrate "$@" ;;
     system-lock) exec_ahr_command ahr-system-lock "$@" ;;
@@ -79,20 +95,28 @@ dispatch() {
     list)
       printf '%s\n' \
         "ahr-menu" \
+        "ahr-menu-keybindings" \
         "ahr-theme" \
         "ahr-launch-terminal" \
+        "ahr-launch-apps" \
         "ahr-launch-browser" \
         "ahr-launch-files" \
         "ahr-launch-audio" \
+        "ahr-launch-bluetooth" \
         "ahr-launch-wifi" \
         "ahr-default-browser" \
         "ahr-default-terminal" \
         "ahr-update" \
         "ahr-update-available" \
+        "ahr-repair" \
         "ahr-voxtype-model" \
         "ahr-voxtype-config" \
         "ahr-toggle-idle" \
         "ahr-toggle-notification-silencing" \
+        "ahr-toggle-waybar" \
+        "ahr-notification-dismiss" \
+        "ahr-restart-mako" \
+        "ahr-restart-waybar" \
         "ahr-restart-walker" \
         "ahr-migrate" \
         "ahr-system-lock" \

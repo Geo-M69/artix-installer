@@ -6,4 +6,4 @@ if ! command -v notify-send >/dev/null 2>&1; then
   exit 0
 fi
 
-notify-send "Learn Keybindings" "Super + Space for application launcher.\nSuper + Return for terminal." -u critical
+notify-send "Welcome to Artix Hypr Remix" "Super + Space opens the menu.\nSuper + K shows keybindings.\nSuper + Return opens a terminal." -u critical

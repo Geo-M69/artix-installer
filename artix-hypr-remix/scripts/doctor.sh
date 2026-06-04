@@ -7,6 +7,7 @@ CHECKER_SCRIPT="$SCRIPT_DIR/check-config-deps.sh"
 checker_args=()
 host_policy="${AHR_HOST_POLICY:-artix}"
 overall_status=0
+repair_suggestion_recommended=false
 
 declare -a REQUIRED_ENV_COMMANDS=(pacman slurp grim hyprctl rc-update rc-service)
 declare -a REQUIRED_DESKTOP_COMMANDS=(
@@ -17,11 +18,15 @@ declare -a REQUIRED_DESKTOP_COMMANDS=(
 declare -a REQUIRED_OPENRC_SERVICES=(dbus elogind NetworkManager bluetoothd)
 declare -a OPTIONAL_PRINTING_SERVICES=(cupsd avahi-daemon)
 declare -a REQUIRED_FRAMEWORK_COMMANDS=(
+  ahr-menu
+  ahr-menu-keybindings
   ahr-launch-terminal
+  ahr-launch-apps
   ahr-launch-browser
   ahr-launch-files
   ahr-default-browser
   ahr-default-terminal
+  ahr-repair
   ahr-system-lock
   ahr-toggle-idle
   ahr-launch-wallpaper-session
@@ -92,6 +97,10 @@ EOF
 
 mark_missing() {
   overall_status=1
+}
+
+recommend_repair() {
+  repair_suggestion_recommended=true
 }
 
 resolve_target_user() {
@@ -228,6 +237,7 @@ check_framework_runtime_commands() {
   if [[ ! -d "$framework_bin_dir" ]]; then
     echo "MISSING: framework bin directory: $framework_bin_dir"
     mark_missing
+    recommend_repair
     return
   fi
 
@@ -238,9 +248,11 @@ check_framework_runtime_commands() {
     elif [[ -e "$command_path" ]]; then
       echo "MISSING: framework command not executable: $command_path"
       mark_missing
+      recommend_repair
     else
       echo "MISSING: framework command missing: $command_path"
       mark_missing
+      recommend_repair
     fi
   done
 }
@@ -330,6 +342,20 @@ fi
 if (( overall_status != 0 )); then
   echo
   echo "Doctor checks failed"
+  echo
+  echo "Suggested next steps:"
+  if [[ "$repair_suggestion_recommended" == "true" ]]; then
+    if [[ -n "$target_home" && -x "$target_home/.config/artix-hypr-remix/bin/ahr-repair" ]]; then
+      echo "  - Preview safe framework repairs as the desktop user:"
+      echo "      $target_home/.config/artix-hypr-remix/bin/ahr-repair"
+      echo "  - Apply safe framework repairs after reviewing output:"
+      echo "      $target_home/.config/artix-hypr-remix/bin/ahr-repair --apply"
+    elif [[ -n "$target_home" ]]; then
+      echo "  - Framework repair command is missing; re-run config deployment:"
+      echo "      sudo ./install.sh --phase 4 --user ${target_user:-<user>} -y"
+    fi
+  fi
+  echo "  - Package or OpenRC service failures may require rerunning the relevant installer phase or enabling/starting the named service."
   exit 1
 fi
 

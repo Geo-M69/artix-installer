@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+if pgrep -x waybar >/dev/null 2>&1; then
+  pkill -x waybar >/dev/null 2>&1 || true
+  ahr_notify "Waybar" "Waybar hidden"
+  exit 0
+fi
+
+if ahr_has_cmd waybar; then
+  setsid waybar >/dev/null 2>&1 &
+  ahr_notify "Waybar" "Waybar shown"
+  exit 0
+fi
+
+ahr_fail "waybar is not installed"

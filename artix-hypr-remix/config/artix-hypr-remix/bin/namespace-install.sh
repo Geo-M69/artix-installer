@@ -19,6 +19,7 @@ target_dir="$HOME/.local/bin"
 declare -a commands=(
   ahr
   ahr-menu
+  ahr-menu-keybindings
   ahr-theme
   ahr-theme-list
   ahr-theme-current
@@ -29,18 +30,25 @@ declare -a commands=(
   ahr-theme-set-templates
   ahr-theme-colors-from-alacritty
   ahr-launch-terminal
+  ahr-launch-apps
   ahr-launch-browser
   ahr-launch-files
   ahr-launch-audio
+  ahr-launch-bluetooth
   ahr-launch-wifi
   ahr-default-browser
   ahr-default-terminal
   ahr-update
   ahr-update-available
+  ahr-repair
   ahr-voxtype-model
   ahr-voxtype-config
   ahr-toggle-idle
   ahr-toggle-notification-silencing
+  ahr-toggle-waybar
+  ahr-notification-dismiss
+  ahr-restart-mako
+  ahr-restart-waybar
   ahr-restart-walker
   ahr-migrate
   ahr-system-lock
@@ -50,7 +58,9 @@ declare -a commands=(
 )
 
 declare -a aliases=(
+  "omarchy:ahr"
   "omarchy-menu:ahr-menu"
+  "omarchy-menu-keybindings:ahr-menu-keybindings"
   "omarchy-theme:ahr-theme"
   "omarchy-theme-list:ahr-theme-list"
   "omarchy-theme-current:ahr-theme-current"
@@ -61,9 +71,11 @@ declare -a aliases=(
   "omarchy-theme-set-templates:ahr-theme-set-templates"
   "omarchy-theme-colors-from-alacritty:ahr-theme-colors-from-alacritty"
   "omarchy-launch-terminal:ahr-launch-terminal"
+  "omarchy-launch-walker:ahr-launch-apps"
   "omarchy-launch-browser:ahr-launch-browser"
   "omarchy-launch-nautilus:ahr-launch-files"
   "omarchy-launch-audio:ahr-launch-audio"
+  "omarchy-launch-bluetooth:ahr-launch-bluetooth"
   "omarchy-launch-wifi:ahr-launch-wifi"
   "omarchy-system-lock:ahr-system-lock"
   "omarchy-system-reboot:ahr-system-reboot"
@@ -73,10 +85,15 @@ declare -a aliases=(
   "omarchy-default-terminal:ahr-default-terminal"
   "omarchy-update:ahr-update"
   "omarchy-update-available:ahr-update-available"
+  "omarchy-repair:ahr-repair"
   "omarchy-voxtype-model:ahr-voxtype-model"
   "omarchy-voxtype-config:ahr-voxtype-config"
   "omarchy-toggle-idle:ahr-toggle-idle"
   "omarchy-toggle-notification-silencing:ahr-toggle-notification-silencing"
+  "omarchy-toggle-waybar:ahr-toggle-waybar"
+  "omarchy-notification-dismiss:ahr-notification-dismiss"
+  "omarchy-restart-mako:ahr-restart-mako"
+  "omarchy-restart-waybar:ahr-restart-waybar"
   "omarchy-restart-walker:ahr-restart-walker"
   "omarchy-migrate:ahr-migrate"
 )

@@ -4,6 +4,7 @@ return {
   { mods = { "SUPER" }, key = "RETURN", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-launch-terminal" },
   { mods = { "SUPER" }, key = "SPACE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu" },
   { mods = { "SUPER", "ALT" }, key = "SPACE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu" },
+  { mods = { "SUPER" }, key = "K", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu-keybindings" },
   { mods = { "SUPER", "SHIFT" }, key = "RETURN", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-launch-browser" },
   { mods = { "SUPER", "SHIFT" }, key = "F", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-launch-files" },
 

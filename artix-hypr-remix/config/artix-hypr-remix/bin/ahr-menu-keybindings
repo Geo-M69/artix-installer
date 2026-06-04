@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+hypr_config="${AHR_HYPR_CONFIG:-$HOME/.config/hypr/hyprland.conf}"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr-menu-keybindings [--plain]
+
+Shows keybindings from the active Hyprland config. Uses a graphical dmenu
+backend when available, otherwise prints a plain text cheat sheet.
+EOF
+}
+
+clean_token() {
+  local value="$1"
+  value="${value//\$mod/SUPER}"
+  value="${value//,/ }"
+  value="$(ahr_trim "$value")"
+  printf '%s' "$value"
+}
+
+describe_dispatcher() {
+  local dispatcher="$1"
+  local command="$2"
+
+  case "$dispatcher" in
+    exec)
+      command="${command//bash ~\/.config\/artix-hypr-remix\/bin\//}"
+      command="${command//~\/.config\/artix-hypr-remix\/bin\//}"
+      printf '%s' "$command"
+      ;;
+    killactive) printf 'Close focused window' ;;
+    exit) printf 'Exit Hyprland session' ;;
+    fullscreen) printf 'Toggle fullscreen' ;;
+    togglefloating) printf 'Toggle floating window' ;;
+    togglespecialworkspace) printf 'Toggle special workspace %s' "$command" ;;
+    movetoworkspace) printf 'Move focused window to workspace %s' "$command" ;;
+    workspace) printf 'Switch workspace %s' "$command" ;;
+    movefocus) printf 'Move focus %s' "$command" ;;
+    movewindow) printf 'Move window %s' "$command" ;;
+    resizewindow) printf 'Resize window' ;;
+    layoutmsg) printf 'Layout action: %s' "$command" ;;
+    togglegroup) printf 'Toggle group' ;;
+    changegroupactive) printf 'Change active group %s' "$command" ;;
+    moveintogroup) printf 'Move into group %s' "$command" ;;
+    *) printf '%s %s' "$dispatcher" "$command" ;;
+  esac
+}
+
+print_static_help() {
+  cat <<'EOF'
+SUPER + SPACE          AHR menu / application launcher
+SUPER + ALT + SPACE    AHR menu
+SUPER + K              Show this keybinding help
+SUPER + RETURN         Terminal
+SUPER + SHIFT + RETURN Browser
+SUPER + SHIFT + F      Files
+SUPER + CTRL + L       Lock screen
+SUPER + P              Clipboard picker
+PRINT                  Area screenshot
+ALT + RETURN           Emergency terminal fallback
+ALT + F4               Close focused window
+EOF
+}
+
+print_config_bindings() {
+  local line bind_type mods key dispatcher command description
+
+  if [[ ! -f "$hypr_config" ]]; then
+    print_static_help
+    return 0
+  fi
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="$(ahr_trim "$line")"
+    [[ -n "$line" ]] || continue
+    [[ "$line" =~ ^bind[a-z]*[[:space:]]*= ]] || continue
+
+    bind_type="${line%%=*}"
+    bind_type="$(ahr_trim "$bind_type")"
+    line="${line#*=}"
+
+    IFS=',' read -r mods key dispatcher command <<< "$line"
+    mods="$(clean_token "$mods")"
+    key="$(clean_token "$key")"
+    dispatcher="$(ahr_trim "$dispatcher")"
+    command="$(ahr_trim "${command:-}")"
+
+    [[ -n "$key" ]] || continue
+
+    if [[ "$bind_type" == "bindm" ]]; then
+      description="$(describe_dispatcher "$dispatcher" "$command")"
+    else
+      description="$(describe_dispatcher "$dispatcher" "$command")"
+    fi
+
+    if [[ -n "$mods" ]]; then
+      printf '%-24s %s\n' "$mods + $key" "$description"
+    else
+      printf '%-24s %s\n' "$key" "$description"
+    fi
+  done < "$hypr_config"
+}
+
+show_menu() {
+  local output
+  output="$(print_config_bindings | sed '/^[[:space:]]*$/d')"
+
+  if [[ -z "$output" ]]; then
+    output="$(print_static_help)"
+  fi
+
+  if ahr_has_cmd wofi; then
+    printf '%s\n' "$output" | wofi --dmenu --prompt "Keybindings" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  if ahr_has_cmd walker; then
+    printf '%s\n' "$output" | walker --dmenu -p "Keybindings" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  if ahr_has_cmd rofi; then
+    printf '%s\n' "$output" | rofi -dmenu -p "Keybindings" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  printf '%s\n' "$output"
+}
+
+case "${1:-}" in
+  --plain)
+    print_config_bindings
+    ;;
+  -h|--help)
+    usage
+    ;;
+  "")
+    show_menu
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac

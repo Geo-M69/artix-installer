@@ -12,7 +12,19 @@ json=false
 while (( $# > 0 )); do
   case "$1" in
     --json) json=true ;;
-    -h|--help) echo "Usage: ahr-update-available [--json]"; exit 0 ;;
+    -h|--help)
+      cat <<'EOF'
+Usage: ahr-update-available [--json]
+
+Checks repo package, AUR package, pending migration, and skipped migration work.
+
+Exit status:
+  0  Pending work exists
+  1  Nothing pending
+  2  Invalid arguments
+EOF
+      exit 0
+      ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -57,12 +69,25 @@ fi
 total=$((system_count + aur_count + migration_pending_count + migration_skipped_count))
 
 if [[ "$json" == "true" ]]; then
-  printf '{"system": %s, "aur": %s, "migrations": %s, "skipped_migrations": %s, "total": %s}\n' "$system_count" "$aur_count" "$migration_pending_count" "$migration_skipped_count" "$total"
+  pending=false
+  if (( total > 0 )); then
+    pending=true
+  fi
+  printf '{"system": %s, "aur": %s, "migrations": %s, "skipped_migrations": %s, "total": %s, "pending": %s}\n' "$system_count" "$aur_count" "$migration_pending_count" "$migration_skipped_count" "$total" "$pending"
 else
   if (( total > 0 )); then
-    printf 'Updates available (system=%s aur=%s migrations=%s skipped=%s total=%s)\n' "$system_count" "$aur_count" "$migration_pending_count" "$migration_skipped_count" "$total"
+    printf 'Updates pending: %s total\n' "$total"
+    printf '  system packages: %s\n' "$system_count"
+    printf '  AUR packages: %s\n' "$aur_count"
+    printf '  pending migrations: %s\n' "$migration_pending_count"
+    printf '  skipped migrations: %s\n' "$migration_skipped_count"
+    printf '\nRun `ahr update` for normal updates, or `ahr update --flatpak` to include Flatpak apps.\n'
+    if (( migration_skipped_count > 0 )); then
+      printf 'Skipped migrations need review. Use `ahr migrate --status` and `ahr migrate --retry-skipped`.\n'
+    fi
   else
-    printf 'Up to date\n'
+    printf 'No updates pending.\n'
+    printf 'Checked repo packages, AUR packages, pending migrations, and skipped migrations.\n'
   fi
 fi
 

@@ -1,0 +1,437 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${AHR_LIB_PATH:-$SCRIPT_DIR/ahr-lib.sh}"
+
+FRAMEWORK_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+DOCS_DIR="$FRAMEWORK_ROOT/docs"
+STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
+MIGRATION_STATE_DIR="$STATE_ROOT/migrations"
+MIGRATION_SKIPPED_DIR="$MIGRATION_STATE_DIR/skipped"
+UPDATE_LOCK_DIR="$STATE_ROOT/.update.lock"
+UPDATE_LOG_FILE="$STATE_ROOT/update.log"
+UPDATE_RUN_FILE="$STATE_ROOT/update.run"
+UPDATE_STATUS_FILE="$STATE_ROOT/update.status"
+LOCAL_BIN="$HOME/.local/bin"
+
+apply=false
+quiet=false
+status=0
+scope_requested=false
+run_namespace=true
+run_theme=true
+run_docs=true
+run_migrations=true
+run_update_state=true
+run_config=true
+
+usage() {
+  cat <<'EOF'
+Usage: ahr-repair [options]
+
+Checks common Artix Hypr Remix drift and optionally applies safe repairs.
+
+Options:
+  --apply         Apply safe repairs. Without this, ahr-repair is a dry-run.
+  --all           Check every repair scope (default)
+  --namespace     Check command namespace links
+  --theme         Check theme state
+  --docs          Check installed docs
+  --migrations    Check migration state
+  --update-state  Check update lock/log hints
+  --config        Check managed config presence and backup hints
+  --quiet         Reduce success output
+  -h, --help      Show this help
+EOF
+}
+
+log() {
+  local message="${1:-}"
+  if [[ "$quiet" == "false" ]]; then
+    printf '%s\n' "$message"
+  fi
+}
+
+warn() {
+  printf 'WARN: %s\n' "$1"
+}
+
+fail_check() {
+  status=1
+  printf 'FIX: %s\n' "$1"
+}
+
+repairable_issue() {
+  if [[ "$apply" == "true" ]]; then
+    warn "$1"
+  else
+    fail_check "$1"
+  fi
+}
+
+is_link_to() {
+  local link_path="$1"
+  local expected_target="$2"
+  local actual_target
+
+  [[ -L "$link_path" ]] || return 1
+  actual_target="$(readlink "$link_path" 2>/dev/null || true)"
+  [[ "$actual_target" == "$expected_target" ]]
+}
+
+run_or_preview() {
+  local description="$1"
+  shift
+
+  if [[ "$apply" == "true" ]]; then
+    log "APPLY: $description"
+    "$@"
+  else
+    fail_check "$description (run with --apply)"
+  fi
+}
+
+enable_only_scope() {
+  if [[ "$scope_requested" == "false" ]]; then
+    run_namespace=false
+    run_theme=false
+    run_docs=false
+    run_migrations=false
+    run_update_state=false
+    run_config=false
+    scope_requested=true
+  fi
+}
+
+enable_all_scopes() {
+  run_namespace=true
+  run_theme=true
+  run_docs=true
+  run_migrations=true
+  run_update_state=true
+  run_config=true
+  scope_requested=true
+}
+
+check_namespace() {
+  local installer="$SCRIPT_DIR/namespace-install.sh"
+  local command_name source_path link_path
+  local namespace_ok=true
+  local -a required_commands=(
+    ahr
+    ahr-menu
+    ahr-menu-keybindings
+    ahr-repair
+    ahr-theme
+    ahr-update
+    ahr-update-available
+    ahr-migrate
+  )
+
+  log
+  log "Namespace checks"
+
+  if [[ ! -x "$installer" ]]; then
+    fail_check "namespace installer missing or not executable: $installer"
+    return
+  fi
+
+  for command_name in "${required_commands[@]}"; do
+    source_path="$SCRIPT_DIR/$command_name"
+    link_path="$LOCAL_BIN/$command_name"
+
+    if [[ ! -x "$source_path" ]]; then
+      fail_check "framework command missing or not executable: $source_path"
+      namespace_ok=false
+      continue
+    fi
+
+    if is_link_to "$link_path" "$source_path"; then
+      log "OK: $link_path -> $source_path"
+    else
+      repairable_issue "repair command namespace links with $installer"
+      namespace_ok=false
+      break
+    fi
+  done
+
+  if [[ "$namespace_ok" == "false" ]]; then
+    run_or_preview "rerun command namespace installer" "$installer" --quiet
+  else
+    log "OK: command namespace links look healthy"
+  fi
+}
+
+check_config_drift() {
+  local label path root backup
+  local config_ok=true
+  local -a required_paths=(
+    "Hyprland config:$HOME/.config/hypr/hyprland.conf"
+    "Hypridle config:$HOME/.config/hypr/hypridle.conf"
+    "Hyprlock config:$HOME/.config/hypr/hyprlock.conf"
+    "Waybar config:$HOME/.config/waybar/config.jsonc"
+    "Waybar style:$HOME/.config/waybar/style.css"
+    "Mako config:$HOME/.config/mako/config"
+  )
+  local -a managed_roots=(
+    artix-hypr-remix
+    fontconfig
+    ghostty
+    helix
+    hypr
+    mako
+    starship
+    walker
+    waybar
+    yazi
+    zsh
+  )
+
+  log
+  log "Managed config checks"
+
+  for spec in "${required_paths[@]}"; do
+    label="${spec%%:*}"
+    path="${spec#*:}"
+
+    if [[ -s "$path" ]]; then
+      log "OK: $label present: $path"
+    else
+      fail_check "$label missing: $path; re-run installer phase 4/config deployment"
+      config_ok=false
+    fi
+  done
+
+  shopt -s nullglob
+  for root in "${managed_roots[@]}"; do
+    for backup in "$HOME/.config/$root".bak.*; do
+      warn "found previous phase-4 backup for managed config root: $backup"
+    done
+  done
+  shopt -u nullglob
+
+  if [[ "$config_ok" == "true" ]]; then
+    log "OK: core managed config files are present"
+  fi
+
+  warn "Config repair is detect-only for now. Future rewrite actions must preserve timestamp backups before replacing files."
+}
+
+check_theme_state() {
+  local theme_name_file="$FRAMEWORK_ROOT/current/theme.name"
+  local theme_link="$FRAMEWORK_ROOT/current/theme"
+  local background_link="$FRAMEWORK_ROOT/current/background"
+  local theme_cmd="$SCRIPT_DIR/ahr-theme"
+  local theme_name=""
+  local theme_ok=true
+
+  log
+  log "Theme state checks"
+
+  if [[ -s "$theme_name_file" ]]; then
+    theme_name="$(<"$theme_name_file")"
+    log "OK: current theme name: $theme_name"
+  else
+    repairable_issue "current theme name missing: $theme_name_file"
+    theme_ok=false
+  fi
+
+  if [[ -e "$theme_link" ]]; then
+    log "OK: current theme path exists: $theme_link"
+  else
+    repairable_issue "current theme path missing: $theme_link"
+    theme_ok=false
+  fi
+
+  if [[ -e "$background_link" || -L "$background_link" ]]; then
+    log "OK: current background state exists: $background_link"
+  else
+    warn "current background state missing: $background_link"
+  fi
+
+  if [[ "$theme_ok" == "false" ]]; then
+    if [[ ! -x "$theme_cmd" ]]; then
+      fail_check "theme command missing or not executable: $theme_cmd"
+      return
+    fi
+
+    if "$theme_cmd" list --raw 2>/dev/null | grep -qx 'artix-dark'; then
+      run_or_preview "apply default theme artix-dark" "$theme_cmd" set --quiet artix-dark
+    else
+      fail_check "default theme artix-dark not available; rerun config deployment"
+    fi
+  else
+    log "OK: theme state looks healthy"
+  fi
+}
+
+check_docs() {
+  local doc
+  local docs_ok=true
+  local -a required_docs=(
+    quick-reference.md
+    theme-assets.md
+  )
+
+  log
+  log "Installed docs checks"
+
+  for doc in "${required_docs[@]}"; do
+    if [[ -s "$DOCS_DIR/$doc" ]]; then
+      log "OK: installed doc: $DOCS_DIR/$doc"
+    else
+      fail_check "installed doc missing: $DOCS_DIR/$doc"
+      docs_ok=false
+    fi
+  done
+
+  if [[ "$docs_ok" == "false" ]]; then
+    warn "Docs are source-deployed assets. Re-run installer phase 4/config deployment to restore missing docs."
+  fi
+}
+
+check_migrations() {
+  local migrate_cmd="$SCRIPT_DIR/ahr-migrate"
+  local skipped_count=0
+
+  log
+  log "Migration state checks"
+
+  if [[ ! -x "$migrate_cmd" ]]; then
+    fail_check "migration command missing or not executable: $migrate_cmd"
+    return
+  fi
+
+  if [[ ! -d "$MIGRATION_STATE_DIR" ]]; then
+    warn "migration state directory missing: $MIGRATION_STATE_DIR"
+    warn "Run first-run, post-boot hooks, or ahr migrate --status to initialize migration state."
+  else
+    log "OK: migration state directory exists: $MIGRATION_STATE_DIR"
+  fi
+
+  "$migrate_cmd" --status || status=1
+
+  if [[ -d "$MIGRATION_SKIPPED_DIR" ]]; then
+    skipped_count="$(find "$MIGRATION_SKIPPED_DIR" -maxdepth 1 -type f 2>/dev/null | wc -l)"
+  fi
+
+  if (( skipped_count > 0 )); then
+    fail_check "skipped migrations present; review with ahr migrate --status and retry with ahr migrate --retry-skipped"
+  else
+    log "OK: no skipped migrations recorded"
+  fi
+}
+
+check_update_state() {
+  local pid=""
+  local status_value=""
+
+  log
+  log "Update state checks"
+
+  if [[ -f "$UPDATE_STATUS_FILE" ]]; then
+    status_value="$(sed -nE 's/^status=(.*)$/\1/p' "$UPDATE_STATUS_FILE" | head -n1)"
+    log "OK: last update status: ${status_value:-unknown} ($UPDATE_STATUS_FILE)"
+    if [[ "$status_value" == "failed" ]]; then
+      warn "last update failed; review $UPDATE_LOG_FILE before retrying"
+      warn "safe next step: ahr update --dry-run"
+    fi
+  else
+    warn "update status file not found yet: $UPDATE_STATUS_FILE"
+  fi
+
+  if [[ -f "$UPDATE_RUN_FILE" ]]; then
+    pid="$(sed -nE 's/^pid=([0-9]+)$/\1/p' "$UPDATE_RUN_FILE" | head -n1)"
+    if [[ -n "$pid" && -d "/proc/$pid" ]]; then
+      warn "update run marker exists and pid is still active: $UPDATE_RUN_FILE (pid=$pid)"
+    else
+      repairable_issue "stale or interrupted update run marker: $UPDATE_RUN_FILE"
+      if [[ "$apply" == "true" ]]; then
+        run_or_preview "remove stale update run marker" rm -f "$UPDATE_RUN_FILE"
+      else
+        warn "review $UPDATE_LOG_FILE, then run: ahr repair --update-state --apply"
+      fi
+    fi
+  else
+    log "OK: no interrupted update run marker found"
+  fi
+
+  if [[ -d "$UPDATE_LOCK_DIR" ]]; then
+    if [[ -n "$pid" && -d "/proc/$pid" ]]; then
+      warn "mkdir-style update lock exists while pid appears active: $UPDATE_LOCK_DIR"
+    else
+      repairable_issue "possible stale mkdir-style update lock directory: $UPDATE_LOCK_DIR"
+      if [[ "$apply" == "true" ]]; then
+        run_or_preview "remove stale mkdir-style update lock directory" rmdir "$UPDATE_LOCK_DIR"
+      else
+        warn "check for a running ahr-update process, then run: ahr repair --update-state --apply"
+      fi
+    fi
+  else
+    log "OK: no mkdir-style update lock directory found"
+  fi
+
+  if [[ -f "$UPDATE_LOG_FILE" ]]; then
+    log "OK: update log exists: $UPDATE_LOG_FILE"
+  else
+    warn "update log not found yet: $UPDATE_LOG_FILE"
+  fi
+}
+
+while (( $# > 0 )); do
+  case "$1" in
+    --apply) apply=true ;;
+    --all) enable_all_scopes ;;
+    --namespace) enable_only_scope; run_namespace=true ;;
+    --theme) enable_only_scope; run_theme=true ;;
+    --docs) enable_only_scope; run_docs=true ;;
+    --migrations) enable_only_scope; run_migrations=true ;;
+    --update-state) enable_only_scope; run_update_state=true ;;
+    --config) enable_only_scope; run_config=true ;;
+    --quiet) quiet=true ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf 'Unknown option: %s\n\n' "$1" >&2; usage >&2; exit 1 ;;
+  esac
+  shift
+done
+
+if [[ "$apply" == "true" ]]; then
+  log "AHR repair: apply mode"
+else
+  log "AHR repair: dry-run mode"
+fi
+
+if [[ "$run_namespace" == "true" ]]; then
+  check_namespace
+fi
+
+if [[ "$run_theme" == "true" ]]; then
+  check_theme_state
+fi
+
+if [[ "$run_docs" == "true" ]]; then
+  check_docs
+fi
+
+if [[ "$run_migrations" == "true" ]]; then
+  check_migrations
+fi
+
+if [[ "$run_update_state" == "true" ]]; then
+  check_update_state
+fi
+
+if [[ "$run_config" == "true" ]]; then
+  check_config_drift
+fi
+
+if (( status == 0 )); then
+  log
+  log "Repair check completed: no required repairs found"
+else
+  log
+  log "Repair check completed: follow the FIX lines above"
+fi
+
+exit "$status"

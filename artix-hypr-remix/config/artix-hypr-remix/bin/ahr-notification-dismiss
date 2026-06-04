@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+summary="${1:-}"
+
+if [[ -z "$summary" ]]; then
+  if ahr_has_cmd makoctl; then
+    exec makoctl dismiss
+  fi
+
+  ahr_fail "Usage: ahr-notification-dismiss [summary]"
+fi
+
+if ! ahr_has_cmd makoctl; then
+  ahr_fail "makoctl is not installed"
+fi
+
+notification_id="$(makoctl list 2>/dev/null | grep -F "$summary" | head -n1 | sed -E 's/^Notification ([0-9]+):.*/\1/' || true)"
+
+if [[ -n "$notification_id" ]]; then
+  makoctl dismiss -n "$notification_id"
+fi

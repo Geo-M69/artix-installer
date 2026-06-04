@@ -29,6 +29,16 @@ Structure:
 - `scripts/` - small helper scripts
 - `ROADMAP.md` - milestone plan, beta path, blockers, and definition of done
 - `MILESTONE3_KICKOFF.md` - prioritized Milestone 3 implementation checklist and validation plan
+- `MILESTONE4_KICKOFF.md` - Omarchy-like UX parity checklist and validation plan
+- `MILESTONE4_PARITY_AUDIT.md` - pinned Omarchy comparison table for Milestone 4
+- `MILESTONE4_EXPECTED_RESULTS.md` - beta tester expected-results checklist
+- `MILESTONE5_HANDOFF.md` - maintenance, repair, and upgrade follow-up notes
+- `MILESTONE5_KICKOFF.md` - Milestone 5 maintenance and repair execution checklist
+- `MIGRATION_POLICY.md` - migration safety, state, and recovery policy
+- `RECOVERY_AND_RESET.md` - repair, rollback, backup, log, and reset boundaries
+- `BETA_READINESS.md` - known issues, unsupported items, troubleshooting, and Milestone 6 inputs
+- `config/artix-hypr-remix/docs/quick-reference.md` - installed first-login quick reference
+- `config/artix-hypr-remix/docs/theme-assets.md` - installed AHR/Omarchy-compatible theme asset guide
 
 Hypr config source:
 - `config/hypr/hyprland.conf` is the runtime config consumed directly by Hyprland.
@@ -228,6 +238,12 @@ Notes:
 
 Framework maintenance:
 
+    ahr repair
+    ahr repair --apply
+    ahr repair --namespace
+    ahr repair --theme --apply
+    ahr repair --update-state
+    ahr repair --config
     ahr migrate --status
     ahr migrate --dry-run
     ahr migrate --retry-skipped

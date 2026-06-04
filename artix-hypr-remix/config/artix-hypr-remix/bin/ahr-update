@@ -8,7 +8,10 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
 LOCK_FILE="$STATE_DIR/update.lock"
 LOCK_DIR="$STATE_DIR/.update.lock"
 LOG_FILE="$STATE_DIR/update.log"
+RUN_FILE="$STATE_DIR/update.run"
+STATUS_FILE="$STATE_DIR/update.status"
 lock_mode=""
+original_args=("$@")
 
 usage() {
   cat <<'EOF'
@@ -80,6 +83,29 @@ log_and_print() {
   log "$message"
 }
 
+write_status() {
+  local status_value="$1"
+  local detail="${2:-}"
+
+  {
+    printf 'status=%s\n' "$status_value"
+    printf 'time=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+    printf 'log=%s\n' "$LOG_FILE"
+    if [[ -n "$detail" ]]; then
+      printf 'detail=%s\n' "$detail"
+    fi
+  } > "$STATUS_FILE"
+}
+
+write_run_file() {
+  {
+    printf 'pid=%s\n' "$$"
+    printf 'started=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+    printf 'log=%s\n' "$LOG_FILE"
+    printf 'command=ahr-update %s\n' "$*"
+  } > "$RUN_FILE"
+}
+
 signal_waybar_update() {
   pkill -RTMIN+7 -x waybar >/dev/null 2>&1 || true
 }
@@ -94,7 +120,11 @@ acquire_lock() {
   if command -v flock >/dev/null 2>&1; then
     exec 9>"$LOCK_FILE"
     if ! flock -n 9; then
-      ahr_fail "Another update process is already running"
+      printf '%s\n' "Another update process is already running." >&2
+      printf '%s\n' "If this looks stale, check: $RUN_FILE" >&2
+      printf '%s\n' "Recent update log: $LOG_FILE" >&2
+      printf '%s\n' "Repair guidance: ahr repair --update-state" >&2
+      exit 1
     fi
     lock_mode="flock"
     return 0
@@ -105,7 +135,11 @@ acquire_lock() {
     return 0
   fi
 
-  ahr_fail "Another update process is already running"
+  printf '%s\n' "Another update process is already running or a stale mkdir lock exists: $LOCK_DIR" >&2
+  printf '%s\n' "Do not remove it blindly. Check for a running update process first." >&2
+  printf '%s\n' "Recent update log: $LOG_FILE" >&2
+  printf '%s\n' "Repair guidance: ahr repair --update-state" >&2
+  exit 1
 }
 
 run_cmd() {
@@ -128,6 +162,8 @@ finalize() {
   signal_waybar_update
 
   if (( exit_code == 0 )); then
+    rm -f "$RUN_FILE"
+    write_status "success" "Update run completed successfully"
     log_line "Update run completed successfully"
     if [[ "$dry_run" == "false" ]]; then
       ahr_notify "Update" "Update complete"
@@ -135,7 +171,13 @@ finalize() {
     return
   fi
 
+  rm -f "$RUN_FILE"
+  write_status "failed" "Update run failed with exit code $exit_code"
   log_line "Update run failed with exit code $exit_code"
+  if [[ "$quiet" == "false" ]]; then
+    printf '%s\n' "Update failed. Review: $LOG_FILE" >&2
+    printf '%s\n' "Recovery guidance: ahr repair --update-state" >&2
+  fi
   if [[ "$dry_run" == "false" ]]; then
     ahr_notify "Update" "Update failed"
   fi
@@ -144,6 +186,8 @@ finalize() {
 trap finalize EXIT
 
 acquire_lock
+write_run_file "${original_args[@]}"
+write_status "running" "Update run is in progress"
 
 log_line "Starting update run: system=$do_system aur=$do_aur flatpak=$do_flatpak migrate=$do_migrate dry_run=$dry_run assume_yes=$assume_yes"
 

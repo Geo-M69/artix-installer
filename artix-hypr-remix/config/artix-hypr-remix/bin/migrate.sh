@@ -114,8 +114,21 @@ describe_status() {
   local applied_count="$2"
   local skipped_count="$3"
   local pending_count="$4"
+  local skipped_file skipped_name
 
   log "Migration status: total=$total_count applied=$applied_count skipped=$skipped_count pending=$pending_count"
+
+  if (( skipped_count > 0 )); then
+    log "Skipped migrations need review before they are retried:"
+    shopt -s nullglob
+    for skipped_file in "$SKIPPED_DIR"/*.sh; do
+      skipped_name="$(basename "$skipped_file")"
+      log "  - ${skipped_name%.sh}"
+    done
+    shopt -u nullglob
+    log "Retry skipped migrations with: ahr migrate --retry-skipped"
+    log "Preview pending work with: ahr migrate --dry-run"
+  fi
 }
 
 if [[ ! -d "$MIGRATION_DIR" ]]; then
@@ -180,6 +193,9 @@ if [[ "$dry_run" == "true" ]]; then
   for migration_file in "${pending_migrations[@]}"; do
     log "  - $(basename "$migration_file")"
   done
+  if [[ "$retry_skipped" == "true" ]]; then
+    log "Dry-run includes previously skipped migrations because --retry-skipped was provided"
+  fi
   exit 0
 fi
 
@@ -192,6 +208,7 @@ for migration_file in "${pending_migrations[@]}"; do
   migration_name="$(basename "$migration_file")"
 
   if [[ "$retry_skipped" == "true" ]]; then
+    log "Retrying previously skipped migration if present: ${migration_name%.sh}"
     rm -f "$SKIPPED_DIR/$migration_name"
   fi
 
@@ -207,8 +224,10 @@ for migration_file in "${pending_migrations[@]}"; do
   if confirm_skip_failed_migration "$migration_name"; then
     touch "$SKIPPED_DIR/$migration_name"
     log "Skipped failed migration: ${migration_name%.sh}"
+    log "Retry later with: ahr migrate --retry-skipped"
   else
     log "Migration failed: ${migration_name%.sh}"
+    log "Review log: $LOG_FILE"
     exit 1
   fi
 done

@@ -24,27 +24,25 @@ Artix Hypr Remix aims to deliver an Artix Linux, OpenRC-native, Omarchy-equivale
 
 ## Current Status
 
-The repo is beyond a raw installer scaffold. Milestone 1 is mostly in place, Milestone 2 is partially implemented, and Milestone 3 has a usable foundation but not yet a dependable beta finish. In practice, the project appears to be in **early Milestone 3 alpha**: the phased installer, backup behavior, logging, startup-mode switching, first-run framework, and maintenance commands exist, but several user-facing runtime paths still need cleanup and the Omarchy-equivalent polish pass is not complete.
+The repo is beyond a raw installer scaffold. Milestones 1-4 are functionally complete for the current development flow: the phased installer, backup behavior, logging, OpenRC service handling, startup-mode switching, first-run framework, desktop runtime paths, Omarchy-like UX parity scaffolding, menu polish, theme/update UX, and beta expected-results docs are in place. The project is now ready for **Milestone 5 alpha** work focused on maintenance, repair, and upgrade recovery.
 
 ## Gap Analysis
 
 - Installer safety: strong progress, but post-install validation should cover more real desktop readiness, not just package/config structure.
 - Artix/OpenRC base layer: OpenRC service handling exists, but package naming and service assumptions still need live Artix verification.
-- Desktop functionality: Hyprland, Waybar, Mako, PipeWire, screenshots, clipboard, theming, first-run, and update hooks are present, but some defaults still depend on optional components or incomplete fallbacks.
+- Desktop functionality: Hyprland, Waybar, Mako, PipeWire, screenshots, clipboard, theming, first-run, and update hooks are present and validated for Milestone 3 scope.
 - Omarchy-like UX: partial parity only. The repo has the framework for menus, themes, hooks, and update tooling, but it still lacks a documented parity table and some of the “finished desktop” behavior Omarchy ships.
 - Release readiness: README is useful, but supported assumptions, known issues, beta scope, and release criteria are not yet stated clearly enough.
 
 ## Fastest Path To Beta
 
-1. Make the default TTY install path fully self-consistent with only repo-managed core packages.
-2. Validate and tighten the OpenRC/session stack on real Artix systems.
-3. Close first-login polish gaps: launcher behavior, clipboard flow, lock/idle/reboot actions, notifications, wallpaper/theme defaults, and update UX.
+1. Build the Omarchy parity table and decide which UX differences are required parity versus Artix/OpenRC adaptations.
+2. Validate and tighten the OpenRC/session stack on more real Artix systems.
+3. Close remaining first-login polish gaps: menus, update UX, welcome flow, visual cohesion, and documented expected behavior.
 4. Freeze a supported beta matrix and document what is intentionally unsupported.
 
 ## Critical Blockers
 
-- Default runtime paths still referenced optional AUR components directly instead of using safe fallbacks.
-- At least one runtime helper still contained `loginctl`/`systemctl` fallbacks, which conflicts with the OpenRC target.
 - Omarchy parity is not yet documented feature-by-feature, so it is hard to tell what is intentionally different versus unfinished.
 - Hardware package names and service assumptions need validation on real Artix installs before the project can claim reliable support.
 
@@ -102,6 +100,9 @@ The repo is beyond a raw installer scaffold. Milestone 1 is mostly in place, Mil
 - Mark each difference as required parity, Artix/OpenRC adaptation, optional polish, intentional difference, unsupported for now, or unknown.
 - Port only the UX patterns that improve completeness without importing systemd assumptions.
 - Make first login feel fully configured rather than “framework installed.”
+- Track execution in `MILESTONE4_KICKOFF.md`.
+- Track the pinned parity comparison in `MILESTONE4_PARITY_AUDIT.md`.
+- Track expected beta tester results in `MILESTONE4_EXPECTED_RESULTS.md`.
 
 ### Milestone 5: Maintenance, repair, and upgrades
 
@@ -109,6 +110,10 @@ The repo is beyond a raw installer scaffold. Milestone 1 is mostly in place, Mil
 - Add a repair/reapply workflow for config drift and partial installs.
 - Add migration policy notes for future config format changes.
 - Document safe rollback/reset expectations even if full uninstall remains unsupported.
+- Use `MILESTONE5_HANDOFF.md` as the starting task inventory.
+- Track execution in `MILESTONE5_KICKOFF.md`.
+- Track repair/reset boundaries in `RECOVERY_AND_RESET.md`.
+- Track Milestone 6 release-readiness inputs in `BETA_READINESS.md`.
 
 ### Milestone 6: Documentation and release readiness
 
@@ -124,12 +129,11 @@ The repo is beyond a raw installer scaffold. Milestone 1 is mostly in place, Mil
 
 ## Prioritized Task List
 
-1. Remove optional/AUR-only assumptions from default runtime paths.
-2. Remove remaining systemd/logind runtime fallbacks.
-3. Validate phase 2 and phase 3 package/service manifests on real Artix systems.
-4. Expand post-install smoke checks to assert launcher, portal, PipeWire, and lock-screen readiness.
-5. Write the full Omarchy parity table.
-6. Tighten README and release notes around supported assumptions and beta scope.
+1. Write the full Omarchy parity table.
+2. Classify each parity gap as required parity, Artix/OpenRC adaptation, optional polish, intentional difference, unsupported for now, or unknown.
+3. Validate phase 2 and phase 3 package/service manifests on additional real Artix systems.
+4. Tighten README and release notes around supported assumptions and beta scope.
+5. Identify Milestone 5 repair/reapply workflows that should be designed before beta.
 
 ## Definition Of Done
 
@@ -141,4 +145,3 @@ The repo is beyond a raw installer scaffold. Milestone 1 is mostly in place, Mil
 - Optional AUR integrations enhance the desktop but are never required for the base experience.
 - Update, migration, doctor, and smoke tooling can detect and repair common drift.
 - README, compatibility notes, known issues, and release checklist are present.
-

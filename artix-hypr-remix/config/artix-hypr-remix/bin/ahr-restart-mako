@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+pkill -x mako >/dev/null 2>&1 || true
+
+if ahr_has_cmd mako; then
+  setsid mako >/dev/null 2>&1 &
+  ahr_notify "Mako" "Notification daemon restarted"
+  exit 0
+fi
+
+ahr_fail "mako is not installed"

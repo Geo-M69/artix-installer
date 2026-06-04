@@ -13,16 +13,29 @@ declare -a REQUIRED_DESKTOP_COMMANDS=(
 )
 declare -a PRINTING_SERVICES=(cupsd avahi-daemon)
 declare -a REQUIRED_FRAMEWORK_COMMANDS=(
+  ahr-menu
   ahr-launch-terminal
+  ahr-launch-apps
+  ahr-menu-keybindings
   ahr-launch-browser
   ahr-launch-files
+  ahr-launch-bluetooth
   ahr-default-browser
   ahr-default-terminal
+  ahr-repair
   ahr-system-lock
   ahr-toggle-idle
+  ahr-toggle-waybar
+  ahr-notification-dismiss
   ahr-launch-wallpaper-session
   ahr-theme-current
+  ahr-restart-mako
+  ahr-restart-waybar
   start-hyprland-session.sh
+)
+declare -a REQUIRED_FRAMEWORK_DOCS=(
+  quick-reference.md
+  theme-assets.md
 )
 declare -A OPTIONAL_HYPR_COMMANDS=(
   [walker]=1
@@ -434,6 +447,7 @@ check_hyprland_command_dependencies() {
 check_framework_runtime_commands() {
   local framework_bin_dir command_name command_path
   local default_browser_cmd default_terminal_cmd
+  local docs_dir doc
   local session_active=false
 
   echo "[7a/9] Validating framework runtime commands"
@@ -458,9 +472,18 @@ check_framework_runtime_commands() {
     if [[ -x "$command_path" ]]; then
       pass "framework command executable: $command_name"
     elif [[ -e "$command_path" ]]; then
-      fail "framework command not executable: $command_path"
+      fail "framework command not executable: $command_path (try: ahr repair --namespace --apply)"
     else
-      fail "framework command missing: $command_path"
+      fail "framework command missing: $command_path (try: ahr repair --namespace --apply)"
+    fi
+  done
+
+  docs_dir="$target_home/.config/artix-hypr-remix/docs"
+  for doc in "${REQUIRED_FRAMEWORK_DOCS[@]}"; do
+    if [[ -s "$docs_dir/$doc" ]]; then
+      pass "installed framework doc present: $doc"
+    else
+      fail "installed framework doc missing: $docs_dir/$doc (try: ahr repair --docs)"
     fi
   done
 

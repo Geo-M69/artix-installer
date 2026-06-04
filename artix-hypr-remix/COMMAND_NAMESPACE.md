@@ -21,20 +21,28 @@ Categories:
 ## V1 Commands
 
 - `ahr` - top-level help and subcommand dispatcher
-- `ahr-menu` - open feature-sliced command menu (`setup`, `install`, `remove`, `update`, `system`) with app-launcher entry
+- `ahr-menu` - open feature-sliced command menu (`learn`, `trigger`, `style`, `setup`, `install`, `remove`, `update`, `system`) with app-launcher entry
+- `ahr-menu-keybindings` - show Hyprland keybinding help from the active config
+- `ahr-launch-apps` - open the application launcher using core fallback order
 - `ahr-launch-terminal` - open preferred terminal
 - `ahr-launch-browser` - open default browser/homepage
 - `ahr-launch-files` - open file manager in a target path
 - `ahr-launch-audio` - open audio control UI (or terminal fallback)
+- `ahr-launch-bluetooth` - open Bluetooth control UI/TUI
 - `ahr-launch-wifi` - open Wi-Fi/network UI (or terminal fallback)
 - `ahr-default-browser` - inspect or set the user's default browser (xdg)
 - `ahr-default-terminal` - inspect or set the user's preferred terminal (xdg-terminals.list)
 - `ahr-update` - run package updates, migrations, and post-update hooks
 - `ahr-update-available` - report package and migration work remaining
+- `ahr-repair` - inspect common framework drift and apply safe repairs with `--apply`
 - `ahr-voxtype-model` - open voxtype model setup workflow
 - `ahr-voxtype-config` - open voxtype configuration file
 - `ahr-toggle-idle` - toggle `hypridle` daemon state for lock/suspend behavior
 - `ahr-toggle-notification-silencing` - toggle do-not-disturb mode for `mako`
+- `ahr-toggle-waybar` - show or hide Waybar
+- `ahr-notification-dismiss` - dismiss the active Mako notification or a notification matching a summary
+- `ahr-restart-mako` - restart Mako notification daemon
+- `ahr-restart-waybar` - restart Waybar
 - `ahr-restart-walker` - restart Walker launcher service
 - `ahr-migrate` - run framework migrations directly (`--status`, `--dry-run`, `--retry-skipped`)
 - `ahr-theme` - top-level theme management dispatcher (`list`, `current`, `set`, `refresh`, `bg-next`, `bg-set`)
@@ -57,6 +65,8 @@ When namespace installation runs, selected Omarchy-style aliases are created in
 `~/.local/bin` as symlinks to native commands:
 
 - `omarchy-menu` -> `ahr-menu`
+- `omarchy` -> `ahr`
+- `omarchy-menu-keybindings` -> `ahr-menu-keybindings`
 - `omarchy-theme` -> `ahr-theme`
 - `omarchy-theme-list` -> `ahr-theme-list`
 - `omarchy-theme-current` -> `ahr-theme-current`
@@ -67,18 +77,25 @@ When namespace installation runs, selected Omarchy-style aliases are created in
 - `omarchy-theme-set-templates` -> `ahr-theme-set-templates`
 - `omarchy-theme-colors-from-alacritty` -> `ahr-theme-colors-from-alacritty`
 - `omarchy-launch-terminal` -> `ahr-launch-terminal`
+- `omarchy-launch-walker` -> `ahr-launch-apps`
 - `omarchy-launch-browser` -> `ahr-launch-browser`
 - `omarchy-launch-nautilus` -> `ahr-launch-files`
 - `omarchy-launch-audio` -> `ahr-launch-audio`
+- `omarchy-launch-bluetooth` -> `ahr-launch-bluetooth`
 - `omarchy-launch-wifi` -> `ahr-launch-wifi`
 - `omarchy-default-browser` -> `ahr-default-browser`
 - `omarchy-default-terminal` -> `ahr-default-terminal`
 - `omarchy-update` -> `ahr-update`
 - `omarchy-update-available` -> `ahr-update-available`
+- `omarchy-repair` -> `ahr-repair`
 - `omarchy-voxtype-model` -> `ahr-voxtype-model`
 - `omarchy-voxtype-config` -> `ahr-voxtype-config`
 - `omarchy-toggle-idle` -> `ahr-toggle-idle`
 - `omarchy-toggle-notification-silencing` -> `ahr-toggle-notification-silencing`
+- `omarchy-toggle-waybar` -> `ahr-toggle-waybar`
+- `omarchy-notification-dismiss` -> `ahr-notification-dismiss`
+- `omarchy-restart-mako` -> `ahr-restart-mako`
+- `omarchy-restart-waybar` -> `ahr-restart-waybar`
 - `omarchy-restart-walker` -> `ahr-restart-walker`
 - `omarchy-migrate` -> `ahr-migrate`
 - `omarchy-system-lock` -> `ahr-system-lock`
@@ -87,6 +104,8 @@ When namespace installation runs, selected Omarchy-style aliases are created in
 - `omarchy-capture-screenshot` -> `ahr-capture-screenshot`
 
 The alias set is intentionally small. The canonical interface remains `ahr-*`.
+Omarchy commands without safe Artix/OpenRC equivalents are intentionally omitted
+until their behavior is implemented natively.
 
 ## Installation
 

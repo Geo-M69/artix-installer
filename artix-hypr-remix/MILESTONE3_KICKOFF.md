@@ -6,6 +6,7 @@ This plan translates Milestone 3 from `ROADMAP.md` into actionable implementatio
 
 - Milestone 2 is functionally green for development flow (VM validation pass).
 - One Milestone 2 release-gate item remains: NVIDIA laptop validation log entry in `MILESTONE2_VALIDATION_MATRIX.md`.
+- Milestone 3 desktop-functionality validation is complete and ready to hand off into Milestone 4 planning.
 
 ## Milestone 3 Goals (Roadmap Alignment)
 
@@ -42,23 +43,27 @@ Exit criteria:
 
 - [x] Validate `xdg-desktop-portal` + `xdg-desktop-portal-hyprland` process health.
 - [x] Validate PipeWire and WirePlumber active status in session.
-- [ ] Validate screenshot and capture path end-to-end (`grim`, `slurp`, recorder path).
+- [x] Validate screenshot and capture path end-to-end (`grim`, `slurp`, recorder path).
 
 Exit criteria:
 - Portal and audio/capture stack are stable immediately after first login.
 
 Progress note:
 - `post-install-smoke.sh` passed with session runtime process checks (portal + media stack).
+- Manual Milestone 3 validation confirmed screenshot/capture paths.
 
 ### B2. Startup mode parity (`tty` and `greetd`)
 
-- [ ] Run smoke in `tty` mode after fresh install.
-- [ ] Run smoke in `greetd` mode (`greeter`).
-- [ ] Run smoke in `greetd` mode (`autologin`).
-- [ ] Compare environment-sensitive behavior (portal startup, keyring, auth prompts).
+- [x] Run smoke in `tty` mode after fresh install.
+- [x] Run smoke in `greetd` mode (`greeter`).
+- [x] Run smoke in `greetd` mode (`autologin`).
+- [x] Compare environment-sensitive behavior (portal startup, keyring, auth prompts).
 
 Exit criteria:
 - No mode-specific regressions in daily desktop use paths.
+
+Progress note:
+- Manual Milestone 3 validation confirmed `tty`, `greetd` greeter, and `greetd` autologin startup paths.
 
 ## Workstream C: First-Login UX Coherence
 
@@ -124,6 +129,18 @@ Follow-ups:
 
 ## Milestone 3 Validation Log
 
+### User-validated completion pass
+
+- Date: 2026-06-04
+- Environment: user-tested supported install paths
+- Startup mode: `tty`, `greetd` / `greeter`, `greetd` / `autologin`
+- C1 result: PASS
+- C2 result: PASS
+- Session/runtime result: PASS
+- Capture result: PASS
+- Warnings: none blocking Milestone 3 handoff
+- Follow-ups: proceed to Milestone 4 Omarchy-like UX parity planning
+
 ### Host: linux2024 (QEMU/KVM)
 
 - Date: 2026-06-04
@@ -135,8 +152,7 @@ Follow-ups:
 - Session/runtime result: PASS
 - Warnings: `NetworkManager` remained inactive because the VM already had a default route outside NetworkManager; accepted by installer and smoke checks.
 - Follow-ups:
-  - B1 screenshot/recording end-to-end validation still needs explicit run log evidence.
-  - B2 `tty` mode and `greetd` greeter-mode parity are still pending.
+  - Superseded by the user-validated completion pass above.
 
 ## First Sprint (Suggested Order)
 
@@ -177,4 +193,4 @@ sudo ./install.sh --phase 5 --user <username> --startup-mode greetd --greetd-mod
 ## Notes
 
 - Keep Milestone 2 release gate open only for pending NVIDIA laptop validation entry.
-- Continue Milestone 3 development in parallel with hardware validation completion.
+- Milestone 3 is complete; continue with Milestone 4 while hardware validation completion remains tracked separately.
