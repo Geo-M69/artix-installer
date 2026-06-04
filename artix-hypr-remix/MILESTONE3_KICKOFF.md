@@ -155,6 +155,7 @@ From `artix-hypr-remix/`:
 ./scripts/doctor.sh
 ./scripts/post-install-smoke.sh --user <username>
 ./scripts/milestone2-validate.sh --user <username>
+./scripts/milestone3-validate.sh --user <username> --c1-result PASS --c2-result PASS
 ```
 
 For startup mode testing:

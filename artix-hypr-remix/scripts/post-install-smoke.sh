@@ -499,6 +499,9 @@ check_wallpaper_backend() {
 }
 
 check_wallpaper_runtime_state() {
+  local hyprland_running=false
+  local first_run_pending=false
+  local first_run_mode_file
   local wallpaper_state_file
   local theme_state_file
 
@@ -509,11 +512,24 @@ check_wallpaper_runtime_state() {
     return
   fi
 
+  if pgrep -u "$target_user" -x Hyprland >/dev/null 2>&1; then
+    hyprland_running=true
+  fi
+
+  first_run_mode_file="$target_home/.local/state/artix-hypr-remix/first-run.mode"
+  if [[ -f "$first_run_mode_file" ]]; then
+    first_run_pending=true
+  fi
+
   theme_state_file="$target_home/.config/artix-hypr-remix/current/theme.name"
   if [[ -s "$theme_state_file" ]]; then
     pass "theme state present: $theme_state_file"
+  elif [[ "$hyprland_running" == "true" ]]; then
+    fail "theme state missing or empty during active Hyprland session: $theme_state_file"
+  elif [[ "$first_run_pending" == "true" ]]; then
+    warn_msg "theme state missing while first-run setup is pending: $theme_state_file"
   else
-    fail "theme state missing or empty: $theme_state_file"
+    fail "theme state missing or empty after first-run setup: $theme_state_file"
   fi
 
   wallpaper_state_file="$target_home/.config/artix-hypr-remix/current/background"
@@ -527,7 +543,7 @@ check_wallpaper_runtime_state() {
     warn_msg "wallpaper state symlink missing; theme color fallback may be in use"
   fi
 
-  if pgrep -u "$target_user" -x Hyprland >/dev/null 2>&1; then
+  if [[ "$hyprland_running" == "true" ]]; then
     if pgrep -u "$target_user" -x swaybg >/dev/null 2>&1; then
       pass "wallpaper runtime process running: swaybg"
     elif pgrep -u "$target_user" -x swww-daemon >/dev/null 2>&1; then
