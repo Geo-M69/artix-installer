@@ -64,21 +64,22 @@ Exit criteria:
 
 ### C1. Lock/idle/wallpaper/default apps
 
-- [ ] Validate lock screen command and idle trigger behavior.
-- [ ] Validate wallpaper backend selection and persistence.
-- [ ] Validate browser/terminal/file-manager defaults and opening behavior.
+- [x] Validate lock screen command and idle trigger behavior.
+- [x] Validate wallpaper backend selection and persistence.
+- [x] Validate browser/terminal/file-manager defaults and opening behavior.
 
 Exit criteria:
 - Fresh login feels complete and consistent, not partially configured.
 
 Progress note:
-- Runtime launchers now route through `ahr-*` wrappers, preferred terminal/file-manager/browser defaults are initialized on first run, and default-theme setup now seeds wallpaper state on fresh login. Live validation is still pending.
+- Runtime launchers now route through `ahr-*` wrappers, preferred terminal/file-manager/browser defaults are initialized on first run, and default-theme setup now seeds wallpaper state on fresh login.
+- VM validation on `linux2024` (QEMU/KVM, `greetd` autologin) passed lock/idle, default-app launchers, wallpaper persistence, and theme-color wallpaper fallback.
 
 ### C2. Theme/font/icon/cursor coherence
 
-- [ ] Validate theme assets present and active at first login.
-- [ ] Validate fonts and icon theme fallback behavior.
-- [ ] Validate cursor theme/size consistency across apps.
+- [x] Validate theme assets present and active at first login.
+- [x] Validate fonts and icon theme fallback behavior.
+- [x] Validate cursor theme/size consistency across apps.
 
 Exit criteria:
 - No obvious theme/font/cursor mismatches on first session.
@@ -87,20 +88,55 @@ Exit criteria:
 
 ### D1. Extend smoke/doctor for Milestone 3 assertions
 
-- [ ] Add checks for PipeWire/WirePlumber service/process readiness in user session context.
-- [ ] Add checks for portal backend readiness beyond binary presence.
-- [ ] Add checks for launcher fallback health and lock/idle command availability.
+- [x] Add checks for PipeWire/WirePlumber service/process readiness in user session context.
+- [x] Add checks for portal backend readiness beyond binary presence.
+- [x] Add checks for launcher fallback health and lock/idle command availability.
 
 Exit criteria:
 - `doctor.sh` and `post-install-smoke.sh` detect major Milestone 3 runtime breakages.
 
+Progress note:
+- `post-install-smoke.sh` now checks live session processes for portal/media/Waybar/Mako, validates deployed `ahr-*` runtime wrappers, probes default browser/terminal helpers, and validates wallpaper state/runtime.
+- `doctor.sh` now checks deployed framework command executables for the resolved desktop user in addition to package/runtime dependencies.
+
 ### D2. Add Milestone 3 run log template
 
-- [ ] Add a per-host Milestone 3 log section (VM + real hardware).
-- [ ] Track startup mode, failures, and mitigations.
+- [x] Add a per-host Milestone 3 log section (VM + real hardware).
+- [x] Track startup mode, failures, and mitigations.
 
 Exit criteria:
 - Repeatable evidence trail exists for Milestone 3 stabilization.
+
+## Milestone 3 Validation Log Template
+
+```text
+Host ID:
+Date:
+Environment: VM | bare metal
+Startup mode:
+Install command:
+C1 result:
+C2 result:
+Session/runtime result:
+Warnings:
+Follow-ups:
+```
+
+## Milestone 3 Validation Log
+
+### Host: linux2024 (QEMU/KVM)
+
+- Date: 2026-06-04
+- Environment: VM
+- Startup mode: `greetd` / `autologin`
+- Install command: `sudo ./install.sh --from-phase 3 --phase 8 --user geo --startup-mode greetd --greetd-mode autologin --hardware-mode auto --docker-profile on --printing-profile on --flatpak-profile all --dev-baseline on -y`
+- C1 result: PASS
+- C2 result: PASS
+- Session/runtime result: PASS
+- Warnings: `NetworkManager` remained inactive because the VM already had a default route outside NetworkManager; accepted by installer and smoke checks.
+- Follow-ups:
+  - B1 screenshot/recording end-to-end validation still needs explicit run log evidence.
+  - B2 `tty` mode and `greetd` greeter-mode parity are still pending.
 
 ## First Sprint (Suggested Order)
 

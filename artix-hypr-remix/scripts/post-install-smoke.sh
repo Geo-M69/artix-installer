@@ -12,6 +12,18 @@ declare -a REQUIRED_DESKTOP_COMMANDS=(
   xdg-desktop-portal-hyprland
 )
 declare -a PRINTING_SERVICES=(cupsd avahi-daemon)
+declare -a REQUIRED_FRAMEWORK_COMMANDS=(
+  ahr-launch-terminal
+  ahr-launch-browser
+  ahr-launch-files
+  ahr-default-browser
+  ahr-default-terminal
+  ahr-system-lock
+  ahr-toggle-idle
+  ahr-launch-wallpaper-session
+  ahr-theme-current
+  start-hyprland-session.sh
+)
 declare -A OPTIONAL_HYPR_COMMANDS=(
   [walker]=1
   [elephant]=1
@@ -72,6 +84,27 @@ service_enabled_in_default_runlevel() {
 service_script_present() {
   local service="$1"
   [[ -x "/etc/init.d/$service" ]]
+}
+
+run_as_target_user() {
+  [[ "$user_context_ready" == "true" ]] || return 1
+
+  if [[ "$(id -un)" == "$target_user" ]]; then
+    HOME="$target_home" "$@"
+    return $?
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -H -u "$target_user" env HOME="$target_home" "$@"
+    return $?
+  fi
+
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u "$target_user" -- env HOME="$target_home" "$@"
+    return $?
+  fi
+
+  return 1
 }
 
 network_default_route_present() {
@@ -398,6 +431,58 @@ check_hyprland_command_dependencies() {
   done < <(printf '%s\n' "${!hypr_commands_seen[@]}" | sort)
 }
 
+check_framework_runtime_commands() {
+  local framework_bin_dir command_name command_path
+  local default_browser_cmd default_terminal_cmd
+  local session_active=false
+
+  echo "[7a/9] Validating framework runtime commands"
+
+  if [[ "$user_context_ready" != "true" ]]; then
+    fail "cannot validate framework runtime commands because target user context is unavailable"
+    return
+  fi
+
+  framework_bin_dir="$target_home/.config/artix-hypr-remix/bin"
+  if [[ ! -d "$framework_bin_dir" ]]; then
+    fail "framework bin directory missing: $framework_bin_dir"
+    return
+  fi
+
+  if pgrep -u "$target_user" -x Hyprland >/dev/null 2>&1; then
+    session_active=true
+  fi
+
+  for command_name in "${REQUIRED_FRAMEWORK_COMMANDS[@]}"; do
+    command_path="$framework_bin_dir/$command_name"
+    if [[ -x "$command_path" ]]; then
+      pass "framework command executable: $command_name"
+    elif [[ -e "$command_path" ]]; then
+      fail "framework command not executable: $command_path"
+    else
+      fail "framework command missing: $command_path"
+    fi
+  done
+
+  default_browser_cmd="$framework_bin_dir/ahr-default-browser"
+  if run_as_target_user bash "$default_browser_cmd" >/dev/null 2>&1; then
+    pass "default browser probe succeeded"
+  elif [[ "$session_active" == "true" ]]; then
+    fail "default browser probe failed: $default_browser_cmd"
+  else
+    warn_msg "default browser probe failed before session startup: $default_browser_cmd"
+  fi
+
+  default_terminal_cmd="$framework_bin_dir/ahr-default-terminal"
+  if run_as_target_user bash "$default_terminal_cmd" >/dev/null 2>&1; then
+    pass "default terminal probe succeeded"
+  elif [[ "$session_active" == "true" ]]; then
+    fail "default terminal probe failed: $default_terminal_cmd"
+  else
+    warn_msg "default terminal probe failed before session startup: $default_terminal_cmd"
+  fi
+}
+
 check_wallpaper_backend() {
   echo "[7b/9] Validating wallpaper backend"
 
@@ -411,6 +496,46 @@ check_wallpaper_backend() {
   fi
 
   fail "no supported wallpaper backend is installed (expected swww or swaybg)"
+}
+
+check_wallpaper_runtime_state() {
+  local wallpaper_state_file
+  local theme_state_file
+
+  echo "[7c/9] Validating wallpaper runtime state"
+
+  if [[ "$user_context_ready" != "true" ]]; then
+    fail "cannot validate wallpaper runtime state because target user context is unavailable"
+    return
+  fi
+
+  theme_state_file="$target_home/.config/artix-hypr-remix/current/theme.name"
+  if [[ -s "$theme_state_file" ]]; then
+    pass "theme state present: $theme_state_file"
+  else
+    fail "theme state missing or empty: $theme_state_file"
+  fi
+
+  wallpaper_state_file="$target_home/.config/artix-hypr-remix/current/background"
+  if [[ -L "$wallpaper_state_file" ]]; then
+    if [[ -f "$(readlink -f "$wallpaper_state_file" 2>/dev/null || true)" ]]; then
+      pass "wallpaper state symlink resolves to an image"
+    else
+      warn_msg "wallpaper state symlink exists but does not resolve to a file: $wallpaper_state_file"
+    fi
+  else
+    warn_msg "wallpaper state symlink missing; theme color fallback may be in use"
+  fi
+
+  if pgrep -u "$target_user" -x Hyprland >/dev/null 2>&1; then
+    if pgrep -u "$target_user" -x swaybg >/dev/null 2>&1; then
+      pass "wallpaper runtime process running: swaybg"
+    elif pgrep -u "$target_user" -x swww-daemon >/dev/null 2>&1; then
+      pass "wallpaper runtime process running: swww-daemon"
+    else
+      fail "no wallpaper runtime process detected for active Hyprland session"
+    fi
+  fi
 }
 
 check_startup_state_and_launcher() {
@@ -524,6 +649,9 @@ check_session_runtime_stack() {
     "xdg-desktop-portal-hyprland:xdg-desktop-portal-hyprland"
     "pipewire:pipewire"
     "wireplumber:wireplumber"
+    "pipewire-pulse:pipewire-pulse"
+    "waybar:waybar"
+    "mako:mako"
   )
   local entry label pattern
 
@@ -594,7 +722,9 @@ check_desktop_runtime_commands
 check_printing_services
 check_session_runtime_stack
 check_hyprland_command_dependencies
+check_framework_runtime_commands
 check_wallpaper_backend
+check_wallpaper_runtime_state
 check_startup_state_and_launcher
 check_mode_specific_state
 

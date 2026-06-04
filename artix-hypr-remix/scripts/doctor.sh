@@ -16,6 +16,20 @@ declare -a REQUIRED_DESKTOP_COMMANDS=(
 )
 declare -a REQUIRED_OPENRC_SERVICES=(dbus elogind NetworkManager bluetoothd)
 declare -a OPTIONAL_PRINTING_SERVICES=(cupsd avahi-daemon)
+declare -a REQUIRED_FRAMEWORK_COMMANDS=(
+  ahr-launch-terminal
+  ahr-launch-browser
+  ahr-launch-files
+  ahr-default-browser
+  ahr-default-terminal
+  ahr-system-lock
+  ahr-toggle-idle
+  ahr-launch-wallpaper-session
+  start-hyprland-session.sh
+)
+
+target_user="${SUDO_USER:-}"
+target_home=""
 
 is_virtualized_host() {
   if command -v systemd-detect-virt >/dev/null 2>&1; then
@@ -78,6 +92,28 @@ EOF
 
 mark_missing() {
   overall_status=1
+}
+
+resolve_target_user() {
+  local current_user
+
+  if [[ -z "$target_user" || "$target_user" == "root" ]]; then
+    current_user="$(id -un 2>/dev/null || true)"
+    if [[ "$current_user" != "root" && -n "$current_user" ]]; then
+      target_user="$current_user"
+    fi
+  fi
+
+  if [[ -z "$target_user" || "$target_user" == "root" ]]; then
+    return 1
+  fi
+
+  if ! id "$target_user" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  target_home="$(getent passwd "$target_user" | cut -d: -f6)"
+  [[ -n "$target_home" && -d "$target_home" ]]
 }
 
 service_enabled_in_default_runlevel() {
@@ -177,6 +213,38 @@ desktop_command_available() {
   return 1
 }
 
+check_framework_runtime_commands() {
+  local framework_bin_dir command_name command_path
+
+  echo
+  echo "Running framework command deployment checks"
+
+  if ! resolve_target_user; then
+    echo "WARN: could not resolve a non-root desktop user; skipping framework command deployment checks"
+    return
+  fi
+
+  framework_bin_dir="$target_home/.config/artix-hypr-remix/bin"
+  if [[ ! -d "$framework_bin_dir" ]]; then
+    echo "MISSING: framework bin directory: $framework_bin_dir"
+    mark_missing
+    return
+  fi
+
+  for command_name in "${REQUIRED_FRAMEWORK_COMMANDS[@]}"; do
+    command_path="$framework_bin_dir/$command_name"
+    if [[ -x "$command_path" ]]; then
+      echo "OK: framework command executable: $command_path"
+    elif [[ -e "$command_path" ]]; then
+      echo "MISSING: framework command not executable: $command_path"
+      mark_missing
+    else
+      echo "MISSING: framework command missing: $command_path"
+      mark_missing
+    fi
+  done
+}
+
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --no-aur)
@@ -245,6 +313,8 @@ for service in "${OPTIONAL_PRINTING_SERVICES[@]}"; do
     check_openrc_service_health "$service" "false"
   fi
 done
+
+check_framework_runtime_commands
 
 echo
 echo "Running config dependency validation"
