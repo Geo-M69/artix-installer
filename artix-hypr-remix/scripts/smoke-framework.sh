@@ -111,6 +111,8 @@ cp -a "$FRAMEWORK_SOURCE" "$sandbox/.config/"
 
 echo "Smoke test sandbox: $sandbox"
 
+export AHR_THEME_NO_RELOAD=1
+
 echo "[1/5] Install command namespace"
 HOME="$sandbox" bash "$sandbox/.config/artix-hypr-remix/bin/namespace-install.sh" --quiet
 

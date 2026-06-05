@@ -556,6 +556,11 @@ collect_hardware_recommended_packages() {
 
 	out_ref=()
 
+	if [[ "$HARDWARE_MODE" == "off" ]]; then
+		info "Hardware profile package recommendations are disabled (--hardware-mode off)"
+		return 0
+	fi
+
 	profile_root="$CONFIG_DIR/hardware"
 
 	mapfile -t profiles < <(hardware_detect_profiles)

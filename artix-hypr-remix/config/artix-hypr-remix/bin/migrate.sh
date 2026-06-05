@@ -87,8 +87,6 @@ acquire_lock() {
 
 trap cleanup_lock EXIT
 
-acquire_lock
-
 confirm_skip_failed_migration() {
   local migration_name="$1"
   local response
@@ -203,6 +201,8 @@ if (( ${#pending_migrations[@]} == 0 )); then
   log "No pending migrations"
   exit 0
 fi
+
+acquire_lock
 
 for migration_file in "${pending_migrations[@]}"; do
   migration_name="$(basename "$migration_file")"

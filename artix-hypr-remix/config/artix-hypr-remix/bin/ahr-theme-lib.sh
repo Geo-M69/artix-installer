@@ -415,6 +415,10 @@ ahr_theme_read_color_value() {
 }
 
 ahr_theme_reload_services() {
+  if [[ "${AHR_THEME_NO_RELOAD:-0}" == "1" ]]; then
+    return 0
+  fi
+
   if pgrep -x waybar >/dev/null 2>&1; then
     pkill -x waybar >/dev/null 2>&1 || true
     if ahr_has_cmd waybar; then
