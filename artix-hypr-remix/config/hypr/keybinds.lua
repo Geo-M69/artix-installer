@@ -60,7 +60,7 @@ return {
   { mods = { "SUPER", "SHIFT", "ALT" }, key = "COMMA", action = "exec", command = "makoctl restore" },
 
   -- Screenshot.
-  { mods = {}, key = "PRINT", action = "exec", command = "grim -g \"$(slurp)\" \"$HOME/Pictures/screenshot-$(date +%s).png\"" },
+  { mods = {}, key = "PRINT", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-capture-screenshot" },
 
   -- Media and device keys.
   { mods = {}, key = "XF86AudioRaiseVolume", action = "exec", command = "pamixer -i 5" },

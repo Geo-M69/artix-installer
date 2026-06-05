@@ -9,7 +9,7 @@ Key known issues
 - Theme gallery and previews: rich theme gallery and previews are deferred to future work.
 - Wallpaper / background symlink: `~/.config/artix-hypr-remix/current/background` is not created during install; `ahr repair` reports it as missing. Theme falls back to solid color until a background image is manually set or the symlink workflow is completed in a future update.
 - `ahr repair --config` is detect-only at present and will not rewrite user-edited config automatically.
-- Optional AUR tools (Walker/Elephant) are not required; absence triggers warnings in smoke checks but should not block base install.
+- Optional AUR tools (Walker, Elephant) are not required; absence triggers warnings in smoke checks but should not block base install. See "AUR tool fallback behavior" below.
 - Post-install smoke checks are session-aware and will skip runtime-only assertions when a Hyprland session is not active.
 - Package availability depends on live Artix repos and selected package profiles — unexpected package name differences may appear on some mirrors.
 
@@ -33,6 +33,21 @@ ahr migrate --status
 ahr migrate --retry-skipped
 ahr update --dry-run
 ```
+
+---
+
+## AUR tool fallback behavior
+
+Some features rely on optional AUR packages that are not installed in a `--skip-aur` or no-AUR setup. Here is how each tool behaves when missing:
+
+| AUR tool | Required by | Fallback behavior |
+|----------|-------------|-------------------|
+| `walker` (launcher) | `ahr-launch-apps`, `ahr-menu` | Falls back to `wofi` → `rofi` → shows a non-fatal error message |
+| `walker` (clipboard) | `ahr-clipboard-picker` | Falls back to `wofi` → `rofi` for the picker dialog |
+| `elephant` (clipboard manager) | Autostart in Hyprland | `ahr-optional-elephant` checks and skips silently if not installed; clipboard history still works via `cliphist` + `wl-paste` |
+| `walker` (keybindings) | `ahr-menu-keybindings` | Falls back to printing keybindings to terminal instead of walker's dmenu |
+
+**Bottom line:** The base desktop (Waybar, Mako, Hyprland, audio, screenshot, lock, idle, terminal, browser, file manager) works without any AUR packages. AUR tools only add convenience — launcher UI, graphical clipboard picker, Elephant clipboard UI/integration.
 
 If you hit a missing command dependency
 - Re-run `./scripts/check-config-deps.sh` to get the mapping between required commands and package manifests.

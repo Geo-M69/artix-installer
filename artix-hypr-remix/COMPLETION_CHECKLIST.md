@@ -4,7 +4,7 @@ This checklist tracks the remaining work needed to reach the target:
 
 > An Artix OpenRC-native Omarchy-equivalent Hyprland desktop setup with a safe, repeatable installer and a polished first-login experience.
 
-Current estimate: about 80% complete overall, with the project in Milestone 6 beta-readiness work. Milestone 1 is now addressed for beta; Milestone 0 has only the ongoing support-matrix update loop remaining.
+Current estimate: about 82% complete overall, with the project in Milestone 6 beta-readiness work. Milestones 0 and 1 are addressed for beta; Milestone 3 code items are complete (validation only remains).
 
 ## Milestone 0 - Target And Support Contract
 
@@ -107,8 +107,8 @@ Status: core desktop is present; polish and validation remain.
 - [ ] Validate TTY startup on real hardware.
 - [ ] Validate `greetd` greeter mode on real hardware.
 - [ ] Validate `greetd` autologin mode on real hardware.
-- [ ] Add fallback behavior or documentation for missing optional AUR tools such as Walker and Elephant.
-- [ ] Decide whether screenshot command should always use the repo wrapper instead of inline Hyprland command.
+- [x] Add fallback behavior or documentation for missing optional AUR tools such as Walker and Elephant.
+- [x] Decide whether screenshot command should always use the repo wrapper instead of inline Hyprland command.
 - [ ] Validate lock/idle behavior after suspend/resume on laptop hardware.
 - [ ] Validate default browser and terminal helpers with installed package set.
 - [ ] Validate portal behavior with Flatpak apps.
