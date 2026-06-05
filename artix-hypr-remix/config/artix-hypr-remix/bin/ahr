@@ -36,6 +36,8 @@ Commands:
   launch-wifi         Open network control
   default-browser     Inspect or set default browser
   default-terminal    Inspect or set default terminal
+  status              Print install state, log paths, and framework summary
+  list-backups        List config backups created by installer phase 4
   update              System + AUR update helper
   update-available    Check whether updates are available (for status bars)
   repair              Check and apply safe framework repairs
@@ -80,6 +82,8 @@ dispatch() {
     default-terminal) exec_ahr_command ahr-default-terminal "$@" ;;
     update) exec_ahr_command ahr-update "$@" ;;
     update-available) exec_ahr_command ahr-update-available "$@" ;;
+    status) exec_ahr_command ahr-status "$@" ;;
+    list-backups) exec_ahr_command ahr-list-backups "$@" ;;
     repair) exec_ahr_command ahr-repair "$@" ;;
     voxtype-model) exec_ahr_command ahr-voxtype-model "$@" ;;
     voxtype-config) exec_ahr_command ahr-voxtype-config "$@" ;;
@@ -114,6 +118,8 @@ dispatch() {
         "ahr-default-terminal" \
         "ahr-update" \
         "ahr-update-available" \
+        "ahr-status" \
+        "ahr-list-backups" \
         "ahr-repair" \
         "ahr-voxtype-model" \
         "ahr-voxtype-config" \

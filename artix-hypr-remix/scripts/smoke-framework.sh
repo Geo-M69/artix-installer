@@ -133,7 +133,17 @@ if [[ "$status_no_path" -ne 0 && "$status_no_path" -ne 1 ]]; then
   exit "$status_no_path"
 fi
 
-echo "[5/5] Run migrations non-interactively"
+echo "[5/7] ahr status --quiet"
+HOME="$sandbox" "$sandbox/.local/bin/ahr-status" --quiet
+
+echo "[6/7] ahr list-backups --count"
+count="$(HOME="$sandbox" "$sandbox/.local/bin/ahr-list-backups" --count)"
+echo "Backups found in sandbox: $count"
+if [[ "$count" -ne 0 ]]; then
+  echo "WARN: sandbox unexpectedly contains config backups" >&2
+fi
+
+echo "[7/7] Run migrations non-interactively"
 HOME="$sandbox" "$sandbox/.local/bin/ahr-migrate" --non-interactive
 HOME="$sandbox" "$sandbox/.local/bin/ahr-migrate" --status
 

@@ -35,6 +35,8 @@ Categories:
 - `ahr-update` - run package updates, migrations, and post-update hooks
 - `ahr-update-available` - report package and migration work remaining
 - `ahr-repair` - inspect common framework drift and apply safe repairs with `--apply`
+- `ahr-status` - print install state, log paths, and framework summary
+- `ahr-list-backups` - list config backups created by installer phase 4
 - `ahr-voxtype-model` - open voxtype model setup workflow
 - `ahr-voxtype-config` - open voxtype configuration file
 - `ahr-toggle-idle` - toggle `hypridle` daemon state for lock/suspend behavior
@@ -91,6 +93,8 @@ When namespace installation runs, selected Omarchy-style aliases are created in
 - `omarchy-update` -> `ahr-update`
 - `omarchy-update-available` -> `ahr-update-available`
 - `omarchy-repair` -> `ahr-repair`
+- `omarchy-status` -> `ahr-status`
+- `omarchy-list-backups` -> `ahr-list-backups`
 - `omarchy-voxtype-model` -> `ahr-voxtype-model`
 - `omarchy-voxtype-config` -> `ahr-voxtype-config`
 - `omarchy-toggle-idle` -> `ahr-toggle-idle`

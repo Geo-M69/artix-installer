@@ -4,7 +4,7 @@ This checklist tracks the remaining work needed to reach the target:
 
 > An Artix OpenRC-native Omarchy-equivalent Hyprland desktop setup with a safe, repeatable installer and a polished first-login experience.
 
-Current estimate: about 92% complete overall, with the project in Milestone 6 beta-readiness work. Milestones 0, 1, 3, and the bulk of 4 are addressed for beta. Deferred Milestone 4 items are explicitly documented as post-beta.
+Current estimate: about 93% complete overall, with the project in Milestone 6 beta-readiness work. Milestones 0, 1, 3, and the bulk of 4 are addressed for beta. Core Milestone 2 services validated on VM (2026-06-05). Deferred Milestone 4 items are explicitly documented as post-beta.
 
 ## Milestone 0 - Target And Support Contract
 
@@ -47,7 +47,7 @@ Status: complete for beta; continue validating behavior during real installs.
 
 ## Milestone 2 - Artix/OpenRC Base Layer
 
-Status: functional, but real-host validation is the main gap.
+Status: functional; core services validated on VM (2026-06-05). Real-hardware and optional profiles still pending.
 
 - [x] Use `rc-service` and `rc-update` for service management.
 - [x] Add OpenRC service manifests.
@@ -58,14 +58,14 @@ Status: functional, but real-host validation is the main gap.
 - [x] Add OpenRC portability check against runtime use of systemd-only commands.
 - [x] Add package availability validation before package install.
 - [x] Add hardware profile package stubs and OpenRC modules for AMD, Intel, NVIDIA, and laptop.
-- [ ] Validate all core package names on a fresh Artix OpenRC install.
+- [x] Validate all core package names on a fresh Artix OpenRC install.
 - [ ] Validate all optional package names on a fresh Artix OpenRC install.
-- [ ] Capture real-host service validation for `dbus`.
-- [ ] Capture real-host service validation for `elogind`.
-- [ ] Capture real-host service validation for `NetworkManager`.
-- [ ] Capture real-host service validation for `bluetoothd`.
-- [ ] Capture real-host validation for PipeWire and WirePlumber startup under Hyprland.
-- [ ] Capture real-host validation for XDG portals under Hyprland.
+- [x] Capture real-host service validation for `dbus`.
+- [x] Capture real-host service validation for `elogind`.
+- [x] Capture real-host service validation for `NetworkManager`.
+- [x] Capture real-host service validation for `bluetoothd`.
+- [x] Capture real-host validation for PipeWire and WirePlumber startup under Hyprland.
+- [x] Capture real-host validation for XDG portals under Hyprland.
 - [ ] Capture real-host validation for printing profile.
 - [ ] Capture real-host validation for Docker profile.
 - [ ] Confirm Intel hardware profile packages and module behavior.
@@ -116,7 +116,20 @@ Status: core desktop is present; polish and validation remain.
 
 ## Milestone 4 - Omarchy-Like User Experience
 
-Status: partially complete; this is the largest user-facing gap.
+Status: mostly complete; validated on VM (2026-06-05). Remaining items are deferred post-beta.
+
+### VM Validation (2026-06-05)
+
+```text
+Host: geoartix (Artix VM, VM)
+Startup mode: tty
+Quality gate: PASS
+Framework smoke: PASS
+Doctor: PASS
+Post-install smoke: PASS
+Milestone 2 validate: PASS
+Manual UX validation: PASS (menu, keybindings, theme, update, discoverability, core desktop)
+```
 
 - [x] Create pinned Omarchy parity audit.
 - [x] Classify differences using required parity, Artix/OpenRC adaptation, optional polish, intentional difference, unsupported for now, and unknown.
@@ -147,7 +160,7 @@ Status: partially complete; this is the largest user-facing gap.
 
 ## Milestone 5 - Maintenance, Repair, And Upgrade Tooling
 
-Status: strong foundation; needs recovery confidence.
+Status: strong foundation; repair coverage extended, new diagnostic commands added, reset boundaries documented.
 
 - [x] Add `scripts/doctor.sh`.
 - [x] Add post-install smoke script.
@@ -162,17 +175,17 @@ Status: strong foundation; needs recovery confidence.
 - [x] Add first-run idempotency validation.
 - [x] Add framework smoke test.
 - [x] Add quality gate.
-- [ ] Make `ahr repair --config` either apply safe fixes or clearly remain detect-only in all docs.
-- [ ] Add guided recovery for interrupted update runs.
-- [ ] Add guided recovery for skipped or failed migrations.
-- [ ] Add a validation bundle collection script.
-- [ ] Add command to print install state and last log path.
-- [ ] Add command to list config backups created by phase 4.
-- [ ] Add repair coverage for missing namespace links.
-- [ ] Add repair coverage for missing docs.
-- [ ] Add repair coverage for theme state/background fallback.
-- [ ] Add repair coverage for startup mode state.
-- [ ] Decide whether a full uninstall is too risky; if so, document manual reset boundaries instead.
+- [x] Make `ahr repair --config` clearly remain detect-only in all docs (usage, function output, RECOVERY_AND_RESET.md).
+- [x] Add guided recovery for interrupted update runs (enhanced `check_update_state` with numbered recovery steps).
+- [x] Add guided recovery for skipped or failed migrations (enhanced `check_migrations` with numbered recovery steps and log inspection).
+- [x] Add validation bundle collection script (`scripts/collect-validation-bundle.sh`).
+- [x] Add command to print install state and last log path (`ahr status`).
+- [x] Add command to list config backups created by phase 4 (`ahr list-backups`).
+- [x] Add repair coverage for missing namespace links (`ahr repair --namespace --apply`).
+- [x] Add repair coverage for missing docs (`ahr repair --docs` with guidance to re-run phase 4).
+- [x] Add repair coverage for theme state/background fallback (`ahr repair --theme --apply`).
+- [x] Add repair coverage for startup mode state (`ahr repair --startup`).
+- [x] Document manual reset boundaries and confirm full uninstall is out of scope (RECOVERY_AND_RESET.md).
 
 ## Milestone 6 - Documentation And Release Readiness
 

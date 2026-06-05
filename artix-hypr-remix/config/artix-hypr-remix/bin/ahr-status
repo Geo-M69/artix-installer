@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+FRAMEWORK_ROOT="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}"
+STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
+INSTALL_STATE_DIR="${AHR_INSTALL_STATE_DIR:-/var/lib/artix-hypr-remix/install-state}"
+INSTALL_LOG_FILE="${AHR_INSTALL_LOG_FILE:-/var/log/artix-hypr-remix-install.log}"
+INSTALL_LOG_FALLBACK="/tmp/artix-hypr-remix-install-*.log"
+LOCAL_BIN="$HOME/.local/bin"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr-status [options]
+
+Print install state, log paths, backup hints, and framework health summary.
+
+Options:
+  --all         Print all available status sections (default)
+  --install     Print installer state and log paths
+  --backups     Print config backup hints
+  --framework   Print framework paths and state
+  --quiet       Suppress headers, print key=value pairs only
+  -h, --help    Show this help
+EOF
+}
+
+quiet=false
+show_install=true
+show_backups=true
+show_framework=true
+
+while (( $# > 0 )); do
+  case "$1" in
+    --all) show_install=true; show_backups=true; show_framework=true ;;
+    --install) show_install=true; show_backups=false; show_framework=false ;;
+    --backups) show_install=false; show_backups=true; show_framework=false ;;
+    --framework) show_install=false; show_backups=false; show_framework=true ;;
+    --quiet) quiet=true ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf 'Unknown option: %s\n\n' "$1" >&2; usage >&2; exit 1 ;;
+  esac
+  shift
+done
+
+print_header() {
+  local label="$1"
+  if [[ "$quiet" == "false" ]]; then
+    printf '\n=== %s ===\n' "$label"
+  fi
+}
+
+print_kv() {
+  local key="$1"
+  local value="$2"
+  if [[ "$quiet" == "true" ]]; then
+    printf '%s=%s\n' "$key" "$value"
+  else
+    printf '%-30s %s\n' "$key:" "$value"
+  fi
+}
+
+if [[ "$show_install" == "true" ]]; then
+  print_header "Installer State"
+
+  if [[ -d "$INSTALL_STATE_DIR" ]]; then
+    print_kv "Install state dir" "$INSTALL_STATE_DIR"
+    last_phase=0
+    for f in "$INSTALL_STATE_DIR"/phase-*.completed; do
+      [[ -f "$f" ]] || continue
+      phase_num="$(sed 's/.*phase-\([0-9]*\)\.completed/\1/' <<< "$(basename "$f")")"
+      if (( phase_num > last_phase )); then
+        last_phase="$phase_num"
+      fi
+    done
+    print_kv "Last completed phase" "$last_phase"
+  else
+    print_kv "Install state dir" "NOT FOUND ($INSTALL_STATE_DIR)"
+  fi
+
+  if [[ -f "$INSTALL_LOG_FILE" ]]; then
+    print_kv "Install log" "$INSTALL_LOG_FILE"
+    print_kv "Install log size" "$(stat --printf='%s' "$INSTALL_LOG_FILE" 2>/dev/null || echo '?') bytes"
+  else
+    # Check fallback paths
+    fallback_found=false
+    shopt -s nullglob
+    for f in $INSTALL_LOG_FALLBACK; do
+      print_kv "Install log (fallback)" "$f"
+      fallback_found=true
+      break
+    done
+    shopt -u nullglob
+    if [[ "$fallback_found" == "false" ]]; then
+      print_kv "Install log" "NOT FOUND (expected: $INSTALL_LOG_FILE)"
+    fi
+  fi
+fi
+
+if [[ "$show_backups" == "true" ]]; then
+  print_header "Config Backups"
+
+  managed_roots=(
+    artix-hypr-remix fontconfig ghostty helix hypr
+    mako starship walker waybar yazi zsh
+  )
+  backup_count=0
+
+  for root in "${managed_roots[@]}"; do
+    shopt -s nullglob
+    for backup in "$HOME/.config/$root".bak.*; do
+      if [[ "$quiet" == "false" ]]; then
+        printf '  %s\n' "$backup"
+      fi
+      backup_count=$((backup_count + 1))
+    done
+    shopt -u nullglob
+  done
+
+  if (( backup_count == 0 )); then
+    if [[ "$quiet" == "false" ]]; then
+      printf '  (none found)\n'
+    fi
+    print_kv "Config backups found" "0"
+  else
+    print_kv "Config backups found" "$backup_count"
+  fi
+
+  # Also check dev baseline backups
+  dev_bak_count=0
+  shopt -s nullglob
+  for backup in "$HOME/.ssh/config.ahr-dev-baseline.bak"* \
+    "$HOME/.gnupg/gpg.conf.ahr-dev-baseline.bak"* \
+    "$HOME/.gnupg/gpg-agent.conf.ahr-dev-baseline.bak"*; do
+    dev_bak_count=$((dev_bak_count + 1))
+  done
+  shopt -u nullglob
+  if (( dev_bak_count > 0 )); then
+    print_kv "Dev baseline backups" "$dev_bak_count"
+  fi
+fi
+
+if [[ "$show_framework" == "true" ]]; then
+  print_header "Framework Paths"
+
+  print_kv "Framework root" "$FRAMEWORK_ROOT"
+  print_kv "State root" "$STATE_ROOT"
+  print_kv "Local bin" "$LOCAL_BIN"
+
+  if [[ -d "$FRAMEWORK_ROOT" ]]; then
+    cmd_count="$(find "$FRAMEWORK_ROOT/bin" -maxdepth 1 -type f -name 'ahr-*' 2>/dev/null | wc -l)"
+    print_kv "Framework commands" "$cmd_count"
+  fi
+
+  if [[ -d "$LOCAL_BIN" ]]; then
+    link_count="$(find "$LOCAL_BIN" -maxdepth 1 -type l -lname "$FRAMEWORK_ROOT/bin/*" 2>/dev/null | wc -l)"
+    print_kv "Namespace links" "$link_count"
+  fi
+
+  update_log="$STATE_ROOT/update.log"
+  if [[ -f "$update_log" ]]; then
+    print_kv "Update log" "$update_log"
+    print_kv "Update log size" "$(stat --printf='%s' "$update_log" 2>/dev/null || echo '?') bytes"
+  fi
+
+  update_status="$STATE_ROOT/update.status"
+  if [[ -f "$update_status" ]]; then
+    status_value="$(sed -nE 's/^status=(.*)$/\1/p' "$update_status" | head -n1)"
+    print_kv "Last update status" "${status_value:-unknown}"
+  fi
+
+  startup_mode_file="$STATE_ROOT/startup.mode"
+  if [[ -f "$startup_mode_file" ]]; then
+    print_kv "Startup mode" "$(<"$startup_mode_file")"
+  fi
+
+  migration_state="$STATE_ROOT/migrations"
+  if [[ -d "$migration_state" ]]; then
+    migration_count="$(find "$migration_state" -maxdepth 1 -type f ! -path '*/skipped/*' 2>/dev/null | wc -l)"
+    skipped_count="$(find "$migration_state/skipped" -maxdepth 1 -type f 2>/dev/null | wc -l)"
+    print_kv "Migration state files" "$migration_count"
+    if (( skipped_count > 0 )); then
+      print_kv "Skipped migrations" "$skipped_count"
+    fi
+  fi
+
+  first_run_marker="$STATE_ROOT/first-run.mode"
+  if [[ -f "$first_run_marker" ]]; then
+    print_kv "First-run mode" "enabled"
+  fi
+fi
+
+echo ""

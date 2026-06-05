@@ -24,6 +24,7 @@ run_theme=true
 run_docs=true
 run_migrations=true
 run_update_state=true
+run_startup=true
 run_config=true
 
 usage() {
@@ -41,7 +42,8 @@ Options:
   --docs          Check installed docs
   --migrations    Check migration state
   --update-state  Check update lock/log hints
-  --config        Check managed config presence and backup hints
+  --startup       Check startup mode state
+  --config        Check managed config presence and backup hints (detect-only)
   --quiet         Reduce success output
   -h, --help      Show this help
 EOF
@@ -100,6 +102,7 @@ enable_only_scope() {
     run_docs=false
     run_migrations=false
     run_update_state=false
+    run_startup=false
     run_config=false
     scope_requested=true
   fi
@@ -111,6 +114,7 @@ enable_all_scopes() {
   run_docs=true
   run_migrations=true
   run_update_state=true
+  run_startup=true
   run_config=true
   scope_requested=true
 }
@@ -124,6 +128,8 @@ check_namespace() {
     ahr-menu
     ahr-menu-keybindings
     ahr-repair
+    ahr-status
+    ahr-list-backups
     ahr-theme
     ahr-update
     ahr-update-available
@@ -295,6 +301,7 @@ check_docs() {
 check_migrations() {
   local migrate_cmd="$SCRIPT_DIR/ahr-migrate"
   local skipped_count=0
+  local migration_log="$MIGRATION_STATE_DIR/migrate.log"
 
   log
   log "Migration state checks"
@@ -306,7 +313,8 @@ check_migrations() {
 
   if [[ ! -d "$MIGRATION_STATE_DIR" ]]; then
     warn "migration state directory missing: $MIGRATION_STATE_DIR"
-    warn "Run first-run, post-boot hooks, or ahr migrate --status to initialize migration state."
+    warn "Migrations have not been initialized yet. This is normal for fresh installs."
+    warn "Run first-run setup or: ahr migrate --status"
   else
     log "OK: migration state directory exists: $MIGRATION_STATE_DIR"
   fi
@@ -318,7 +326,16 @@ check_migrations() {
   fi
 
   if (( skipped_count > 0 )); then
-    fail_check "skipped migrations present; review with ahr migrate --status and retry with ahr migrate --retry-skipped"
+    fail_check "skipped migrations present ($skipped_count)"
+    warn "Review migration log: $migration_log"
+    warn "View skipped migrations: ls -la $MIGRATION_SKIPPED_DIR/"
+    warn "Recovery steps:"
+    warn "  1. Review what went wrong: cat $migration_log"
+    warn "  2. Fix any underlying issues (missing packages, config drift, etc.)"
+    warn "  3. Retry skipped migrations: ahr migrate --retry-skipped"
+    warn "  4. If retry fails, inspect individual migration scripts in:"
+    warn "     $FRAMEWORK_ROOT/migrations/"
+    warn "  5. After fixing, re-run: ahr repair --migrations"
   else
     log "OK: no skipped migrations recorded"
   fi
@@ -335,23 +352,35 @@ check_update_state() {
     status_value="$(sed -nE 's/^status=(.*)$/\1/p' "$UPDATE_STATUS_FILE" | head -n1)"
     log "OK: last update status: ${status_value:-unknown} ($UPDATE_STATUS_FILE)"
     if [[ "$status_value" == "failed" ]]; then
-      warn "last update failed; review $UPDATE_LOG_FILE before retrying"
-      warn "safe next step: ahr update --dry-run"
+      warn "Last update run failed."
+      warn "Review the update log: $UPDATE_LOG_FILE"
+      warn "Guided recovery:"
+      warn "  1. Check what failed: tail -20 $UPDATE_LOG_FILE"
+      warn "  2. Fix any underlying issues (network, package conflicts, disk space)"
+      warn "  3. Dry-run before retrying: ahr update --dry-run"
+      warn "  4. If ready, retry: ahr update"
+      warn "  5. If the log shows partial success, run: ahr migrate"
     fi
   else
-    warn "update status file not found yet: $UPDATE_STATUS_FILE"
+    warn "Update status file not found: $UPDATE_STATUS_FILE"
+    warn "No update run has completed yet. Run: ahr update"
   fi
 
   if [[ -f "$UPDATE_RUN_FILE" ]]; then
     pid="$(sed -nE 's/^pid=([0-9]+)$/\1/p' "$UPDATE_RUN_FILE" | head -n1)"
     if [[ -n "$pid" && -d "/proc/$pid" ]]; then
-      warn "update run marker exists and pid is still active: $UPDATE_RUN_FILE (pid=$pid)"
+      warn "Update run marker found and PID $pid appears active."
+      warn "Either wait for it to finish, or if you are sure it is stuck:"
+      warn "  kill $pid && ahr repair --update-state --apply"
     else
-      repairable_issue "stale or interrupted update run marker: $UPDATE_RUN_FILE"
+      repairable_issue "Stale/interrupted update run marker: $UPDATE_RUN_FILE"
+      warn "Guided recovery:"
+      warn "  1. Verify no update is running: ps aux | grep ahr-update"
+      warn "  2. Review log for partial success: cat $UPDATE_LOG_FILE"
+      warn "  3. Run migrations if packages were updated: ahr migrate"
+      warn "  4. Apply fix (removes stale marker): ahr repair --update-state --apply"
       if [[ "$apply" == "true" ]]; then
         run_or_preview "remove stale update run marker" rm -f "$UPDATE_RUN_FILE"
-      else
-        warn "review $UPDATE_LOG_FILE, then run: ahr repair --update-state --apply"
       fi
     fi
   else
@@ -360,13 +389,15 @@ check_update_state() {
 
   if [[ -d "$UPDATE_LOCK_DIR" ]]; then
     if [[ -n "$pid" && -d "/proc/$pid" ]]; then
-      warn "mkdir-style update lock exists while pid appears active: $UPDATE_LOCK_DIR"
+      warn "mkdir-style update lock exists while PID $pid appears active."
     else
-      repairable_issue "possible stale mkdir-style update lock directory: $UPDATE_LOCK_DIR"
+      repairable_issue "Possible stale mkdir-style update lock directory: $UPDATE_LOCK_DIR"
+      warn "Guided recovery:"
+      warn "  1. Confirm no update is running: ps aux | grep ahr-update"
+      warn "  2. If stale, remove lock: ahr repair --update-state --apply"
+      warn "  3. Then run: ahr update --dry-run"
       if [[ "$apply" == "true" ]]; then
         run_or_preview "remove stale mkdir-style update lock directory" rmdir "$UPDATE_LOCK_DIR"
-      else
-        warn "check for a running ahr-update process, then run: ahr repair --update-state --apply"
       fi
     fi
   else
@@ -380,6 +411,57 @@ check_update_state() {
   fi
 }
 
+check_startup_mode() {
+  local startup_mode_file="$STATE_ROOT/startup.mode"
+  local session_launcher="$HOME/.config/artix-hypr-remix/bin/start-hyprland-session.sh"
+  local tty_launcher="$HOME/.bash_profile"
+  local greetd_config="/etc/greetd/config.toml"
+  local mode_value=""
+
+  log
+  log "Startup mode checks"
+
+  if [[ -f "$startup_mode_file" ]]; then
+    mode_value="$(<"$startup_mode_file")"
+    log "OK: recorded startup mode: $mode_value"
+  else
+    warn "Startup mode state file missing: $startup_mode_file"
+    warn "This may be normal if the installer has not configured startup yet."
+    warn "Run installer phase 5: sudo ./install.sh --phase 5 --user <username>"
+  fi
+
+  if [[ ! -x "$session_launcher" ]]; then
+    fail_check "Session launcher not executable or missing: $session_launcher"
+    warn "Re-run installer phase 4: sudo ./install.sh --phase 4 --user <username> -y"
+  else
+    log "OK: session launcher present: $session_launcher"
+  fi
+
+  # Check TTY startup path
+  if [[ -f "$tty_launcher" ]] && grep -q 'start-hyprland-session' "$tty_launcher" 2>/dev/null; then
+    log "OK: TTY startup configured in $tty_launcher"
+  else
+    warn "TTY startup not detected in $tty_launcher"
+    warn "If using TTY mode, re-run installer phase 5 with --startup-mode tty"
+  fi
+
+  # Check greetd config if applicable
+  if [[ "$mode_value" == "greetd" ]] || [[ -f "$greetd_config" ]]; then
+    if [[ -f "$greetd_config" ]]; then
+      if grep -q 'artix-hypr-remix' "$greetd_config" 2>/dev/null || grep -q 'start-hyprland-session' "$greetd_config" 2>/dev/null; then
+        log "OK: greetd configured for Artix Hypr Remix: $greetd_config"
+      else
+        warn "greetd config exists but does not reference AHR session launcher: $greetd_config"
+      fi
+    else
+      warn "greetd config not found (startup mode is greetd): $greetd_config"
+      warn "Re-run installer phase 5 with --startup-mode greetd"
+    fi
+  fi
+
+  log "OK: startup mode checks complete"
+}
+
 while (( $# > 0 )); do
   case "$1" in
     --dry-run) apply=false ;;
@@ -390,6 +472,7 @@ while (( $# > 0 )); do
     --docs) enable_only_scope; run_docs=true ;;
     --migrations) enable_only_scope; run_migrations=true ;;
     --update-state) enable_only_scope; run_update_state=true ;;
+    --startup) enable_only_scope; run_startup=true ;;
     --config) enable_only_scope; run_config=true ;;
     --quiet) quiet=true ;;
     -h|--help) usage; exit 0 ;;
@@ -426,6 +509,10 @@ fi
 
 if [[ "$run_config" == "true" ]]; then
   check_config_drift
+fi
+
+if [[ "$run_startup" == "true" ]]; then
+  check_startup_mode
 fi
 
 if (( status == 0 )); then

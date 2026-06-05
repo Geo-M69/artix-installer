@@ -41,6 +41,8 @@ declare -a commands=(
   ahr-update
   ahr-update-available
   ahr-repair
+  ahr-status
+  ahr-list-backups
   ahr-voxtype-model
   ahr-voxtype-config
   ahr-toggle-idle
@@ -89,6 +91,8 @@ declare -a aliases=(
   "omarchy-update:ahr-update"
   "omarchy-update-available:ahr-update-available"
   "omarchy-repair:ahr-repair"
+  "omarchy-status:ahr-status"
+  "omarchy-list-backups:ahr-list-backups"
   "omarchy-voxtype-model:ahr-voxtype-model"
   "omarchy-voxtype-config:ahr-voxtype-config"
   "omarchy-toggle-idle:ahr-toggle-idle"

@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr-list-backups [options]
+
+List config backups created by installer phase 4 and dev baseline setup.
+
+Options:
+  --config      Show only phase-4 config backups (default)
+  --dev         Show only dev baseline backups
+  --all         Show all known backup types
+  --count       Print backup count only
+  -h, --help    Show this help
+
+Backup naming conventions:
+  Phase-4 backups:  ~/.config/<name>.bak.<timestamp>[.N]
+  Dev baseline:     ~/.ssh/config.ahr-dev-baseline.bak[.N]
+                    ~/.gnupg/gpg.conf.ahr-dev-baseline.bak[.N]
+                    ~/.gnupg/gpg-agent.conf.ahr-dev-baseline.bak[.N]
+
+Backups are timestamped by the installer. Do not delete them until
+the repaired or replaced configuration has been validated.
+EOF
+}
+
+show_config=false
+show_dev=false
+count_only=false
+show_all=true
+
+while (( $# > 0 )); do
+  case "$1" in
+    --config) show_all=false; show_config=true ;;
+    --dev) show_all=false; show_dev=true ;;
+    --all) show_all=true ;;
+    --count) count_only=true ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf 'Unknown option: %s\n\n' "$1" >&2; usage >&2; exit 1 ;;
+  esac
+  shift
+done
+
+if [[ "$show_all" == "true" ]]; then
+  show_config=true
+  show_dev=true
+fi
+
+declare -a managed_roots=(
+  artix-hypr-remix fontconfig ghostty helix hypr
+  mako starship walker waybar yazi zsh
+)
+
+total_count=0
+
+if [[ "$show_config" == "true" ]]; then
+  if [[ "$count_only" == "false" ]]; then
+    printf 'Phase-4 config backups:\n'
+  fi
+
+  for root in "${managed_roots[@]}"; do
+    shopt -s nullglob
+    for backup in "$HOME/.config/$root".bak.*; do
+      if [[ "$count_only" == "false" ]]; then
+        printf '  %s\n' "$backup"
+      fi
+      total_count=$((total_count + 1))
+    done
+    shopt -u nullglob
+  done
+
+  if [[ "$count_only" == "false" ]] && (( total_count == 0 )); then
+    printf '  (none found)\n'
+  fi
+fi
+
+dev_count=0
+if [[ "$show_dev" == "true" ]]; then
+  if [[ "$count_only" == "false" ]]; then
+    printf '\nDev baseline backups:\n'
+  fi
+
+  shopt -s nullglob
+  for backup in "$HOME/.ssh/config.ahr-dev-baseline.bak"* \
+    "$HOME/.gnupg/gpg.conf.ahr-dev-baseline.bak"* \
+    "$HOME/.gnupg/gpg-agent.conf.ahr-dev-baseline.bak"*; do
+    if [[ "$count_only" == "false" ]]; then
+      printf '  %s\n' "$backup"
+    fi
+    dev_count=$((dev_count + 1))
+    total_count=$((total_count + 1))
+  done
+  shopt -u nullglob
+
+  if [[ "$count_only" == "false" ]] && (( dev_count == 0 )); then
+    printf '  (none found)\n'
+  fi
+fi
+
+if [[ "$count_only" == "true" ]]; then
+  printf '%d\n' "$total_count"
+else
+  printf '\nTotal backups: %d\n' "$total_count"
+  printf '\nHint: To restore a backup, copy it back to the original location:\n'
+  printf '  cp <backup_path> <original_config_path>\n'
+  printf 'Example: cp ~/.config/hypr/hyprland.conf.bak.20250101-120000 ~/.config/hypr/hyprland.conf\n'
+fi
