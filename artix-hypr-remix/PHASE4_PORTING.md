@@ -84,6 +84,26 @@ When adding or changing config commands:
 2. If a command is optional, gate it in runtime shell scripts instead of hard failing session startup.
 3. Prefer distro-neutral commands over Omarchy-specific wrappers.
 
+## Phase 4 Deployment Strategy (Beta Decision)
+
+**Decision:** Keep full top-level replace for beta.
+
+Phase 4 uses unconditional top-level replacement:
+- Each directory in `config/` is copied into `~/.config/<name>`.
+- Existing directories are backed up with a `.bak.<timestamp>` suffix before replacement.
+- The `confirm_dotfile_overwrite_window` function lists all paths that will be replaced and asks for confirmation (unless `--yes` is used).
+
+**Why full replace is correct for beta:**
+1. **Predictability** - users always get a known config state after phase 4.
+2. **Safety** - timestamped backups are never deleted by the installer.
+3. **Simplicity** - no partial-state bugs from selective merge or diff logic.
+4. **Recovery** - users can restore any file manually from the `.bak.<timestamp>` copy.
+
+**When selective config restore may be added (post-beta):**
+- Per-component restore commands (e.g. `ahr config restore waybar`).
+- Diff-based merge for users who have customized individual files.
+- These require careful edge-case handling and are deferred.
+
 ## Next Steps
 
 - Iterate each config file on real Artix hardware.

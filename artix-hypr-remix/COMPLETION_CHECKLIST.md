@@ -4,11 +4,11 @@ This checklist tracks the remaining work needed to reach the target:
 
 > An Artix OpenRC-native Omarchy-equivalent Hyprland desktop setup with a safe, repeatable installer and a polished first-login experience.
 
-Current estimate: about 76% complete overall, with the project in Milestone 6 beta-readiness work.
+Current estimate: about 80% complete overall, with the project in Milestone 6 beta-readiness work. Milestone 1 is now addressed for beta; Milestone 0 has only the ongoing support-matrix update loop remaining.
 
 ## Milestone 0 - Target And Support Contract
 
-Status: mostly complete.
+Status: mostly complete; support-matrix updates remain ongoing after each real-host validation run.
 
 - [x] State the project target in README.
 - [x] Define supported base system: Artix Linux with OpenRC.
@@ -21,11 +21,11 @@ Status: mostly complete.
 - [x] Explicitly defer ISO/profile distribution work.
 - [x] Publish beta support matrix.
 - [ ] Keep support matrix updated after every real-host validation run.
-- [ ] Add exact tested Artix image/date/repository state to release notes.
+- [x] Add exact tested Artix image/date/repository state to release notes.
 
 ## Milestone 1 - Safe, Repeatable Installer
 
-Status: mostly complete; remaining work is hardening and UX clarity.
+Status: complete for beta; continue validating behavior during real installs.
 
 - [x] Use strict shell behavior in installer entrypoint.
 - [x] Add installer logging with fallback path.
@@ -39,11 +39,11 @@ Status: mostly complete; remaining work is hardening and UX clarity.
 - [x] Ask before replacing existing user config unless `--yes` is supplied.
 - [x] Add dry-run behavior for system-changing phases.
 - [x] Add post-install smoke validation in phase 7.
-- [ ] Add clearer remediation text for each preflight failure.
-- [ ] Add a `--backup-only` or documented manual backup command for cautious users.
-- [ ] Add an installer summary at the end listing changed phases, backup paths, log path, and next command.
-- [ ] Add a re-run guide showing safe common cases: phase 4 reapply, phase 6 retry, phase 7 framework repair.
-- [ ] Decide whether phase 4 should keep full top-level replace behavior for beta or gain selective config restore later.
+- [x] Add clearer remediation text for each preflight failure.
+- [x] Add a `--backup-only` or documented manual backup command for cautious users.
+- [x] Add an installer summary at the end listing changed phases, backup paths, log path, and next command.
+- [x] Add a re-run guide showing safe common cases: phase 4 reapply, phase 6 retry, phase 7 framework repair.
+- [x] Decide whether phase 4 should keep full top-level replace behavior for beta or gain selective config restore later.
 
 ## Milestone 2 - Artix/OpenRC Base Layer
 

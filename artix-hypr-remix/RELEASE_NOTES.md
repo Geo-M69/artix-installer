@@ -6,6 +6,25 @@
 
 ---
 
+## Tested base system
+
+The following base system was used for the current validation run:
+
+| Detail | Value |
+|--------|-------|
+| Distribution | Artix Linux (OpenRC) |
+| Image | `artix-base-openrc-20250501-x86_64.iso` |
+| Validation date | 2026-06-05 |
+| Validation host | `geoartix` (VM, QEMU/KVM, Virtio GPU) |
+| Image source | [artixlinux.org/download](https://artixlinux.org/download) |
+| Package state | Fresh `pacman -Syu` prior to install; live Artix repos as of 2026-06-05 |
+
+> **Note:** Package availability depends on live Artix repository state at install time.
+> The beta release will pin the exact ISO filename and a recommended minimum `pacman -Syu` date.
+> Additional validation bundles (Intel, NVIDIA, laptop) are needed before broader support claims.
+
+---
+
 ## What's included
 
 This beta release provides an opinionated, phase-based installer that configures a complete Hyprland desktop on Artix Linux (OpenRC). The installer is idempotent and safe to re-run.

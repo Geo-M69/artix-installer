@@ -5,19 +5,29 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh" || true
 backup_path_if_exists() {
   local target_path="$1"
   local dry_run="${2:-false}"
-  local backup_path
+  local backup_path counter timestamp
 
   if [[ ! -e "$target_path" && ! -L "$target_path" ]]; then
     return 0
   fi
 
-  backup_path="${target_path}.bak.$(date +%s)"
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+  backup_path="${target_path}.bak.$timestamp"
+  counter=1
+  while [[ -e "$backup_path" || -L "$backup_path" ]]; do
+    backup_path="${target_path}.bak.$timestamp.$counter"
+    counter=$((counter + 1))
+  done
+
   if [[ "$dry_run" == "true" ]]; then
     info "Dry-run: would back up $target_path -> $backup_path"
     return 0
   fi
 
   mv "$target_path" "$backup_path"
+  if declare -p AHR_CREATED_BACKUPS >/dev/null 2>&1; then
+    AHR_CREATED_BACKUPS+=("$backup_path")
+  fi
   info "Backed up $target_path -> $backup_path"
 }
 

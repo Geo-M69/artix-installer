@@ -118,13 +118,39 @@ Useful options:
     sudo ./install.sh --phase 3 --docker-profile on
     sudo ./install.sh --phase 2 --printing-profile on
     sudo ./install.sh --phase 3 --printing-profile on
+
+Re-run guide (safe common cases):
+
+    # Back up existing config without replacing it
+    sudo ./install.sh --backup-only --user <username>
+
+    # Re-apply config deployment (phase 4); creates timestamped backups first
+    sudo ./install.sh --phase 4 --user <username> -y
+
+    # Retry AUR/Flatpak installation (phase 6); skips already-installed packages
     sudo ./install.sh --phase 6 --user <username>
-    sudo ./install.sh --phase 6 --user <username> --skip-aur
+
+    # Retry AUR only
     sudo ./install.sh --phase 6 --user <username> --skip-flatpak
+
+    # Retry Flatpak only
+    sudo ./install.sh --phase 6 --user <username> --skip-aur
+
+    # Re-run post-install framework repair (phase 7)
+    sudo ./install.sh --phase 7 --user <username>
+
+    # Resume with specific phase window
+    sudo ./install.sh --from-phase 4 --phase 7 --user <username>
+
+Additional phase 6 Flatpak profile examples:
+
     sudo ./install.sh --phase 6 --user <username> --flatpak-profile default
     sudo ./install.sh --phase 6 --user <username> --flatpak-profile optional
     sudo ./install.sh --phase 6 --user <username> --flatpak-profile all
     sudo ./install.sh --phase 6 --user <username> --flatpak-profile none
+
+More examples:
+
     sudo ./install.sh --phase 7 --user <username>
     sudo ./install.sh --phase 8 --user <username> --dev-baseline on
     sudo ./install.sh --from-phase 6 --phase 7 --user <username>

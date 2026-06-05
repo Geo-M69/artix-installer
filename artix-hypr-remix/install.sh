@@ -28,6 +28,7 @@ FROM_PHASE=1
 FROM_PHASE_EXPLICIT=false
 ASSUME_YES=false
 DRY_RUN=false
+BACKUP_ONLY=false
 SKIP_AUR=false
 SKIP_FLATPAK=false
 STARTUP_MODE="tty"
@@ -43,6 +44,7 @@ HOST_POLICY="${AHR_HOST_POLICY:-artix}"
 INSTALL_LOG_FILE="${AHR_INSTALL_LOG_FILE:-/var/log/artix-hypr-remix-install.log}"
 INSTALL_STATE_DIR="${AHR_INSTALL_STATE_DIR:-/var/lib/artix-hypr-remix/install-state}"
 ACTIVE_INSTALL_LOG_FILE=""
+AHR_CREATED_BACKUPS=()
 
 install_error_trap() {
 	local line_no="${1:-unknown}"
@@ -86,6 +88,7 @@ Options:
 	--skip-aur    Skip phase 6 AUR install even when phase includes it
 	--skip-flatpak Skip Flatpak profile install in phase 6
 	--dry-run     Print planned actions without changing the system
+	--backup-only Run only Phase 4 backups, then exit (no config replacement)
 	-y, --yes     Do not ask for confirmation
 	-h, --help    Show this help
 EOF
@@ -603,7 +606,8 @@ run_preflight() {
 		if [[ "$DRY_RUN" == true ]]; then
 			warn "Dry-run without root: system-changing steps are not executed"
 		else
-			error "Please run as root (or with sudo)."
+			remediate "Please run as root (or with sudo)." \
+				"Re-run with: sudo ./install.sh [options]"$'\n'"For phases 4-8, pass --user <username> if sudo cannot infer the desktop user."
 		fi
 	fi
 
@@ -618,59 +622,75 @@ run_preflight() {
 			;;
 		artix)
 			if [[ ! -f /etc/artix-release ]]; then
-				error "Host policy requires Artix (/etc/artix-release missing)."
+				remediate "Host policy requires Artix (/etc/artix-release missing)." \
+					"This installer targets Artix Linux with OpenRC."$'\n'"If this is a maintenance/test run, use --host-policy any only when you understand the risk."
 			fi
 			;;
 		vm)
 			if [[ ! -f /etc/artix-release ]]; then
-				error "Host policy 'vm' requires Artix (/etc/artix-release missing)."
+				remediate "Host policy 'vm' requires Artix (/etc/artix-release missing)." \
+					"Use --host-policy vm only on an Artix VM. For maintenance/testing outside Artix, use --host-policy any."
 			fi
 
 			hardware_probe
 			if [[ "$HARDWARE_IS_VIRTUALIZED" != "true" ]]; then
-				error "Host policy 'vm' requires virtualization."
+				remediate "Host policy 'vm' requires virtualization." \
+					"Use --host-policy artix for real hardware, or --host-policy any for maintenance/testing bypasses."
 			fi
 			;;
 		*)
-			error "Unknown effective host policy: $effective_host_policy"
+			remediate "Unknown effective host policy: $effective_host_policy" \
+				"Valid host policies are: artix, vm, and any. Check --host-policy or AHR_HOST_POLICY."
 			;;
 	esac
 
-	require_command pacman
-	require_command rc-update
-	require_command rc-service
+	if phase_window_overlaps 2 2 || phase_window_overlaps 6 6 || { [[ "$STARTUP_MODE" == "greetd" ]] && phase_window_overlaps 5 5; }; then
+		require_command pacman
+	fi
+	if phase_window_overlaps 3 3 || { [[ "$STARTUP_MODE" == "greetd" ]] && phase_window_overlaps 5 5; }; then
+		require_command rc-update
+		require_command rc-service
+	fi
 	require_command id
 	require_command getent
 	require_command bash
 
 	if phase_window_overlaps 2 2; then
-		[[ -d "$PACKAGES_DIR" ]] || error "Packages directory is missing: $PACKAGES_DIR"
+		[[ -d "$PACKAGES_DIR" ]] || remediate "Packages directory is missing: $PACKAGES_DIR" \
+			"Run the installer from a complete artix-hypr-remix checkout. Expected: packages/ next to install.sh."
 	fi
 
 	if phase_window_overlaps 3 3; then
-		[[ -f "$SERVICES_DIR/openrc-default.txt" ]] || error "Required OpenRC service manifest is missing: $SERVICES_DIR/openrc-default.txt"
+		[[ -f "$SERVICES_DIR/openrc-default.txt" ]] || remediate "Required OpenRC service manifest is missing: $SERVICES_DIR/openrc-default.txt" \
+			"Restore services/openrc-default.txt or re-clone the repository."
 	fi
 
 	if phase_window_overlaps 4 8; then
-		[[ -d "$CONFIG_DIR" ]] || error "Config source directory is missing: $CONFIG_DIR"
+		[[ -d "$CONFIG_DIR" ]] || remediate "Config source directory is missing: $CONFIG_DIR" \
+			"Restore config/ or re-clone the repository."
 		resolve_target_user
 
 		if [[ "$TARGET_HOME" == "/" ]]; then
-			error "Refusing to target home directory '/'. Re-run with a real desktop user via --user <name>."
+			remediate "Refusing to target home directory '/'. Re-run with a real desktop user via --user <name>." \
+				"Specify a non-root desktop user: sudo ./install.sh --user <username>"
 		fi
 
 		if [[ ! -d "$TARGET_HOME" ]]; then
-			error "Resolved target home is not a directory: $TARGET_HOME"
+			remediate "Resolved target home is not a directory: $TARGET_HOME" \
+				"Create or fix the desktop user home, then re-run with: sudo ./install.sh --user <username>"
 		fi
 	fi
 
 	if phase_window_overlaps 5 8; then
-		[[ -f "$CONFIG_DIR/artix-hypr-remix/bin/start-hyprland-session.sh" ]] || error "Shared Hyprland session launcher source is missing from repo config/"
+		[[ -f "$CONFIG_DIR/artix-hypr-remix/bin/start-hyprland-session.sh" ]] || remediate "Shared Hyprland session launcher source is missing from repo config/" \
+			"Restore config/artix-hypr-remix/bin/start-hyprland-session.sh or re-clone the repository."
 	fi
 
 	if phase_window_overlaps 7 8; then
-		[[ -f "$SCRIPT_DIR/scripts/post-install-smoke.sh" ]] || error "Post-install validation script is missing: $SCRIPT_DIR/scripts/post-install-smoke.sh"
-		[[ -f "$CONFIG_DIR/artix-hypr-remix/bin/first-run.sh" ]] || error "First-run framework source is missing from repo config/"
+		[[ -f "$SCRIPT_DIR/scripts/post-install-smoke.sh" ]] || remediate "Post-install validation script is missing: $SCRIPT_DIR/scripts/post-install-smoke.sh" \
+			"Restore scripts/post-install-smoke.sh or re-clone the repository."
+		[[ -f "$CONFIG_DIR/artix-hypr-remix/bin/first-run.sh" ]] || remediate "First-run framework source is missing from repo config/" \
+			"Restore config/artix-hypr-remix/bin/first-run.sh or re-clone the repository."
 	fi
 
 	info "Preflight checks passed"
@@ -1052,6 +1072,39 @@ run_dev_baseline_phase() {
 	apply_dev_baseline "$TARGET_USER" "$TARGET_HOME" "$DRY_RUN"
 }
 
+run_backup_only() {
+	info "=== Backup-only mode ==="
+	info "Creating config backups without replacing existing files."
+	resolve_target_user
+
+	local -a existing_paths=()
+	local destination
+	mapfile -t existing_paths < <(collect_existing_config_destinations "$CONFIG_DIR" "$TARGET_HOME")
+
+	if [[ "${#existing_paths[@]}" -eq 0 ]]; then
+		info "No existing config paths found to back up. Nothing to do."
+		return 0
+	fi
+
+	info "Backing up ${#existing_paths[@]} existing config path(s):"
+	printf '  - %s\n' "${existing_paths[@]}"
+
+	for destination in "${existing_paths[@]}"; do
+		backup_path_if_exists "$destination" false
+	done
+
+	info ""
+	if [[ "${#AHR_CREATED_BACKUPS[@]}" -gt 0 ]]; then
+		info "Created backups:"
+		printf '  - %s\n' "${AHR_CREATED_BACKUPS[@]}"
+	fi
+	info ""
+	info "Your existing configs are preserved (nothing was replaced)."
+	info "When ready, run the full installer with config deployment:"
+	info "  sudo ./install.sh --phase 4 --user $TARGET_USER -y"
+	info "=== Backup-only complete ==="
+}
+
 run_phase_by_number() {
 	local phase="$1"
 
@@ -1168,6 +1221,10 @@ while [[ "$#" -gt 0 ]]; do
 		--dry-run)
 			DRY_RUN=true
 			;;
+		--backup-only)
+			BACKUP_ONLY=true
+			DRY_RUN=false
+			;;
 		-y|--yes)
 			ASSUME_YES=true
 			;;
@@ -1211,6 +1268,14 @@ fi
 
 if [[ "$HOST_POLICY" != "artix" ]]; then
 	info "Host policy override: $HOST_POLICY"
+fi
+
+if [[ "$BACKUP_ONLY" == true ]]; then
+	FROM_PHASE=4
+	TARGET_PHASE=4
+	run_preflight
+	run_backup_only
+	exit 0
 fi
 
 if [[ "$ASSUME_YES" == false ]]; then
@@ -1257,5 +1322,98 @@ for (( phase=FROM_PHASE; phase<=TARGET_PHASE; phase++ )); do
 	run_phase_by_number "$phase"
 done
 
-info "Completed requested phases ($FROM_PHASE..$TARGET_PHASE)"
-info "Installer phase run finished"
+print_install_summary() {
+	local -a completed_phases=()
+	local label phase
+
+	for (( phase=FROM_PHASE; phase<=TARGET_PHASE; phase++ )); do
+		if state_phase_completed "$phase"; then
+			completed_phases+=("$phase")
+		fi
+	done
+
+	local phase_labels=(
+		[1]="Preflight checks"
+		[2]="Package installation"
+		[3]="OpenRC services"
+		[4]="Config deployment"
+		[5]="Startup mode"
+		[6]="AUR + Flatpak"
+		[7]="Post-install framework"
+		[8]="Dev baseline"
+	)
+
+	info ""
+	info "=============================================="
+	info "         Installer Complete"
+	info "=============================================="
+	info ""
+
+	if [[ "${#completed_phases[@]}" -gt 0 ]]; then
+		info "Completed phases:"
+		for phase in "${completed_phases[@]}"; do
+			label="${phase_labels[$phase]:-Phase $phase}"
+			info "  [$phase/8] $label"
+		done
+		info ""
+	fi
+
+	info "Log file:       $ACTIVE_INSTALL_LOG_FILE"
+	info "State dir:      $INSTALL_STATE_DIR"
+	info "Target user:    ${TARGET_USER:-<not set>}"
+	if [[ -n "$TARGET_HOME" ]]; then
+		info "Target home:    $TARGET_HOME"
+	fi
+	info "Startup mode:   $STARTUP_MODE"
+	if [[ "$DOCKER_PROFILE" == "on" ]]; then
+		info "Docker profile: enabled"
+	fi
+	if [[ "$PRINTING_PROFILE" == "on" ]]; then
+		info "Printing:       enabled"
+	fi
+	info ""
+
+	info "Next steps:"
+	if (( TARGET_PHASE >= 4 && FROM_PHASE <= 4 )); then
+		if [[ "${#AHR_CREATED_BACKUPS[@]}" -gt 0 ]]; then
+			info "  - Config backups created:"
+			printf '      %s\n' "${AHR_CREATED_BACKUPS[@]}"
+		else
+			info "  - Config backups: none created for this run"
+		fi
+	fi
+	if state_phase_completed 4; then
+		info "  - Re-apply config (replaces with fresh backup):"
+		info "      sudo ./install.sh --phase 4 --user ${TARGET_USER:-<username>} -y"
+	fi
+	if state_phase_completed 6; then
+		info "  - Re-run AUR/Flatpak phase:"
+		info "      sudo ./install.sh --phase 6 --user ${TARGET_USER:-<username>}"
+	fi
+	if state_phase_completed 7; then
+		info "  - Re-run post-install framework repair:"
+		info "      sudo ./install.sh --phase 7 --user ${TARGET_USER:-<username>}"
+		info "  - After login, run: ahr repair"
+	fi
+	if state_phase_completed 5; then
+		if [[ "$STARTUP_MODE" != "greetd" ]]; then
+			info "  - Log out and log back in (or reboot) to start your Hyprland session."
+		else
+			info "  - Reboot to start greetd and launch Hyprland."
+		fi
+	elif [[ "$BACKUP_ONLY" != "true" ]]; then
+		info "  - Continue with remaining phases to complete setup."
+	fi
+	info ""
+	info "  - Check health:   ahr doctor"
+	info "  - Check updates:  ahr update-available"
+	info "  - View help:      ahr help"
+	info ""
+	if [[ "$ACTIVE_INSTALL_LOG_FILE" == /tmp/* ]]; then
+		warn "Log file is under /tmp (fallback path). Copy or preserve it if needed:"
+		warn "  sudo cp $ACTIVE_INSTALL_LOG_FILE /var/log/"
+	fi
+	info "=============================================="
+}
+
+print_install_summary
