@@ -547,10 +547,10 @@ check_wallpaper_runtime_state() {
   theme_state_file="$target_home/.config/artix-hypr-remix/current/theme.name"
   if [[ -s "$theme_state_file" ]]; then
     pass "theme state present: $theme_state_file"
-  elif [[ "$hyprland_running" == "true" ]]; then
-    fail "theme state missing or empty during active Hyprland session: $theme_state_file"
   elif [[ "$first_run_pending" == "true" ]]; then
     warn_msg "theme state missing while first-run setup is pending: $theme_state_file"
+  elif [[ "$hyprland_running" == "true" ]]; then
+    fail "theme state missing or empty during active Hyprland session: $theme_state_file"
   else
     fail "theme state missing or empty after first-run setup: $theme_state_file"
   fi
