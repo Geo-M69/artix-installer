@@ -1,5 +1,4 @@
-# Artix Hypr Remix zsh baseline
-export ZDOTDIR="$HOME/.config/zsh"
+# Artix Hypr Remix bash baseline
 
 # AHR namespace commands (ahr, ahr-theme, ahr-menu, etc.) are in ~/.local/bin
 export PATH="$HOME/.local/bin:$PATH"
@@ -12,13 +11,13 @@ alias ll='eza -lah --group-directories-first --icons=auto'
 alias cat='bat --style=plain'
 
 if command -v zoxide >/dev/null 2>&1; then
-  eval "$(zoxide init zsh)"
+  eval "$(zoxide init bash)"
 fi
 
 if command -v fzf >/dev/null 2>&1; then
-  source <(fzf --zsh)
+  eval "$(fzf --bash)"
 fi
 
 if command -v starship >/dev/null 2>&1; then
-  eval "$(starship init zsh)"
+  eval "$(starship init bash)"
 fi
