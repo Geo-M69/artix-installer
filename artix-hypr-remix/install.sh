@@ -23,6 +23,28 @@ source "$LIB_DIR/post_install.sh"
 source "$LIB_DIR/dev_baseline.sh"
 source "$LIB_DIR/state.sh"
 
+# --- Auto-elevate with sudo if not already root ---
+# This lets users run ./install.sh directly instead of sudo ./install.sh.
+# The password is entered once at the sudo prompt, avoiding repeated prompts
+# across separate installer invocations.
+
+# Skip auto-elevation for --help so harmless help queries don't trigger a
+# password prompt.
+_ahr_skip_sudo=false
+for _ahr_arg in "$@"; do
+	case "$_ahr_arg" in
+		-h|--help) _ahr_skip_sudo=true; break ;;
+	esac
+done
+
+if [[ "$(id -u)" -ne 0 ]] && [[ "${AHR_NO_SUDO:-0}" != "1" ]] && ! $_ahr_skip_sudo; then
+	exec sudo \
+		--preserve-env=AHR_HOST_POLICY,AHR_INSTALL_LOG_FILE,AHR_INSTALL_STATE_DIR,AHR_ALLOW_NON_VM_TESTING \
+		"$SCRIPT_DIR/install.sh" "$@"
+fi
+unset _ahr_skip_sudo _ahr_arg
+# --------------------------------------------------
+
 TARGET_PHASE=7
 FROM_PHASE=1
 FROM_PHASE_EXPLICIT=false
@@ -607,7 +629,7 @@ run_preflight() {
 			warn "Dry-run without root: system-changing steps are not executed"
 		else
 			remediate "Please run as root (or with sudo)." \
-				"Re-run with: sudo ./install.sh [options]"$'\n'"For phases 4-8, pass --user <username> if sudo cannot infer the desktop user."
+				"This script auto-elevates with sudo when run as a normal user."$'\n'"If you see this, sudo is unavailable. Re-run as root, or set AHR_NO_SUDO=1 to suppress auto-elevation."$'\n'"For phases 4-8, pass --user <username>."
 		fi
 	fi
 
@@ -672,12 +694,12 @@ run_preflight() {
 
 		if [[ "$TARGET_HOME" == "/" ]]; then
 			remediate "Refusing to target home directory '/'. Re-run with a real desktop user via --user <name>." \
-				"Specify a non-root desktop user: sudo ./install.sh --user <username>"
+				"Specify a non-root desktop user: ./install.sh --user <username>"
 		fi
 
 		if [[ ! -d "$TARGET_HOME" ]]; then
 			remediate "Resolved target home is not a directory: $TARGET_HOME" \
-				"Create or fix the desktop user home, then re-run with: sudo ./install.sh --user <username>"
+				"Create or fix the desktop user home, then re-run with: ./install.sh --user <username>"
 		fi
 	fi
 
@@ -1101,7 +1123,7 @@ run_backup_only() {
 	info ""
 	info "Your existing configs are preserved (nothing was replaced)."
 	info "When ready, run the full installer with config deployment:"
-	info "  sudo ./install.sh --phase 4 --user $TARGET_USER -y"
+	info "  ./install.sh --phase 4 --user $TARGET_USER -y"
 	info "=== Backup-only complete ==="
 }
 
@@ -1245,7 +1267,15 @@ fi
 
 setup_install_logging
 trap 'install_error_trap "${LINENO}" "$BASH_COMMAND"' ERR
-trap 'status=$?; printf "[%s] Installer exit status: %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$status" >> "$ACTIVE_INSTALL_LOG_FILE"' EXIT
+trap '
+	status=$?
+	printf "[%s] Installer exit status: %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$status" >> "$ACTIVE_INSTALL_LOG_FILE"
+	# Clean up AUR sudoers drop-in only when WE created it during this run,
+	# so we do not remove a stale file from a different user or invocation.
+	if [[ "${AUR_SUDOERS_CREATED:-false}" == "true" ]] && [[ -f /etc/sudoers.d/99-artix-hypr-remix-aur ]]; then
+		rm -f /etc/sudoers.d/99-artix-hypr-remix-aur 2>/dev/null || true
+	fi
+' EXIT
 state_init "$INSTALL_STATE_DIR" "$DRY_RUN"
 
 last_completed_phase="$(state_last_completed_phase 8)"
@@ -1384,15 +1414,15 @@ print_install_summary() {
 	fi
 	if state_phase_completed 4; then
 		info "  - Re-apply config (replaces with fresh backup):"
-		info "      sudo ./install.sh --phase 4 --user ${TARGET_USER:-<username>} -y"
+		info "      ./install.sh --phase 4 --user ${TARGET_USER:-<username>} -y"
 	fi
 	if state_phase_completed 6; then
 		info "  - Re-run AUR/Flatpak phase:"
-		info "      sudo ./install.sh --phase 6 --user ${TARGET_USER:-<username>}"
+		info "      ./install.sh --phase 6 --user ${TARGET_USER:-<username>}"
 	fi
 	if state_phase_completed 7; then
 		info "  - Re-run post-install framework repair:"
-		info "      sudo ./install.sh --phase 7 --user ${TARGET_USER:-<username>}"
+		info "      ./install.sh --phase 7 --user ${TARGET_USER:-<username>}"
 		info "  - After login, run: ahr repair"
 	fi
 	if state_phase_completed 5; then

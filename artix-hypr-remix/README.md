@@ -45,7 +45,7 @@ Hypr config source:
 - `config/hypr/*.lua` are staging/source notes for future generation tooling.
 
 Current installer milestone:
-1. Run `sudo ./install.sh` on fresh Artix OpenRC from a non-root user shell.
+1. Run `./install.sh` on fresh Artix OpenRC from a non-root user shell. *(Auto-elevates with `sudo` — you'll only enter your password once.)*
 2. Install package sets from `packages/00-*.txt` through `packages/80-*.txt`.
 3. Apply detected hardware profile OpenRC modules from `config/hardware/<profile>/openrc-module.sh`.
 4. Enable safe OpenRC services from `services/openrc-default.txt`.
@@ -88,76 +88,79 @@ Quick install (fresh Artix OpenRC):
 
     git clone https://github.com/<you>/artix-installer.git
     cd artix-installer/artix-hypr-remix
-    sudo ./install.sh
+    ./install.sh
+
+*(The installer auto-elevates with `sudo` — you only enter your password once at the prompt.)*
 
 Install command notes:
-- Installer phases 1-8 require root privileges.
-- Running with `sudo` preserves `SUDO_USER`, so phases 4-8 can target your desktop user automatically.
-- If you run from a root shell directly, pass `--user <username>` for phases 4-8.
+- The installer auto-elevates with `sudo` when run as a normal user, so `sudo` is not needed in front of the command.
+- `SUDO_USER` is preserved automatically, so phases 4-8 can target your desktop user without `--user`.
+- If you run as root directly, pass `--user <username>` for phases 4-8.
+- Set `AHR_NO_SUDO=1` to disable auto-elevation (e.g. inside a container or when testing).
 
 Usage (from `artix-hypr-remix/`):
 
-    sudo ./install.sh
+    ./install.sh
 
 Useful options:
 
-    sudo ./install.sh --dry-run
-    sudo ./install.sh --phase 1
-    sudo ./install.sh --phase 2
-    sudo ./install.sh --phase 3 -y
-    sudo ./install.sh --phase 4 --user <username>
-    sudo ./install.sh --phase 5 --user <username>
-    sudo ./install.sh --phase 5 --user <username> --startup-mode tty
-    sudo ./install.sh --phase 5 --user <username> --startup-mode greetd
-    sudo ./install.sh --phase 5 --user <username> --startup-mode greetd --greetd-mode autologin
-    sudo ./install.sh --phase 5 --user <username> --startup-mode greetd --greetd-mode greeter
-    sudo ./install.sh --phase 2 --hardware-mode recommend
-    sudo ./install.sh --phase 2 --hardware-mode auto
-    sudo ./install.sh --phase 2 --hardware-mode off
-    sudo ./install.sh --phase 2 --docker-profile on
-    sudo ./install.sh --phase 3 --docker-profile on
-    sudo ./install.sh --phase 2 --printing-profile on
-    sudo ./install.sh --phase 3 --printing-profile on
+    ./install.sh --dry-run
+    ./install.sh --phase 1
+    ./install.sh --phase 2
+    ./install.sh --phase 3 -y
+    ./install.sh --phase 4 --user <username>
+    ./install.sh --phase 5 --user <username>
+    ./install.sh --phase 5 --user <username> --startup-mode tty
+    ./install.sh --phase 5 --user <username> --startup-mode greetd
+    ./install.sh --phase 5 --user <username> --startup-mode greetd --greetd-mode autologin
+    ./install.sh --phase 5 --user <username> --startup-mode greetd --greetd-mode greeter
+    ./install.sh --phase 2 --hardware-mode recommend
+    ./install.sh --phase 2 --hardware-mode auto
+    ./install.sh --phase 2 --hardware-mode off
+    ./install.sh --phase 2 --docker-profile on
+    ./install.sh --phase 3 --docker-profile on
+    ./install.sh --phase 2 --printing-profile on
+    ./install.sh --phase 3 --printing-profile on
 
 Re-run guide (safe common cases):
 
     # Back up existing config without replacing it
-    sudo ./install.sh --backup-only --user <username>
+    ./install.sh --backup-only --user <username>
 
     # Re-apply config deployment (phase 4); creates timestamped backups first
-    sudo ./install.sh --phase 4 --user <username> -y
+    ./install.sh --phase 4 --user <username> -y
 
     # Retry AUR/Flatpak installation (phase 6); skips already-installed packages
-    sudo ./install.sh --phase 6 --user <username>
+    ./install.sh --phase 6 --user <username>
 
     # Retry AUR only
-    sudo ./install.sh --phase 6 --user <username> --skip-flatpak
+    ./install.sh --phase 6 --user <username> --skip-flatpak
 
     # Retry Flatpak only
-    sudo ./install.sh --phase 6 --user <username> --skip-aur
+    ./install.sh --phase 6 --user <username> --skip-aur
 
     # Re-run post-install framework repair (phase 7)
-    sudo ./install.sh --phase 7 --user <username>
+    ./install.sh --phase 7 --user <username>
 
     # Resume with specific phase window
-    sudo ./install.sh --from-phase 4 --phase 7 --user <username>
+    ./install.sh --from-phase 4 --phase 7 --user <username>
 
 Additional phase 6 Flatpak profile examples:
 
-    sudo ./install.sh --phase 6 --user <username> --flatpak-profile default
-    sudo ./install.sh --phase 6 --user <username> --flatpak-profile optional
-    sudo ./install.sh --phase 6 --user <username> --flatpak-profile all
-    sudo ./install.sh --phase 6 --user <username> --flatpak-profile none
+    ./install.sh --phase 6 --user <username> --flatpak-profile default
+    ./install.sh --phase 6 --user <username> --flatpak-profile optional
+    ./install.sh --phase 6 --user <username> --flatpak-profile all
+    ./install.sh --phase 6 --user <username> --flatpak-profile none
 
 More examples:
 
-    sudo ./install.sh --phase 7 --user <username>
-    sudo ./install.sh --phase 8 --user <username> --dev-baseline on
-    sudo ./install.sh --from-phase 6 --phase 7 --user <username>
-    sudo ./install.sh --from-phase 8 --phase 8 --user <username> --dev-baseline on
-    sudo ./install.sh --host-policy vm --phase 1
-    AHR_INSTALL_STATE_DIR=/tmp/ahr-install-state sudo ./install.sh --phase 3
-    AHR_INSTALL_LOG_FILE=/tmp/ahr-install.log sudo ./install.sh
+    ./install.sh --phase 7 --user <username>
+    ./install.sh --phase 8 --user <username> --dev-baseline on
+    ./install.sh --from-phase 6 --phase 7 --user <username>
+    ./install.sh --from-phase 8 --phase 8 --user <username> --dev-baseline on
+    ./install.sh --host-policy vm --phase 1
+    AHR_INSTALL_STATE_DIR=/tmp/ahr-install-state ./install.sh --phase 3
+    AHR_INSTALL_LOG_FILE=/tmp/ahr-install.log ./install.sh
     AHR_HOST_POLICY=vm ./scripts/doctor.sh
 
 Config dependency validation:
