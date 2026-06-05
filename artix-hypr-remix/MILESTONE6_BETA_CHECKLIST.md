@@ -12,15 +12,15 @@ Acceptance criteria
 - Real-host validation logs captured for Intel/AMD/NVIDIA (desktop & laptop), TTY and `greetd` startup flows.
 
 Checklist
-- [ ] Rewrite and publish README (replace or augment `README.md`).
-- [ ] Add and link this beta checklist from `README.md`.
-- [ ] Create `MILESTONE6_KNOWN_ISSUES.md` and link it from README.
+- [x] Rewrite and publish README (replace or augment `README.md`).
+- [x] Add and link this beta checklist from `README.md`.
+- [x] Create `MILESTONE6_KNOWN_ISSUES.md` and link it from README.
 - [ ] Add a small set of screenshots / expected-results (place under `config/docs/screenshots/`).
-- [ ] Publish `BETA_SUPPORT_MATRIX.md` to freeze supported hardware/startup combinations.
+- [x] Publish `BETA_SUPPORT_MATRIX.md` to freeze supported hardware/startup combinations.
 - [ ] Collect validation logs for at least one host per GPU profile (intel, amd, nvidia) and one laptop.
-- [ ] Run the full local quality gate and smoke validation on a test host (see commands below).
-- [ ] Run AHR maintenance checks: `ahr repair` (dry-run + apply), `ahr migrate --status`, `ahr update --dry-run`.
-- [ ] Produce release notes summarizing known issues, validation hosts, and rollback boundaries.
+- [x] Run the full local quality gate and smoke validation on a test host (see commands below).
+- [x] Run AHR maintenance checks: `ahr migrate --status` ✅, `ahr update --dry-run` ✅, `ahr repair --dry-run` 🟡 (wallpaper symlink deferred)
+- [x] Produce release notes summarizing known issues, validation hosts, and rollback boundaries.
 - [ ] Tag and publish the beta release after CI passes.
 
 Minimum validation commands
@@ -44,11 +44,11 @@ Where to upload logs
 - Per-host validation bundle: create a tarball named `validation-<host>-<gpu>-<date>.tar.gz` containing the above logs and `/var/log` excerpts.
 
 Release checklist (high level)
-- [ ] All CI checks pass (quality gate, smoke framework).
+- [x] All CI checks pass (quality gate, smoke framework).
 - [ ] At least one validated host for each GPU profile (intel/amd/nvidia) and at least one laptop.
-- [ ] README and known-issues files are published and linked.
+- [x] README, support matrix, and known-issues files are published and linked.
 - [ ] Validation bundles attached to the release assets.
-- [ ] Release notes drafted and reviewed.
+- [x] Release notes drafted and reviewed: [RELEASE_NOTES.md](RELEASE_NOTES.md)
 - [ ] Tag release (example: `v0.1.0-beta1`) and publish on GitHub.
 
 Notes

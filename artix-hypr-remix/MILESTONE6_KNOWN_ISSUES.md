@@ -7,6 +7,7 @@ Key known issues
 - Real-host validation is limited. The project needs at least one validated host per GPU profile (intel, amd, nvidia) and one laptop snapshot.
 - `greetd` mode: present but not exhaustively validated across greeter/autologin variants — test carefully before claiming broad support.
 - Theme gallery and previews: rich theme gallery and previews are deferred to future work.
+- Wallpaper / background symlink: `~/.config/artix-hypr-remix/current/background` is not created during install; `ahr repair` reports it as missing. Theme falls back to solid color until a background image is manually set or the symlink workflow is completed in a future update.
 - `ahr repair --config` is detect-only at present and will not rewrite user-edited config automatically.
 - Optional AUR tools (Walker/Elephant) are not required; absence triggers warnings in smoke checks but should not block base install.
 - Post-install smoke checks are session-aware and will skip runtime-only assertions when a Hyprland session is not active.
