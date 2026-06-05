@@ -58,6 +58,9 @@ Categories:
 - `ahr-system-reboot` - reboot safely via available init interface
 - `ahr-capture-screenrecording` - start or stop screen recording
 - `ahr-capture-screenshot` - area screenshot with Wayland tools
+- `ahr-edit-config` - open a config file in user's preferred editor
+- `ahr-system-suspend` - suspend to RAM
+- `ahr-system-hibernate` - hibernate to disk
 
 ## Compatibility Aliases (Optional)
 
@@ -102,6 +105,9 @@ When namespace installation runs, selected Omarchy-style aliases are created in
 - `omarchy-system-reboot` -> `ahr-system-reboot`
 - `omarchy-capture-screenrecording` -> `ahr-capture-screenrecording`
 - `omarchy-capture-screenshot` -> `ahr-capture-screenshot`
+- `omarchy-edit-config` -> `ahr-edit-config`
+- `omarchy-system-suspend` -> `ahr-system-suspend`
+- `omarchy-system-hibernate` -> `ahr-system-hibernate`
 
 The alias set is intentionally small. The canonical interface remains `ahr-*`.
 Omarchy commands without safe Artix/OpenRC equivalents are intentionally omitted

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+# Try pm-utils hibernate, then fall back to direct /sys/power/state write.
+if ahr_has_cmd pm-hibernate; then
+  exec pm-hibernate
+fi
+
+if ahr_has_cmd zzz; then
+  exec zzz -Z
+fi
+
+if [[ -w /sys/power/state ]]; then
+  exec printf '%s' disk > /sys/power/state
+fi
+
+ahr_fail "No hibernate method found (try installing pm-utils)"

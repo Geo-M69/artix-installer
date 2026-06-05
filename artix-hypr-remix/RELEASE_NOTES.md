@@ -74,6 +74,7 @@ See [BETA_SUPPORT_MATRIX.md](BETA_SUPPORT_MATRIX.md) for the full frozen matrix.
 | Host | GPU | Startup | Date | Logs |
 |------|-----|---------|------|------|
 | `geoartix` (VM) | AMD (Virtio) | tty | 2026-06-05 | Quality gate ✅, smoke ✅, milestone2 ✅ |
+| `geoartix` (VM) | AMD (Virtio) | greetd | 2026-06-05 | Doctor ✅, post-install smoke ✅, milestone2 ✅ |
 
 ---
 

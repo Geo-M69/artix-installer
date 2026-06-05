@@ -55,6 +55,9 @@ declare -a commands=(
   ahr-system-reboot
   ahr-capture-screenrecording
   ahr-capture-screenshot
+  ahr-edit-config
+  ahr-system-suspend
+  ahr-system-hibernate
 )
 
 declare -a aliases=(
@@ -96,6 +99,9 @@ declare -a aliases=(
   "omarchy-restart-waybar:ahr-restart-waybar"
   "omarchy-restart-walker:ahr-restart-walker"
   "omarchy-migrate:ahr-migrate"
+  "omarchy-edit-config:ahr-edit-config"
+  "omarchy-system-suspend:ahr-system-suspend"
+  "omarchy-system-hibernate:ahr-system-hibernate"
 )
 
 log() {

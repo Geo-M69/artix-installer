@@ -56,6 +56,22 @@ If a first-run task fails in Hyprland
 - Inspect user state: `~/.local/state/artix-hypr-remix/first-run.tasks`
 - Re-run first-run hook: `~/.config/artix-hypr-remix/bin/first-run.sh` (as the target user) or reboot to run cleanly on next login.
 
+---
+
+## Intentionally deferred features (post-beta)
+
+The following Omarchy UX features are recognized as desirable but explicitly deferred until after the beta release:
+
+| Feature | Reason |
+|---------|--------|
+| Night-light / wl-gammarelay toggles | Needs OpenRC service integration and testing |
+| Gaps, layout, corners style toggles | Not critical for first beta; can be added as `ahr theme` sub-commands later |
+| OCR, color picker, audio/webcam recording in capture menu | Each requires new tooling; scope is too broad for beta |
+| Notification timers / reminders | Lightweight implementation possible, but not a beta blocker |
+| Transcode workflow | Depends on ffmpeg or similar; use-case is narrow |
+| LocalSend / share workflow | Needs network discovery; out of scope for beta |
+| Top-bar toggle parity | Current Waybar toggle is sufficient for beta; additional parity tracked separately |
+
 Where to gather logs for a validation bundle
 - `/var/log/artix-hypr-remix-install.log`
 - `/var/lib/artix-hypr-remix/hardware-profile.json`

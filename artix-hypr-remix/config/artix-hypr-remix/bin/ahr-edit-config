@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+config_file="${1:-}"
+[[ -n "$config_file" ]] || ahr_fail "Usage: ahr-edit-config <config-file-path>"
+
+terminal_launcher="${AHR_TERMINAL_LAUNCHER:-$HOME/.config/artix-hypr-remix/bin/ahr-launch-terminal}"
+
+launch_terminal_editor() {
+  local editor_cmd="$1"
+
+  if [[ -x "$terminal_launcher" ]]; then
+    setsid "$terminal_launcher" -e "$editor_cmd" "$config_file" >/dev/null 2>&1 &
+    return 0
+  fi
+
+  return 1
+}
+
+mkdir -p "$(dirname "$config_file")"
+touch "$config_file"
+
+# First, try $EDITOR. Route through terminal launcher since most editors
+# (nvim, vim, hx, nano) are terminal-based. If that fails, try direct setsid
+# for GUI editors (code, gedit, etc.).
+if [[ -n "${EDITOR:-}" ]] && command -v "$EDITOR" >/dev/null 2>&1; then
+  if launch_terminal_editor "$EDITOR"; then
+    exit 0
+  fi
+  # Fallback: try direct launch for GUI editors.
+  setsid "$EDITOR" "$config_file" >/dev/null 2>&1 && exit 0
+fi
+
+if ahr_has_cmd hx && launch_terminal_editor hx; then
+  exit 0
+fi
+
+if ahr_has_cmd nvim && launch_terminal_editor nvim; then
+  exit 0
+fi
+
+if ahr_has_cmd vim && launch_terminal_editor vim; then
+  exit 0
+fi
+
+if ahr_has_cmd nano && launch_terminal_editor nano; then
+  exit 0
+fi
+
+if ahr_has_cmd code && setsid code "$config_file" >/dev/null 2>&1; then
+  exit 0
+fi
+
+if ahr_has_cmd gedit && setsid gedit "$config_file" >/dev/null 2>&1; then
+  exit 0
+fi
+
+if ahr_has_cmd xdg-open; then
+  setsid xdg-open "$config_file" >/dev/null 2>&1 &
+  exit 0
+fi
+
+ahr_fail "No editor found to open $config_file"

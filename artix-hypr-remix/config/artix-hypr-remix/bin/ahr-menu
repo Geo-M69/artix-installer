@@ -426,6 +426,13 @@ show_setup_menu() {
       "Bluetooth Control" \
       "Default Browser" \
       "Default Terminal" \
+      "Edit Hyprland Config" \
+      "Edit Hypridle Config" \
+      "Edit Hyprlock Config" \
+      "Edit Waybar Config" \
+      "Edit Mako Config" \
+      "Edit Walker Config" \
+      "Edit AHR Config" \
       "Restart Walker" \
       "Back")"
 
@@ -435,6 +442,27 @@ show_setup_menu() {
       "Bluetooth Control") run_command_background ahr-launch-bluetooth ;;
       "Default Browser") show_default_browser_menu ;;
       "Default Terminal") show_default_terminal_menu ;;
+      "Edit Hyprland Config")
+        run_command_background ahr-edit-config "$HOME/.config/hypr/hyprland.conf"
+        ;;
+      "Edit Hypridle Config")
+        run_command_background ahr-edit-config "$HOME/.config/hypr/hypridle.conf"
+        ;;
+      "Edit Hyprlock Config")
+        run_command_background ahr-edit-config "$HOME/.config/hypr/hyprlock.conf"
+        ;;
+      "Edit Waybar Config")
+        run_command_background ahr-edit-config "$HOME/.config/waybar/config.jsonc"
+        ;;
+      "Edit Mako Config")
+        run_command_background ahr-edit-config "$HOME/.config/mako/config"
+        ;;
+      "Edit Walker Config")
+        run_command_background ahr-edit-config "$HOME/.config/walker/config.toml"
+        ;;
+      "Edit AHR Config")
+        run_command_background ahr-edit-config "$HOME/.config/artix-hypr-remix/config"
+        ;;
       "Restart Walker") run_command_now ahr-restart-walker ;;
       "Back"|"") return 0 ;;
       *) return 0 ;;
@@ -574,6 +602,8 @@ show_system_menu() {
     choice="$(menu_select "System" \
       "Lock Screen" \
       "Logout Hyprland" \
+      "Suspend" \
+      "Hibernate" \
       "Reboot" \
       "Power Off" \
       "Open Terminal" \
@@ -590,6 +620,16 @@ show_system_menu() {
           exit 0
         fi
         ahr_fail "hyprctl is not available to end the current session"
+        ;;
+      "Suspend")
+        if confirm_yes "Suspend to RAM now?"; then
+          run_command_now ahr-system-suspend
+        fi
+        ;;
+      "Hibernate")
+        if confirm_yes "Hibernate to disk now? This suspends the system and powers off."; then
+          run_command_now ahr-system-hibernate
+        fi
         ;;
       "Reboot")
         if confirm_yes "Reboot now? This ends all current sessions."; then
@@ -625,6 +665,7 @@ show_main_menu() {
       "Remove" \
       "Update" \
       "System" \
+      "About" \
       "Cancel")"
 
     case "$choice" in
@@ -637,10 +678,44 @@ show_main_menu() {
       "Remove") show_remove_menu ;;
       "Update") show_update_menu ;;
       "System") show_system_menu ;;
+      "About") show_about_menu ;;
       "Cancel"|"") exit 0 ;;
       *) exit 0 ;;
     esac
   done
+}
+
+show_about_menu() {
+  local version_file="${AHR_CONFIG_DIR:-$HOME/.config/artix-hypr-remix}/VERSION"
+  local version=""
+
+  if [[ -f "$version_file" ]]; then
+    version="$(head -1 "$version_file")"
+  fi
+
+  local title="Artix Hypr Remix"
+  if [[ -n "$version" ]]; then
+    title="$title ($version)"
+  fi
+
+  # Use printf %q to shell-quote the dynamic title, preventing injection
+  # when the version string contains apostrophes or other shell metacharacters.
+  local quoted_title
+  quoted_title="$(printf '%q' "$title")"
+
+  run_terminal_script "printf '%s\n\n%s\n\n%s\n%s\n%s\n\n%s\n%s\n%s\n%s\n\n%s\n%s\n\n%s\n' \
+    $quoted_title \
+    'An opinionated Artix Linux installer focused on Hyprland and OpenRC.' \
+    'Project target:' \
+    '  OpenRC-native Omarchy-equivalent Hyprland desktop' \
+    '  with a safe, repeatable installer and polished first-login experience.' \
+    'Base system: Artix Linux with OpenRC' \
+    'Shell: bash (zsh optional)' \
+    'Startup: tty (greetd optional)' \
+    'Command: ahr <command> or ahr-menu' \
+    'Log: /var/log/artix-hypr-remix-install.log' \
+    'Docs: ~/.config/artix-hypr-remix/docs/' \
+    'Licensed under MIT'; read -r -p 'Press Enter to close...' _"
 }
 
 dispatch() {
