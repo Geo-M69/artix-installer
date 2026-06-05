@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FRAMEWORK_ROOT="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}"
+SCRIPT_DIR="$FRAMEWORK_ROOT/bin"
 source "${AHR_LIB_PATH:-$SCRIPT_DIR/ahr-lib.sh}"
 
-FRAMEWORK_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DOCS_DIR="$FRAMEWORK_ROOT/docs"
 STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
 MIGRATION_STATE_DIR="$STATE_ROOT/migrations"
@@ -33,6 +33,7 @@ Usage: ahr-repair [options]
 Checks common Artix Hypr Remix drift and optionally applies safe repairs.
 
 Options:
+  --dry-run       Check only; do not apply repairs (default)
   --apply         Apply safe repairs. Without this, ahr-repair is a dry-run.
   --all           Check every repair scope (default)
   --namespace     Check command namespace links
@@ -381,6 +382,7 @@ check_update_state() {
 
 while (( $# > 0 )); do
   case "$1" in
+    --dry-run) apply=false ;;
     --apply) apply=true ;;
     --all) enable_all_scopes ;;
     --namespace) enable_only_scope; run_namespace=true ;;
