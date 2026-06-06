@@ -671,6 +671,23 @@ check_mode_specific_state() {
         fail "greetd config missing: /etc/greetd/config.toml"
       fi
 
+      if [[ -f /etc/local.d/artix-hypr-remix-greetd.start ]]; then
+        pass "greetd boot-time fallback launcher exists: /etc/local.d/artix-hypr-remix-greetd.start"
+        if [[ -x /etc/local.d/artix-hypr-remix-greetd.start ]]; then
+          pass "greetd boot-time fallback launcher is executable"
+        else
+          fail "greetd boot-time fallback launcher is not executable"
+        fi
+      else
+        fail "greetd boot-time fallback launcher missing: /etc/local.d/artix-hypr-remix-greetd.start"
+      fi
+
+      if service_enabled_in_default_runlevel "local"; then
+        pass "OpenRC 'local' service is enabled in default runlevel"
+      else
+        fail "OpenRC 'local' service is not enabled in default runlevel (needed for greetd boot-time fallback)"
+      fi
+
       if [[ "$openrc_commands_ok" == "true" ]]; then
         if rc-service greetd status >/dev/null 2>&1; then
           pass "greetd service is running"

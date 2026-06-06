@@ -169,7 +169,7 @@ disable_greetd_service() {
   local dry_run="${1:-false}"
 
   if [[ "$dry_run" == "true" ]]; then
-    info "Dry-run: would remove greetd from OpenRC default runlevel, stop service, and remove AHR-managed conf.d block"
+    info "Dry-run: would remove greetd from OpenRC default runlevel, stop service, remove AHR-managed conf.d block and local.d launcher"
     return 0
   fi
 
@@ -182,6 +182,7 @@ disable_greetd_service() {
   fi
 
   _remove_greetd_confd_block
+  rm -f /etc/local.d/artix-hypr-remix-greetd.start
 }
 
 ensure_session_launcher_present() {
@@ -341,6 +342,32 @@ EOF
     info "Updated $_greetd_confd (rc_need=\"dbus elogind\")"
   fi
   unset _greetd_confd
+
+  # Install a local.d boot-time launcher as a fallback for when the stock
+  # greetd init script's supervise-daemon fails during boot (the process
+  # crashes before supervise-daemon finishes setting up, entering a
+  # crash-retry loop and eventually giving up).  local.d runs at the very
+  # end of the default runlevel, after all services are settled, and uses
+  # plain rc-service which is known to work.
+  _greetd_locald="/etc/local.d/artix-hypr-remix-greetd.start"
+  if [[ "$dry_run" == "true" ]]; then
+    info "Dry-run: would write $_greetd_locald and enable OpenRC 'local' service"
+  else
+    install -d -m 0755 /etc/local.d
+    cat > "$_greetd_locald" <<'LOCALEOF'
+#!/bin/bash
+# artix-hypr-remix greetd fallback - started by OpenRC 'local' service.
+# Best-effort: ensures greetd is running after all services have settled.
+if command -v rc-service >/dev/null 2>&1; then
+  rc-service greetd status >/dev/null 2>&1 || rc-service greetd start >/dev/null 2>&1 || true
+fi
+LOCALEOF
+    chmod 0755 "$_greetd_locald"
+    info "Installed $_greetd_locald boot-time launcher"
+    # Ensure the 'local' service is in the default runlevel so the script runs.
+    enable_service local default false false
+  fi
+  unset _greetd_locald
 
   if [[ "$dry_run" == "true" ]]; then
     info "Dry-run: would enable greetd OpenRC service (start deferred until reboot)"
