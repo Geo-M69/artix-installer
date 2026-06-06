@@ -46,6 +46,9 @@ case "$MENU_BACKEND" in
     ;;
 esac
 
+# Small delay for menu exit animation to settle before capture
+sleep 0.3
+
 # Execute choice
 case "$choice" in
   "Area Screenshot") exec "$SCRIPT_DIR/ahr-capture-screenshot" --area ;;
