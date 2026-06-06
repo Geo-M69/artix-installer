@@ -67,10 +67,10 @@ Status: functional; core services validated on VM (2026-06-05). Real-hardware an
 - [x] Capture real-host service validation for `bluetoothd`.
 - [x] Capture real-host validation for PipeWire and WirePlumber startup under Hyprland.
 - [x] Capture real-host validation for XDG portals under Hyprland.
-- [ ] Capture real-host validation for printing profile.
-  - **Dry-run validated** (2026-06-06): packages (`cups`, `avahi`, `cups-openrc`, `avahi-openrc`) and services (`cupsd`, `avahi-daemon`) inject correctly. Live install pending.
-- [ ] Capture real-host validation for Docker profile.
-  - **Script-level validation passes** in quality gate via `check-docker-profile.sh`. Dry-run confirmed. Live install pending.
+- [x] Capture real-host validation for printing profile.
+  - **Live-validated (NVIDIA laptop, 2026-06-06):** packages (`cups`, `avahi`, `cups-openrc`, `avahi-openrc`) and services (`cupsd`, `avahi-daemon`) confirmed running. Post-install smoke and doctor pass.
+- [x] Capture real-host validation for Docker profile.
+  - **Live-validated (NVIDIA laptop, 2026-06-06):** `check-docker-profile.sh` passes. `rc-service docker status` reports `started`.
 - [ ] Confirm Intel hardware profile packages and module behavior.
 - [ ] Confirm AMD hardware profile packages and module behavior on non-VM hardware.
   - **VM-validated (2026-06-05).** Real non-VM AMD hardware still pending.

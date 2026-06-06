@@ -10,7 +10,7 @@ This page is installed with the desktop framework and is meant as a first-login 
 - `Super + Shift + Return`: open the default browser.
 - `Super + Shift + F`: open files.
 - `Super + Ctrl + L`: lock the session.
-- `Print`: take an area screenshot.
+- `Print`: open screenshot picker (area/fullscreen/window).
 
 ## Menu Map
 

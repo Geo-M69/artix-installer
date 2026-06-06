@@ -3,15 +3,61 @@ set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
+# Defaults
+mode="area"
+open_after=false
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -a|--area) mode="area"; shift ;;
+    -f|--fullscreen) mode="fullscreen"; shift ;;
+    -w|--window) mode="window"; shift ;;
+    --open) open_after=true; shift ;;
+    -h|--help)
+      echo "Usage: ahr-capture-screenshot [options]"
+      echo ""
+      echo "Options:"
+      echo "  -a, --area        Capture selected area (default)"
+      echo "  -f, --fullscreen  Capture full screen"
+      echo "  -w, --window      Capture active window"
+      echo "  --open            Open screenshot after capture"
+      echo "  -h, --help        Show this help"
+      exit 0
+      ;;
+    *) ahr_fail "Unknown option: $1 (use -h for help)" ;;
+  esac
+done
+
 target_dir="${XDG_PICTURES_DIR:-$HOME/Pictures}"
 target_file="$target_dir/screenshot-$(date +%s).png"
 
 mkdir -p "$target_dir"
 
-if ahr_has_cmd slurp && ahr_has_cmd grim; then
-  grim -g "$(slurp)" "$target_file"
-  ahr_notify "Screenshot saved" "$target_file"
-  exit 0
-fi
+case "$mode" in
+  area)
+    if ! ahr_has_cmd slurp || ! ahr_has_cmd grim; then
+      ahr_fail "slurp and grim are required for area screenshots"
+    fi
+    grim -g "$(slurp)" "$target_file"
+    ;;
+  fullscreen)
+    if ! ahr_has_cmd grim; then
+      ahr_fail "grim is required for fullscreen screenshots"
+    fi
+    grim "$target_file"
+    ;;
+  window)
+    if ! ahr_has_cmd grim || ! ahr_has_cmd hyprctl || ! ahr_has_cmd jq; then
+      ahr_fail "grim, hyprctl, and jq are required for window screenshots"
+    fi
+    geometry="$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"' 2>/dev/null)" || ahr_fail "Failed to get active window geometry (is a window focused?)"
+    grim -g "$geometry" "$target_file"
+    ;;
+esac
 
-ahr_fail "slurp and grim are required for area screenshots"
+ahr_notify "Screenshot saved" "$(basename "$target_file")"
+
+if $open_after && ahr_has_cmd xdg-open; then
+  xdg-open "$target_file" >/dev/null 2>&1 || true
+fi

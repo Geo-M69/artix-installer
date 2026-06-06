@@ -59,7 +59,8 @@ Categories:
 - `ahr-system-lock` - lock current session
 - `ahr-system-reboot` - reboot safely via available init interface
 - `ahr-capture-screenrecording` - start or stop screen recording
-- `ahr-capture-screenshot` - area screenshot with Wayland tools
+- `ahr-capture-screenshot` - area, fullscreen, or window screenshot with Wayland tools (`--area`/`--fullscreen`/`--window`, `--open`)
+- `ahr-capture-picker` - interactive picker for screenshot mode (bound to Print by default)
 - `ahr-edit-config` - open a config file in user's preferred editor
 - `ahr-system-suspend` - suspend to RAM
 - `ahr-system-hibernate` - hibernate to disk

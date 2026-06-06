@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Detect menu backend
+MENU_BACKEND=""
+if ahr_has_cmd wofi; then
+  MENU_BACKEND="wofi"
+elif ahr_has_cmd walker; then
+  MENU_BACKEND="walker"
+elif ahr_has_cmd rofi; then
+  MENU_BACKEND="rofi"
+elif [[ -t 0 && -t 1 ]]; then
+  MENU_BACKEND="tty"
+else
+  ahr_fail "No menu backend found (wofi/walker/rofi)"
+fi
+
+# Show menu and capture selection
+case "$MENU_BACKEND" in
+  wofi)
+    choice=$(printf "Area Screenshot\nFullscreen Screenshot\nWindow Screenshot" | wofi --dmenu --prompt "Capture" 2>/dev/null || true)
+    ;;
+  walker)
+    choice=$(printf "Area Screenshot\nFullscreen Screenshot\nWindow Screenshot" | walker --dmenu -p "Capture" 2>/dev/null || true)
+    ;;
+  rofi)
+    choice=$(printf "Area Screenshot\nFullscreen Screenshot\nWindow Screenshot" | rofi -dmenu -p "Capture" 2>/dev/null || true)
+    ;;
+  tty)
+    echo "Capture mode:"
+    echo "  1) Area Screenshot"
+    echo "  2) Fullscreen Screenshot"
+    echo "  3) Window Screenshot"
+    echo -n "> "
+    read -r selection || true
+    case "$selection" in
+      1) choice="Area Screenshot" ;;
+      2) choice="Fullscreen Screenshot" ;;
+      3) choice="Window Screenshot" ;;
+      *) exit 0 ;;
+    esac
+    ;;
+esac
+
+# Execute choice
+case "$choice" in
+  "Area Screenshot") exec "$SCRIPT_DIR/ahr-capture-screenshot" --area ;;
+  "Fullscreen Screenshot") exec "$SCRIPT_DIR/ahr-capture-screenshot" --fullscreen ;;
+  "Window Screenshot") exec "$SCRIPT_DIR/ahr-capture-screenshot" --window ;;
+esac

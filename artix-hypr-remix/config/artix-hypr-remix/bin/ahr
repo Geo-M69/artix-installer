@@ -54,7 +54,8 @@ Commands:
   system-lock         Lock session
   system-reboot       Reboot system
   capture-screenrecording Toggle screen recording
-  capture-screenshot  Interactive area screenshot
+  capture-screenshot  Area, fullscreen, or window screenshot
+  capture-picker      Interactive screenshot mode picker
   edit-config         Open editor for a config file
   system-suspend      Suspend to RAM
   system-hibernate    Hibernate to disk
@@ -99,7 +100,8 @@ dispatch() {
     system-reboot) exec_ahr_command ahr-system-reboot "$@" ;;
     capture-screenrecording) exec_ahr_command ahr-capture-screenrecording "$@" ;;
     capture-screenshot) exec_ahr_command ahr-capture-screenshot "$@" ;;
-    edit-config) exec_ahr_command ahr-edit-config "$@" ;;
+    capture-picker) exec_ahr_command ahr-capture-picker "$@" ;;
+    edit-config) exec_ahr_command ahr-edit-config "$@" ;;    
     system-suspend) exec_ahr_command ahr-system-suspend "$@" ;;
     system-hibernate) exec_ahr_command ahr-system-hibernate "$@" ;;
     list)
@@ -135,6 +137,7 @@ dispatch() {
         "ahr-system-reboot" \
         "ahr-capture-screenrecording" \
         "ahr-capture-screenshot" \
+        "ahr-capture-picker" \
         "ahr-edit-config" \
         "ahr-system-suspend" \
         "ahr-system-hibernate"

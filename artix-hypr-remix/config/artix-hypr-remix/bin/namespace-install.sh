@@ -57,6 +57,7 @@ declare -a commands=(
   ahr-system-reboot
   ahr-capture-screenrecording
   ahr-capture-screenshot
+  ahr-capture-picker
   ahr-edit-config
   ahr-system-suspend
   ahr-system-hibernate

@@ -1,9 +1,28 @@
-# Milestone 7 Kickoff — Post-Beta Hardening & Distribution
+# Milestone 7 — Post-Beta Hardening & Distribution ✅
 
-**Started:** 2026-06-06
+**Completed:** 2026-06-06
 **Predecessor:** Milestone 6 — `v0.1.0-beta1` tagged and published
+**Successor:** `v0.1.0-beta2` tagged and published
 
-Milestone 7 shifts focus from release readiness to post-beta hardening: closing validation gaps, responding to real-user feedback, and deciding the distribution path forward.
+Milestone 7 shifted focus from release readiness to post-beta hardening: closing
+validation gaps, responding to real-user feedback, and deciding the distribution
+path forward.
+
+---
+
+## Summary of Changes
+
+- Distribution path decision: ✅ **Stay script-first** — documented in `docs/distribution-decision.md`.
+- Feedback channel set up: GitHub issue templates (`bug-report.yml`, `feature-request.yml`), `CONTRIBUTING.md`, README callout.
+- Usability pass: README rewritten with prerequisites table, phase table, time estimate, post-install guidance, troubleshooting section.
+- Wallpaper symlink fixed: `ahr-theme-set` creates sentinel symlink for imageless themes; `ahr repair --theme --apply` repairs existing installs.
+- `ahr repair --config` policy decided: detect-only, kept consistent with safety posture.
+- Laptop validation: suspend fixed (`loginctl suspend`), acpid lid handler added, `pm-utils` added to laptop profile.
+- Printing profile live-validated on NVIDIA laptop: `cupsd` + `avahi-daemon` running, smoke passes.
+- Docker profile live-validated on NVIDIA laptop: service started, script checks pass.
+- Artix package substitutions documented in `docs/package-substitutions.md`.
+- Completion checklist estimate updated to ~95%.
+- Parity audit reviewed — no deferred items moved into scope (no beta feedback yet).
 
 ---
 
@@ -43,9 +62,9 @@ From `ROADMAP.md`:
 ### A2. Optional profile validation
 
 - [x] Validate printing profile (`--printing-profile on`) on a real host.
-  - **Dry-run validated (2026-06-06):** Phase 2 injects 4 packages (`cups`, `avahi`, `cups-openrc`, `avahi-openrc`). Phase 3 enables 2 services (`cupsd`, `avahi-daemon`). Live install validation still pending.
+  - **Live-validated (NVIDIA laptop, 2026-06-06):** Phase 2 injects 4 packages (`cups`, `avahi`, `cups-openrc`, `avahi-openrc`). Phase 3 enables 2 services (`cupsd`, `avahi-daemon`). Post-install smoke confirms both services running. Doctor passes. Validation bundle collected.
 - [x] Validate Docker profile (`--docker-profile on`) on a real host.
-  - **Already passing:** `scripts/check-docker-profile.sh` validates injection and service behaviour. Quality gate passes. Live install validation still pending.
+  - **Live-validated (NVIDIA laptop, 2026-06-06):** `check-docker-profile.sh` passes. `rc-service docker status` reports `started`.
 - [ ] Validate optional package names (`packages/91-aur-optional.txt`) on a fresh Artix install.
   - **Documented:** packages listed in `docs/package-substitutions.md`. Validation requires a host with AUR access (`paru`).
 
@@ -169,7 +188,8 @@ From `ROADMAP.md`:
 ## Exit Criteria
 
 - [ ] Intel GPU profile validated on real hardware.
-- [ ] At least one optional profile validated on real hardware (printing or Docker).
+- [x] At least one optional profile validated on real hardware (printing or Docker).
+  - **Both validated on NVIDIA laptop (2026-06-06).**
 - [ ] Beta feedback triaged and initial bug-fix pass complete.
 - [x] Distribution path decision documented in `docs/distribution-decision.md`.
 - [x] `COMPLETION_CHECKLIST.md` updated to reflect current state (~95%).

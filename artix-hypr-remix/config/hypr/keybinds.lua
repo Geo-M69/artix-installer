@@ -59,8 +59,8 @@ return {
   { mods = { "SUPER", "ALT" }, key = "COMMA", action = "exec", command = "makoctl invoke" },
   { mods = { "SUPER", "SHIFT", "ALT" }, key = "COMMA", action = "exec", command = "makoctl restore" },
 
-  -- Screenshot.
-  { mods = {}, key = "PRINT", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-capture-screenshot" },
+  -- Screenshot picker (Area, Fullscreen, Window).
+  { mods = {}, key = "PRINT", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-capture-picker" },
 
   -- Media and device keys.
   { mods = {}, key = "XF86AudioRaiseVolume", action = "exec", command = "pamixer -i 5" },

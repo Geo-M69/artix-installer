@@ -336,11 +336,15 @@ show_capture_menu() {
   while true; do
     choice="$(menu_select "Capture" \
       "Area Screenshot" \
+      "Fullscreen Screenshot" \
+      "Window Screenshot" \
       "Toggle Screen Recording" \
       "Back")"
 
     case "$choice" in
-      "Area Screenshot") run_command_background ahr-capture-screenshot ;;
+      "Area Screenshot") run_command_background ahr-capture-screenshot --area ;;
+      "Fullscreen Screenshot") run_command_background ahr-capture-screenshot --fullscreen ;;
+      "Window Screenshot") run_command_background ahr-capture-screenshot --window ;;
       "Toggle Screen Recording") run_command_background ahr-capture-screenrecording ;;
       "Back"|"") return 0 ;;
       *) return 0 ;;

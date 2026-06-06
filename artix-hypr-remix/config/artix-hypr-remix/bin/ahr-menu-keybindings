@@ -60,7 +60,7 @@ SUPER + SHIFT + RETURN Browser
 SUPER + SHIFT + F      Files
 SUPER + CTRL + L       Lock screen
 SUPER + P              Clipboard picker
-PRINT                  Area screenshot
+PRINT                  Screenshot picker (area/fullscreen/window)
 ALT + RETURN           Emergency terminal fallback
 ALT + F4               Close focused window
 EOF
