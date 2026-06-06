@@ -13,6 +13,11 @@ Supported base system:
 - Supported session flow: `tty` by default, optional `greetd`
 - GPU support target: Intel, AMD, and NVIDIA through Artix/OpenRC-safe adaptations and hardware profile stubs
 
+> **Beta feedback welcome!** If you try artix-hypr-remix on a fresh Artix install,
+> please [open a bug report](https://github.com/geo/artix-installer/issues/new/choose)
+> with any friction, breakage, or missing docs you encounter. Validation bundles
+> help a lot — see `CONTRIBUTING.md` for details.
+
 Out of scope for current beta work:
 - systemd-based hosts
 - display managers other than `greetd`
@@ -82,27 +87,74 @@ Phase 4 configuration strategy:
 - Keep repo configs independent from Omarchy helper commands and systemd-only workflows.
 - See `PHASE4_PORTING.md` for source mapping and adaptation rules.
 
-Usage:
+## Quick Start
 
-Quick install (fresh Artix OpenRC):
+### Prerequisites
 
-    git clone https://github.com/<you>/artix-installer.git
-    cd artix-installer/artix-hypr-remix
+- **Artix Linux with OpenRC** — fresh or minimal base install
+- **A non-root user** with `sudo` access already created
+- **Network access** — the installer downloads packages
+- **`bash`** as the installer shell
+
+### Quick install
+
+```bash
+git clone https://github.com/geo/artix-installer.git
+cd artix-installer/artix-hypr-remix
+./install.sh
+```
+
+The installer auto-elevates with `sudo` — you'll be prompted for your
+password once.
+
+### What the installer does
+
+| Phase | What happens |
+|-------|-------------|
+| 1 | Preflight checks — verifies your system meets prerequisites |
+| 2 | Installs core packages (Hyprland, Waybar, Mako, audio, etc.) |
+| 3 | Enables OpenRC services (dbus, elogind, NetworkManager, etc.) |
+| 4 | Deploys config files — backs up any existing config first |
+| 5 | Sets up startup mode (TTY by default; `--startup-mode greetd` optional) |
+| 6 | Installs AUR packages and Flatpak apps |
+| 7 | Runs post-install smoke checks and offers a reboot prompt |
+
+Estimated time: **10-30 minutes** depending on your internet speed and
+whether AUR packages need to be built from source.
+
+### After install / first login
+
+1. **Reboot** when prompted, or run `sudo reboot` manually.
+2. Log in as your desktop user at the TTY prompt (or greeter if you chose
+   `greetd`).
+3. Hyprland starts automatically. You'll see:
+   - **Waybar** (top bar) with workspace indicators, clock, and system tray
+   - **Mako** notifications
+   - A themed wallpaper or background color
+4. Press `Super` (Windows key) + `K` to open the menu and explore keybindings.
+
+### Troubleshooting
+
+If something doesn't work on first login:
+
+```bash
+ahr repair --dry-run          # check for common issues
+ahr repair --theme --apply    # fix missing wallpaper/theme state
+ahr repair --namespace --apply # fix missing command links
+scripts/doctor.sh --no-aur    # full health check
+```
+
+For guided recovery steps, see `RECOVERY_AND_RESET.md`.
+
+---
+
+## Reference: All Installer Options
+
+Run from the `artix-hypr-remix/` directory:
+
     ./install.sh
 
-*(The installer auto-elevates with `sudo` — you only enter your password once at the prompt.)*
-
-Install command notes:
-- The installer auto-elevates with `sudo` when run as a normal user, so `sudo` is not needed in front of the command.
-- `SUDO_USER` is preserved automatically, so phases 4-8 can target your desktop user without `--user`.
-- If you run as root directly, pass `--user <username>` for phases 4-8.
-- Set `AHR_NO_SUDO=1` to disable auto-elevation (e.g. inside a container or when testing).
-
-Usage (from `artix-hypr-remix/`):
-
-    ./install.sh
-
-Useful options:
+Useful phase options:
 
     ./install.sh --dry-run
     ./install.sh --phase 1

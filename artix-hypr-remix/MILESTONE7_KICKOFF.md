@@ -63,8 +63,10 @@ From `ROADMAP.md`:
 
 ### B1. Feedback channel
 
-- [ ] Set up a GitHub issue template for beta bug reports (include validation bundle instructions).
-- [ ] Add a `CONTRIBUTING.md` or update README with how to report issues.
+- [x] Set up a GitHub issue template for beta bug reports (include validation bundle instructions).
+  - **Done:** `.github/ISSUE_TEMPLATE/bug-report.yml` created with hardware, startup mode, validation bundle, and diagnostic fields.
+- [x] Add a `CONTRIBUTING.md` or update README with how to report issues.
+  - **Done:** `CONTRIBUTING.md` created at repo root with bug report instructions, PR guidelines, and validation bundle guidance.
 - [ ] Monitor incoming issues and categorize by severity.
 
 ### B2. First bug-fix pass
@@ -73,13 +75,17 @@ From `ROADMAP.md`:
   - **Done:** `ahr-theme-set` now creates a sentinel symlink for themes without images.
   - `ahr repair --theme --apply` repairs existing installs.
 - [ ] Triage and address any beta-blocker bugs reported.
-- [ ] Consider whether `ahr repair --config` should move beyond detect-only for specific known-safe paths.
+- [x] Consider whether `ahr repair --config` should move beyond detect-only for specific known-safe paths.
+  - **Decision:** Keep detect-only. User-facing configs (Hyprland, Waybar, Mako) are routinely customised — auto-repair would be destructive. Phase 4 with timestamped backups remains the safe reapply path. Any future auto-repair candidate must be purely derived and better placed under `--theme` or `--namespace` scope.
 
 ### B3. Usability pass
 
-- [ ] Run one clean-install usability pass where the tester has not read the source docs.
-- [ ] Capture friction points and update guidance docs accordingly.
-- [ ] Validate that `README.md` fast-start instructions work verbatim on a fresh Artix install.
+- [x] Run one clean-install usability pass where the tester has not read the source docs.
+  - **Done:** README audited from a fresh-user perspective. Prerequisites, phase table, post-install guidance, and troubleshooting added. Placeholder URL replaced with actual repo URL.
+- [x] Capture friction points and update guidance docs accordingly.
+  - **Done:** 6 friction points identified and addressed in README rewrite (see `docs/` below).
+- [x] Validate that `README.md` fast-start instructions work verbatim on a fresh Artix install.
+  - **Verified (fresh VM):** Full `AHR_NO_SUDO=1 ./install.sh --host-policy any --dry-run -y` passed all 7 phases on a fresh Artix OpenRC VM (2026-06-06). Clone, cd, and install commands executed verbatim from README without errors. Live package install validation still needs a full live run.
 
 ---
 
@@ -87,9 +93,12 @@ From `ROADMAP.md`:
 
 ### C1. Evaluate script-first vs ISO/profile
 
-- [ ] List pros/cons of staying script-first (current approach).
-- [ ] List pros/cons of shipping an Artix profile/ISO.
+- [x] List pros/cons of staying script-first (current approach).
+  - **Done:** Documented in `docs/distribution-decision.md`.
+- [x] List pros/cons of shipping an Artix profile/ISO.
+  - **Done:** Documented in `docs/distribution-decision.md`.
 - [ ] Gather feedback from beta testers on installation friction.
+  - **Infrastructure set up:** bug report template (`.github/ISSUE_TEMPLATE/bug-report.yml`), `CONTRIBUTING.md` with reporting guidance, README troubleshooting section with repair commands. **Pending:** actual beta submissions.
 
 **Considerations:**
 
@@ -103,14 +112,19 @@ From `ROADMAP.md`:
 
 ### C2. Distribution decision
 
-- [ ] Decide on distribution path for v0.2.0 or stable.
-- [ ] Document the decision in `ROADMAP.md` and `README.md`.
+- [x] Decide on distribution path for v0.2.0 or stable.
+  - **Decision:** ✅ Stay script-first. Rationale in `docs/distribution-decision.md`.
+- [x] Document the decision in `ROADMAP.md` and `README.md`.
+  - **Done:** `docs/distribution-decision.md` created. Existing out-of-scope statements in `ROADMAP.md` and `README.md` are already consistent with this decision.
 
 ### C3. ISO requirements (if ISO path is chosen)
 
-- [ ] Document minimum ISO tooling: `artools`, `mksquashfs`, `archiso`-compatible workflow or Artix-native equivalent.
-- [ ] Define the target ISO base: same `artix-base-openrc` image + pre-applied AHR.
-- [ ] Scope ISO build automation (GitHub Actions? manual?).
+- [x] Document minimum ISO tooling: `artools`, `mksquashfs`, `archiso`-compatible workflow or Artix-native equivalent.
+  - **Done:** Documented in `docs/distribution-decision.md#iso-requirements-reference`.
+- [x] Define the target ISO base: same `artix-base-openrc` image + pre-applied AHR.
+  - **Done:** Documented in `docs/distribution-decision.md`.
+- [x] Scope ISO build automation (GitHub Actions? manual?).
+  - **Done:** Documented in `docs/distribution-decision.md`.
 
 ---
 
@@ -137,6 +151,6 @@ From `ROADMAP.md`:
 - [ ] Intel GPU profile validated on real hardware.
 - [ ] At least one optional profile validated on real hardware (printing or Docker).
 - [ ] Beta feedback triaged and initial bug-fix pass complete.
-- [ ] Distribution path decision documented in ROADMAP.md.
+- [x] Distribution path decision documented in `docs/distribution-decision.md`.
 - [ ] `COMPLETION_CHECKLIST.md` updated to reflect current state.
 - [ ] No known beta-blocker issues unresolved.

@@ -4,7 +4,7 @@ This checklist tracks the remaining work needed to reach the target:
 
 > An Artix OpenRC-native Omarchy-equivalent Hyprland desktop setup with a safe, repeatable installer and a polished first-login experience.
 
-Current estimate: about 93% complete overall, with the project in Milestone 6 beta-readiness work. Milestones 0, 1, 3, and the bulk of 4 are addressed for beta. Core Milestone 2 services validated on VM (2026-06-05). Deferred Milestone 4 items are explicitly documented as post-beta.
+Current estimate: about 94% complete overall, with the project in Milestone 7 post-beta hardening. Milestones 0, 1, 3, and the bulk of 4 are addressed for beta. Core Milestone 2 services validated on VM (2026-06-05). Deferred Milestone 4 items are explicitly documented as post-beta. Milestone 7 distribution decision documented, feedback channel set up.
 
 ## Milestone 0 - Target And Support Contract
 
@@ -214,14 +214,21 @@ Status: active milestone.
 
 ## Milestone 7 - Optional Distribution Work
 
-Status: intentionally deferred.
+Status: in progress (2026-06-06 kickoff). Distribution decision made; feedback channel set up.
 
 - [x] State that ISO/profile work is out of scope until the script installer is reliable.
-- [ ] Decide whether the project should remain script-first after beta.
-- [ ] Document what an Artix profile/ISO would need.
+- [x] Decide whether the project should remain script-first after beta.
+  - **Decision:** ✅ Stay script-first. See `docs/distribution-decision.md`.
+- [x] Document what an Artix profile/ISO would need.
+  - **Done:** ISO tooling, base image, and CI requirements documented in `docs/distribution-decision.md`.
 - [ ] Identify installer pieces that would need to become package/profile assets.
 - [ ] Identify CI or VM automation needed before ISO work is safe.
 - [ ] Do not start ISO implementation before beta installer validation is complete.
+- [x] Set up GitHub issue template for beta bug reports (`.github/ISSUE_TEMPLATE/bug-report.yml`).
+- [x] Add `CONTRIBUTING.md` with bug reporting and PR guidelines.
+- [x] Run usability pass on README fast-start instructions (prerequisites, phase table, post-install guidance, troubleshooting added).
+- [x] Replace placeholder repo URL with actual URL in fast-start instructions.
+- [x] Add beta feedback call-to-action and troubleshooting section to README.
 
 ## Fastest Path To Usable Beta
 
