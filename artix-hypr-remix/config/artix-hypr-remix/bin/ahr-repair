@@ -254,7 +254,7 @@ check_theme_state() {
   if [[ -e "$background_link" || -L "$background_link" ]]; then
     log "OK: current background state exists: $background_link"
   else
-    warn "current background state missing: $background_link"
+    repairable_issue "current background state missing: $background_link"
   fi
 
   if [[ "$theme_ok" == "false" ]]; then
@@ -268,7 +268,20 @@ check_theme_state() {
     else
       fail_check "default theme artix-dark not available; rerun config deployment"
     fi
-  else
+  fi
+
+  # Repair background symlink by cycling the current theme's backgrounds.
+  # Delegates to ahr-theme-bg-next, which will either find an image or
+  # create the sentinel symlink for themes without images.
+  if [[ ! -e "$background_link" && ! -L "$background_link" ]]; then
+    if [[ -x "$theme_cmd" ]]; then
+      run_or_preview "cycle current theme background" "$theme_cmd" bg-next
+    else
+      warn "Cannot repair background state: theme command not available"
+    fi
+  fi
+
+  if [[ "$theme_ok" == "true" ]]; then
     log "OK: theme state looks healthy"
   fi
 }

@@ -26,13 +26,14 @@ This document freezes the supported hardware, startup modes, optional profiles, 
 |---------|--------|-----------------|-------|
 | `amd` | 🟢 Validated | 1 (VM, virtualized GPU) | Package detection and OpenRC module present |
 | `intel` | 🟡 Limited | 0 | Package detection stub and OpenRC module present; no real-host logs yet |
-| `nvidia` | 🟡 Limited | 0 | Package detection stub and OpenRC module present; no real-host logs yet |
-| `laptop` | 🟡 Limited | 0 | Detection flag exists; battery/power packages tracked; no real-host logs yet |
+| `nvidia` | 🟢 Validated | 1 (NVIDIA laptop, TTY + greetd) | Real-host Artix OpenRC validation passed; nvidia/nvidia-utils/nvidia-settings installed; `nvidia_drm.modeset=Y` confirmed |
+| `laptop` | 🟢 Validated | 1 (NVIDIA laptop, TTY + greetd) | Battery/power packages tracked, real-host validation passed on NVIDIA laptop |
 
 ### Validation notes
 
 - **AMD** — one virtualized VM host validated (quality gate, smoke framework, milestone2-validate all pass). Tested with `tty`, `greetd` greeter, and `greetd` autologin startup modes.
-- **Intel / NVIDIA / Laptop** — package stubs and OpenRC module actions exist in `config/hardware/<profile>/`, but **no real Artix host logs have been submitted yet**. These profiles are expected to work but are not yet marked as validated.
+- **Intel** — package stubs and OpenRC module actions exist in `config/hardware/intel/`, but **no real Artix host logs have been submitted yet**. Expected to work but not yet marked as validated.
+- **NVIDIA + Laptop** — validated together on a real NVIDIA laptop host (both TTY and greetd startup modes). See validation bundle.
 
 ## Optional Profiles
 

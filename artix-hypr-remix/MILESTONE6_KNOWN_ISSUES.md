@@ -8,6 +8,7 @@ Key known issues
 - `greetd` mode: present and validated for both greeter and autologin modes — confirmed through VM testing and daily host use.
 - Theme gallery and previews: rich theme gallery and previews are deferred to future work.
 - Wallpaper / background symlink: `~/.config/artix-hypr-remix/current/background` is not created during install; `ahr repair` reports it as missing. Theme falls back to solid color until a background image is manually set or the symlink workflow is completed in a future update.
+  - **Fixed in v0.1.0-beta1+** — `ahr-theme-set` now creates a sentinel symlink for themes without background images. `ahr repair --theme --apply` repairs existing installs.
 - `ahr repair --config` is detect-only at present and will not rewrite user-edited config automatically.
 - Optional AUR tools (Walker, Elephant) are not required; absence triggers warnings in smoke checks but should not block base install. See "AUR tool fallback behavior" below.
 - Post-install smoke checks are session-aware and will skip runtime-only assertions when a Hyprland session is not active.

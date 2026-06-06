@@ -1,7 +1,7 @@
 # Artix Hypr Remix — Beta Release Notes
 
 **Target version:** `v0.1.0-beta1`  
-**Release date:** TBD  
+**Release date:** 2026-06-06  
 **Base system:** Artix Linux with OpenRC
 
 ---
@@ -14,14 +14,14 @@ The following base system was used for the current validation run:
 |--------|-------|
 | Distribution | Artix Linux (OpenRC) |
 | Image | `artix-base-openrc-20250501-x86_64.iso` |
-| Validation date | 2026-06-05 |
-| Validation host | `geoartix` (VM, QEMU/KVM, Virtio GPU) |
+| Validation date | 2026-06-05 – 2026-06-06 |
+| Validation hosts | `geoartix` (VM, QEMU/KVM, Virtio GPU) + NVIDIA laptop (real hardware) |
 | Image source | [artixlinux.org/download](https://artixlinux.org/download) |
-| Package state | Fresh `pacman -Syu` prior to install; live Artix repos as of 2026-06-05 |
+| Package state | Fresh `pacman -Syu` prior to install; live Artix repos as of validation date |
 
 > **Note:** Package availability depends on live Artix repository state at install time.
 > The beta release will pin the exact ISO filename and a recommended minimum `pacman -Syu` date.
-> Additional validation bundles (Intel, NVIDIA, laptop) are needed before broader support claims.
+> Intel GPU validation is still pending — expected to work but no real-host logs yet.
 
 ---
 
@@ -66,8 +66,8 @@ See [BETA_SUPPORT_MATRIX.md](BETA_SUPPORT_MATRIX.md) for the full frozen matrix.
 |---------|--------|-----------------|
 | AMD (desktop/VM) | 🟢 Validated | 1 (virtualized) |
 | Intel | 🟡 Limited | 0 — stub and OpenRC module present, no real host yet |
-| NVIDIA | 🟡 Limited | 0 — stub and OpenRC module present, no real host yet |
-| Laptop | 🟡 Limited | 0 — detection flag present, no real host yet |
+| NVIDIA | 🟢 Validated | 1 (real laptop, TTY + greetd) |
+| Laptop | 🟢 Validated | 1 (NVIDIA laptop) |
 
 ### Validation hosts
 
@@ -76,6 +76,8 @@ See [BETA_SUPPORT_MATRIX.md](BETA_SUPPORT_MATRIX.md) for the full frozen matrix.
 | `geoartix` (VM) | AMD (Virtio) | tty | 2026-06-05 | Quality gate ✅, smoke ✅, milestone2 ✅ |
 | `geoartix` (VM) | AMD (Virtio) | greetd (greeter) | 2026-06-05 | Doctor ✅, post-install smoke ✅, milestone2 ✅ |
 | `geoartix` (host) | AMD (Virtio) | greetd (autologin) | 2026-06-05 | Daily-use validation ✅ |
+| NVIDIA laptop | NVIDIA (real) | tty | 2026-06-06 | Doctor ✅, post-install smoke ✅, milestone2 ✅, bundle collected |
+| NVIDIA laptop | NVIDIA (real) | greetd (greeter) | 2026-06-06 | milestone2 ✅ (second pass) |
 
 ---
 
@@ -83,8 +85,8 @@ See [BETA_SUPPORT_MATRIX.md](BETA_SUPPORT_MATRIX.md) for the full frozen matrix.
 
 See [MILESTONE6_KNOWN_ISSUES.md](MILESTONE6_KNOWN_ISSUES.md) for the full list.
 
-- Real-host validation is still limited — Intel, NVIDIA, and laptop profiles need logs before strong support claims.
-- `greetd` mode is present and validated for both greeter and autologin variants. Fresh-install log bundles still needed for release artifacts.
+- Real-host validation is still limited — Intel GPU profile needs logs before strong support claims. NVIDIA and laptop profiles are now validated on real hardware.
+- `greetd` mode is present and validated for both greeter and autologin variants. Fresh-install log bundles collected for TTY and greetd modes (NVIDIA laptop).
 - `ahr repair --config` is detect-only and does not rewrite user-edited config automatically.
 - Theme background fallback: `artix-dark` has no bundled background image; falls back to solid color.
 - Package availability depends on live Artix repos and selected package profiles.

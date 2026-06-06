@@ -582,6 +582,10 @@ ahr_theme_bg_next() {
   if ! ahr_theme_collect_backgrounds "$theme_name" backgrounds; then
     ahr_theme_warn "No backgrounds found for theme: $theme_name; using theme background color"
     ahr_theme_apply_current_background_fallback || true
+    # Create sentinel symlink so repair does not flag this as missing.
+    if [[ ! -e "$AHR_THEME_BACKGROUND_LINK" && ! -L "$AHR_THEME_BACKGROUND_LINK" ]]; then
+      ln -sfn ".no-background" "$AHR_THEME_BACKGROUND_LINK"
+    fi
     return 0
   fi
 

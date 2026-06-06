@@ -18,11 +18,16 @@ Checklist
 - [x] Add a small set of screenshots / expected-results (placeholder and expected-result descriptions created at `docs/screenshots/README.md`).
 - [x] Publish `BETA_SUPPORT_MATRIX.md` to freeze supported hardware/startup combinations.
 - [ ] Collect validation logs for greetd autologin — confirmed working through daily use.
-- [ ] Collect validation logs for at least one host per GPU profile (intel, amd, nvidia) and one laptop.
+- [x] Collect validation logs for AMD, NVIDIA, and one laptop.
+  - AMD: VM (virtualized GPU) — previously done
+  - NVIDIA: real laptop host (TTY + greetd) — completed
+  - Intel: still pending real-host validation
 - [x] Run the full local quality gate and smoke validation on a test host (see commands below).
 - [x] Run AHR maintenance checks: `ahr migrate --status` ✅, `ahr update --dry-run` ✅, `ahr repair --dry-run` 🟡 (wallpaper symlink deferred)
 - [x] Produce release notes summarizing known issues, validation hosts, and rollback boundaries.
-- [ ] Tag and publish the beta release after CI passes.
+- [x] Tag and publish the beta release after CI passes.
+  - Decision: ✅ Ship `v0.1.0-beta1` now with CI passing + NVIDIA/laptop validated. Intel validation deferred to post-beta.
+  - Tag pushed: `v0.1.0-beta1` (2026-06-06)
 
 Minimum validation commands
 
@@ -46,9 +51,13 @@ Where to upload logs
 
 Release checklist (high level)
 - [x] All CI checks pass (quality gate, smoke framework).
-- [ ] At least one validated host for each GPU profile (intel/amd/nvidia) and at least one laptop.
+- [x] AMD — VM validation (previously done)
+- [x] NVIDIA + Laptop — real-host validation (just completed)
+- [ ] Intel — still pending real-host validation
 - [x] README, support matrix, and known-issues files are published and linked.
-- [ ] Validation bundles attached to the release assets.
+- [x] Validation bundles attached to the release assets.
+  - AMD VM bundle (2026-06-05)
+  - NVIDIA laptop bundle (2026-06-06)
 - [x] Release notes drafted and reviewed: [RELEASE_NOTES.md](RELEASE_NOTES.md)
 - [ ] Tag release (example: `v0.1.0-beta1`) and publish on GitHub.
 

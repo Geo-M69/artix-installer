@@ -24,7 +24,7 @@ Artix Hypr Remix aims to deliver an Artix Linux, OpenRC-native, Omarchy-equivale
 
 ## Current Status
 
-The repo is in active beta readiness. Milestones 1-5 are functionally complete: the phased installer, backup behavior, logging, OpenRC service handling, startup-mode switching, first-run framework, desktop runtime paths, Omarchy-like UX parity scaffolding, menu polish, theme/update UX, migration tooling, repair framework, doctor/smoke validation, and beta expected-results docs are in place. The project is now on **Milestone 6**, focused on documentation finalization, validation log collection, and release readiness.
+The repo is in active beta readiness. Milestones 1-5 are functionally complete: the phased installer, backup behavior, logging, OpenRC service handling, startup-mode switching, first-run framework, desktop runtime paths, Omarchy-like UX parity scaffolding, menu polish, theme/update UX, migration tooling, repair framework, doctor/smoke validation, and beta expected-results docs are in place. **Milestone 6** (documentation finalization, validation log collection, release readiness) is complete — `v0.1.0-beta1` tagged and published on 2026-06-06. The project is now on **Milestone 7**, focused on optional distribution work and post-beta hardening.
 
 ## Gap Analysis
 
@@ -46,10 +46,10 @@ The repo is in active beta readiness. Milestones 1-5 are functionally complete: 
 
 ## Critical Blockers
 
-- Real-host validation coverage is incomplete — Intel, NVIDIA, laptop, and `greetd` autologin profiles lack validation logs.
-- First-login visual proof (screenshots / expected-result artifacts) is missing.
+- ~~Real-host validation coverage is incomplete — Intel, NVIDIA, laptop, and `greetd` autologin profiles lack validation logs.~~ ✅ NVIDIA + laptop validated; Intel deferred.
+- ~~First-login visual proof (screenshots / expected-result artifacts) is missing.~~ ✅ Placeholder and expected-result descriptions created.
 - Some Omarchy required-parity workflows remain partial or intentionally narrower.
-- CI must pass on the final beta branch before tagging.
+- ~~CI must pass on the final beta branch before tagging.~~ ✅ CI passes; tag pushed.
 
 ## Omarchy Parity Snapshot
 
@@ -120,16 +120,20 @@ The repo is in active beta readiness. Milestones 1-5 are functionally complete: 
 - Track repair/reset boundaries in `RECOVERY_AND_RESET.md`.
 - Track Milestone 6 release-readiness inputs in `BETA_READINESS.md`.
 
-### Milestone 6: Documentation and release readiness
+### Milestone 6: Documentation and release readiness ✅
 
 - Rewrite README around supported starting point, install path, and validation workflow.
 - Add known issues, compatibility notes, and troubleshooting.
 - Add screenshots or a concise expected-results section.
 - Publish a beta checklist and release checklist.
+- Real-host validation logs collected: AMD (VM), NVIDIA laptop (TTY + greetd).
+- `v0.1.0-beta1` tagged and published 2026-06-06.
 
-### Milestone 7: Optional future distribution work
+### Milestone 7: Post-beta hardening and distribution (in progress)
 
 - Decide whether to stay script-first or eventually ship an Artix profile/ISO.
+- Collect Intel GPU real-host validation (deferred from M6).
+- Address beta feedback and bug reports.
 - Document ISO requirements only after the script installer is reliable.
 
 ## Prioritized Task List
