@@ -9,7 +9,7 @@ host_policy="${AHR_HOST_POLICY:-artix}"
 overall_status=0
 repair_suggestion_recommended=false
 
-declare -a REQUIRED_ENV_COMMANDS=(pacman slurp grim hyprctl rc-update rc-service)
+declare -a REQUIRED_ENV_COMMANDS=(pacman grim hyprctl rc-update rc-service)
 declare -a REQUIRED_DESKTOP_COMMANDS=(
   polkit-gnome-authentication-agent-1
   xdg-desktop-portal
@@ -30,6 +30,8 @@ declare -a REQUIRED_FRAMEWORK_COMMANDS=(
   ahr-system-lock
   ahr-toggle-idle
   ahr-launch-wallpaper-session
+  ahr-capture-screenshot
+  ahr-capture-picker
   start-hyprland-session.sh
 )
 
@@ -313,6 +315,49 @@ if command -v paru >/dev/null 2>&1; then
 else
   echo "WARN: paru (optional)"
 fi
+
+echo
+echo "Running capture tool dependency checks"
+if command -v grim >/dev/null 2>&1; then
+  echo "OK: grim"
+  if command -v slurp >/dev/null 2>&1; then
+    echo "OK: slurp"
+  else
+    echo "WARN: slurp (area screenshot unavailable)"
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    echo "OK: jq (window screenshot)"
+  else
+    echo "WARN: jq (window screenshot unavailable)"
+  fi
+else
+  echo "MISSING: grim (screenshot capture unavailable)"
+  mark_missing
+fi
+
+echo
+echo "Running menu backend checks"
+if command -v wofi >/dev/null 2>&1; then
+  echo "OK: wofi"
+elif command -v walker >/dev/null 2>&1; then
+  echo "OK: walker"
+elif command -v rofi >/dev/null 2>&1; then
+  echo "OK: rofi"
+else
+  echo "MISSING: no menu backend found (wofi/walker/rofi)"
+  mark_missing
+fi
+
+echo
+echo "Running default application tooling checks"
+for cmd in xdg-settings xdg-mime xdg-open; do
+  if command -v "$cmd" >/dev/null 2>&1; then
+    echo "OK: $cmd"
+  else
+    echo "MISSING: $cmd"
+    mark_missing
+  fi
+done
 
 echo
 echo "Running OpenRC service health checks"

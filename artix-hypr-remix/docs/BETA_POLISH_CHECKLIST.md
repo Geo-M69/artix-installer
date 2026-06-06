@@ -43,7 +43,7 @@ Future sessions should update this table after direct inspection or validation.
 | Waybar/status bar | present but rough | `config/waybar/config.jsonc`, `config/waybar/style.css`, Waybar helper scripts | `../omarchy/default/waybar/`, `../omarchy/themes/*/waybar.css` | High-impact polish | Indicators for updates, recording, idle, notifications, weather, voxtype exist; position/theme richness is thinner than Omarchy. |
 | App launcher | present | `config/artix-hypr-remix/bin/ahr-launch-apps`, `ahr-menu`, `config/walker/config.toml` | `../omarchy/bin/omarchy-menu`, Walker defaults | Public beta blocker | Supports `wofi`/`walker`/`rofi`/TTY backend fallback. |
 | Power/logout menu | present but rough | `ahr-menu`, `ahr-system-lock`, `ahr-system-suspend`, `ahr-system-hibernate`, `ahr-system-reboot` | `../omarchy/bin/omarchy-menu` System menu | Public beta blocker | Lock/logout/suspend/hibernate/reboot/power off exposed; validate suspend/hibernate and portability policy. |
-| Screenshot/capture tools | present but rough | `ahr-capture-screenshot`, `ahr-capture-screenrecording`, `config/hypr/hyprland.conf` | Omarchy Capture menu and `omarchy-capture-*` commands | High-impact polish | Area screenshot and screen recording toggle exist; missing full/window screenshot, OCR, color picker, audio/webcam recording menu paths. |
+| Screenshot/capture tools | present | `ahr-capture-screenshot`, `ahr-capture-picker`, `ahr-capture-screenrecording`, `config/hypr/hyprland.conf` | Omarchy Capture menu and `omarchy-capture-*` commands | High-impact polish | Fullscreen/window/area screenshot modes, screenshot picker (PrtSc), and screen recording toggle implemented; still missing OCR, color picker, audio/webcam recording menu paths. |
 | Clipboard history | present | `ahr-clipboard-picker`, Hyprland `wl-paste` autostart, `cliphist` package | `../omarchy/default/hypr/bindings/clipboard.lua` | High-impact polish | Text/image watchers present; keep validating picker backend and image history. |
 | Notifications | present | `config/mako/config`, Mako autostart, `ahr-toggle-notification-silencing`, Waybar indicator | Omarchy notification toggle/status | High-impact polish | Basic Mako control and toggle state exist. |
 | Lock/idle behavior | present but needs hardware testing | `config/hypr/hypridle.conf`, `config/hypr/hyprlock.conf`, `ahr-system-lock`, `ahr-toggle-idle` | Omarchy screensaver/lock/idle helpers | Public beta blocker | Validate after suspend/resume on laptop hardware. |
@@ -572,7 +572,7 @@ OpenRC/Artix notes:
 | Launch menu | Press `Super+Space`; run `ahr-menu` | Main menu opens and top-level actions are visible | No picker, command not found, blank menu | `ahr-menu`, `ahr-launch-apps`, `config/walker/config.toml` |
 | Switch theme | `ahr theme set artix-dark`; menu Style > Theme Set | Theme state updates and UI reloads | Missing theme, stale Waybar/Mako, broken background | `ahr-theme-lib.sh`, `default/themes/*`, `default/themed/*` |
 | Switch wallpaper | `ahr theme bg-next`; menu background action | Background changes and persists | Symlink missing, unreadable image, wallpaper backend absent | `ahr-theme-bg-next`, `ahr-launch-wallpaper-session` |
-| Take screenshot | Press Print or run `ahr-capture-screenshot` | PNG saved in Pictures and notification appears | Selection fails, no file, missing `grim`/`slurp` | `ahr-capture-screenshot`, `packages/10-hyprland.txt` |
+| Take screenshot | Press Print for mode picker (area/fullscreen/window) or run `ahr-capture-screenshot` with `--area`/`--fullscreen`/`--window` | PNG saved in Pictures and notification appears | Selection fails, no file, missing `grim`/`slurp`/`jq` | `ahr-capture-picker`, `ahr-capture-screenshot`, `packages/10-hyprland.txt` |
 | Use clipboard history | Copy text/image, run `ahr-clipboard-picker` | Recent clipboard item can be selected | Empty picker, missing watchers | `hyprland.conf`, `ahr-clipboard-picker`, `cliphist` package |
 | Lock and unlock | `ahr-system-lock` or keybinding | Hyprlock appears and unlocks | Lock fails, wrong auth, blank lock screen | `ahr-system-lock`, `hyprlock.conf` |
 | Idle behavior | Wait for idle timeout; toggle idle twice | Lock/DPMS behavior works and state restores | Never locks, cannot resume, stale Waybar state | `hypridle.conf`, `ahr-toggle-idle`, Waybar idle helper |
@@ -603,7 +603,7 @@ Beta polish is complete when:
 
 ## 10. Immediate next-session starter tasks
 
-- [ ] Add or improve beta healthcheck coverage for menu dependencies, default apps, and capture tools.
+- [x] Add or improve beta healthcheck coverage for menu dependencies, default apps, and capture tools.
 - [ ] Add dependency guards and clearer failure messages to `ahr-menu` actions.
 - [ ] Add default editor validation/setup and broaden safe `xdg-mime` defaults.
 - [x] Add screenshot/capture menu polish for fullscreen/window/open-after-capture behavior.
