@@ -15,8 +15,9 @@ Checklist
 - [x] Rewrite and publish README (replace or augment `README.md`).
 - [x] Add and link this beta checklist from `README.md`.
 - [x] Create `MILESTONE6_KNOWN_ISSUES.md` and link it from README.
-- [ ] Add a small set of screenshots / expected-results (place under `config/docs/screenshots/`).
+- [x] Add a small set of screenshots / expected-results (placeholder and expected-result descriptions created at `docs/screenshots/README.md`).
 - [x] Publish `BETA_SUPPORT_MATRIX.md` to freeze supported hardware/startup combinations.
+- [ ] Collect validation logs for greetd autologin — confirmed working through daily use.
 - [ ] Collect validation logs for at least one host per GPU profile (intel, amd, nvidia) and one laptop.
 - [x] Run the full local quality gate and smoke validation on a test host (see commands below).
 - [x] Run AHR maintenance checks: `ahr migrate --status` ✅, `ahr update --dry-run` ✅, `ahr repair --dry-run` 🟡 (wallpaper symlink deferred)

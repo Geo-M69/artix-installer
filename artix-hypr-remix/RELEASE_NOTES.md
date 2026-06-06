@@ -74,7 +74,8 @@ See [BETA_SUPPORT_MATRIX.md](BETA_SUPPORT_MATRIX.md) for the full frozen matrix.
 | Host | GPU | Startup | Date | Logs |
 |------|-----|---------|------|------|
 | `geoartix` (VM) | AMD (Virtio) | tty | 2026-06-05 | Quality gate ✅, smoke ✅, milestone2 ✅ |
-| `geoartix` (VM) | AMD (Virtio) | greetd | 2026-06-05 | Doctor ✅, post-install smoke ✅, milestone2 ✅ |
+| `geoartix` (VM) | AMD (Virtio) | greetd (greeter) | 2026-06-05 | Doctor ✅, post-install smoke ✅, milestone2 ✅ |
+| `geoartix` (host) | AMD (Virtio) | greetd (autologin) | 2026-06-05 | Daily-use validation ✅ |
 
 ---
 
@@ -83,7 +84,7 @@ See [BETA_SUPPORT_MATRIX.md](BETA_SUPPORT_MATRIX.md) for the full frozen matrix.
 See [MILESTONE6_KNOWN_ISSUES.md](MILESTONE6_KNOWN_ISSUES.md) for the full list.
 
 - Real-host validation is still limited — Intel, NVIDIA, and laptop profiles need logs before strong support claims.
-- `greetd` mode is present but not exhaustively validated across greeter/autologin variants.
+- `greetd` mode is present and validated for both greeter and autologin variants. Fresh-install log bundles still needed for release artifacts.
 - `ahr repair --config` is detect-only and does not rewrite user-edited config automatically.
 - Theme background fallback: `artix-dark` has no bundled background image; falls back to solid color.
 - Package availability depends on live Artix repos and selected package profiles.

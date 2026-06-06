@@ -472,11 +472,6 @@ filter_installable_packages() {
 
 	out_ref=()
 
-	if [[ "$DRY_RUN" == "true" ]]; then
-		out_ref=("$@")
-		return 0
-	fi
-
 	for pkg in "$@"; do
 		if pacman -Si "$pkg" >/dev/null 2>&1; then
 			out_ref+=("$pkg")

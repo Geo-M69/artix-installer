@@ -1,4 +1,5 @@
 # Recommended AMD graphics profile packages.
 # Keep this list focused on packages not guaranteed by base sets.
+# libva-mesa-driver is no longer shipped as a standalone package;
+# VA-API support is built into mesa (26.1+).
 vulkan-radeon
-libva-mesa-driver

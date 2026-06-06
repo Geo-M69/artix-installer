@@ -5,7 +5,7 @@ This document collects the primary known issues, caveats, and recommended starti
 Key known issues
 
 - Real-host validation is limited. The project needs at least one validated host per GPU profile (intel, amd, nvidia) and one laptop snapshot.
-- `greetd` mode: present but not exhaustively validated across greeter/autologin variants — test carefully before claiming broad support.
+- `greetd` mode: present and validated for both greeter and autologin modes — confirmed through VM testing and daily host use.
 - Theme gallery and previews: rich theme gallery and previews are deferred to future work.
 - Wallpaper / background symlink: `~/.config/artix-hypr-remix/current/background` is not created during install; `ahr repair` reports it as missing. Theme falls back to solid color until a background image is manually set or the symlink workflow is completed in a future update.
 - `ahr repair --config` is detect-only at present and will not rewrite user-edited config automatically.

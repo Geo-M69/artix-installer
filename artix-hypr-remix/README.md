@@ -316,7 +316,7 @@ Package policy:
 Milestone 6 — Beta checklist, known issues, and support matrix
 
 - Beta support matrix (frozen): [BETA_SUPPORT_MATRIX.md](BETA_SUPPORT_MATRIX.md)
-- Milestone 6 beta checklist (draft): [MILESTONE6_BETA_CHECKLIST.md](MILESTONE6_BETA_CHECKLIST.md)
-- Milestone 6 README draft: [MILESTONE6_README_DRAFT.md](MILESTONE6_README_DRAFT.md)
-- Known issues and troubleshooting (draft): [MILESTONE6_KNOWN_ISSUES.md](MILESTONE6_KNOWN_ISSUES.md)
+- Milestone 6 beta checklist: [MILESTONE6_BETA_CHECKLIST.md](MILESTONE6_BETA_CHECKLIST.md)
+- Known issues and troubleshooting: [MILESTONE6_KNOWN_ISSUES.md](MILESTONE6_KNOWN_ISSUES.md)
 - Beta release notes (draft): [RELEASE_NOTES.md](RELEASE_NOTES.md)
+- Screenshots / expected-result artifacts: [docs/screenshots/](docs/screenshots/)

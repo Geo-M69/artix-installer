@@ -24,27 +24,32 @@ Artix Hypr Remix aims to deliver an Artix Linux, OpenRC-native, Omarchy-equivale
 
 ## Current Status
 
-The repo is beyond a raw installer scaffold. Milestones 1-4 are functionally complete for the current development flow: the phased installer, backup behavior, logging, OpenRC service handling, startup-mode switching, first-run framework, desktop runtime paths, Omarchy-like UX parity scaffolding, menu polish, theme/update UX, and beta expected-results docs are in place. The project is now ready for **Milestone 5 alpha** work focused on maintenance, repair, and upgrade recovery.
+The repo is in active beta readiness. Milestones 1-5 are functionally complete: the phased installer, backup behavior, logging, OpenRC service handling, startup-mode switching, first-run framework, desktop runtime paths, Omarchy-like UX parity scaffolding, menu polish, theme/update UX, migration tooling, repair framework, doctor/smoke validation, and beta expected-results docs are in place. The project is now on **Milestone 6**, focused on documentation finalization, validation log collection, and release readiness.
 
 ## Gap Analysis
 
-- Installer safety: strong progress, but post-install validation should cover more real desktop readiness, not just package/config structure.
-- Artix/OpenRC base layer: OpenRC service handling exists, but package naming and service assumptions still need live Artix verification.
+- Installer safety: strong progress; post-install smoke validation now covers functional desktop readiness beyond package/config structure.
+- Artix/OpenRC base layer: OpenRC service handling is validated on VM; package naming confirmed for core profile. Real-host validation still needed for Intel, NVIDIA, and laptop profiles.
 - Desktop functionality: Hyprland, Waybar, Mako, PipeWire, screenshots, clipboard, theming, first-run, and update hooks are present and validated for Milestone 3 scope.
-- Omarchy-like UX: partial parity only. The repo has the framework for menus, themes, hooks, and update tooling, but it still lacks a documented parity table and some of the “finished desktop” behavior Omarchy ships.
-- Release readiness: README is useful, but supported assumptions, known issues, beta scope, and release criteria are not yet stated clearly enough.
+- Omarchy-like UX: parity table is documented in `MILESTONE4_PARITY_AUDIT.md`. Most required-parity items are addressed; remaining items are explicitly deferred post-beta.
+- Release readiness: README, support matrix, known issues, release notes, and beta checklist are published. Screenshots/visual artifacts and validation bundles are still needed before the public beta tag.
 
 ## Fastest Path To Beta
 
-1. Build the Omarchy parity table and decide which UX differences are required parity versus Artix/OpenRC adaptations.
-2. Validate and tighten the OpenRC/session stack on more real Artix systems.
-3. Close remaining first-login polish gaps: menus, update UX, welcome flow, visual cohesion, and documented expected behavior.
-4. Freeze a supported beta matrix and document what is intentionally unsupported.
+1. ✅ Build the Omarchy parity table and decide which UX differences are required parity versus Artix/OpenRC adaptations — done in `MILESTONE4_PARITY_AUDIT.md`.
+2. ✅ Validate and tighten the OpenRC/session stack on real Artix systems — core services validated on VM (2026-06-05); Intel/NVIDIA/laptop validation pending.
+3. ✅ Close remaining first-login polish gaps: menus, update UX, welcome flow, visual cohesion, and documented expected behavior — all addressed in Milestone 4 work.
+4. ✅ Freeze a supported beta matrix and document what is intentionally unsupported — done in `BETA_SUPPORT_MATRIX.md` and `BETA_READINESS.md`.
+5. Collect validation logs for Intel, NVIDIA, laptop, and `greetd` autologin profiles.
+6. Add screenshots or expected-result artifacts under `docs/screenshots/`.
+7. Tag the beta release and publish with validation bundles.
 
 ## Critical Blockers
 
-- Omarchy parity is not yet documented feature-by-feature, so it is hard to tell what is intentionally different versus unfinished.
-- Hardware package names and service assumptions need validation on real Artix installs before the project can claim reliable support.
+- Real-host validation coverage is incomplete — Intel, NVIDIA, laptop, and `greetd` autologin profiles lack validation logs.
+- First-login visual proof (screenshots / expected-result artifacts) is missing.
+- Some Omarchy required-parity workflows remain partial or intentionally narrower.
+- CI must pass on the final beta branch before tagging.
 
 ## Omarchy Parity Snapshot
 
@@ -129,11 +134,11 @@ The repo is beyond a raw installer scaffold. Milestones 1-4 are functionally com
 
 ## Prioritized Task List
 
-1. Write the full Omarchy parity table.
-2. Classify each parity gap as required parity, Artix/OpenRC adaptation, optional polish, intentional difference, unsupported for now, or unknown.
-3. Validate phase 2 and phase 3 package/service manifests on additional real Artix systems.
-4. Tighten README and release notes around supported assumptions and beta scope.
-5. Identify Milestone 5 repair/reapply workflows that should be designed before beta.
+1. ✅ Write the full Omarchy parity table — done in `MILESTONE4_PARITY_AUDIT.md`.
+2. ✅ Classify each parity gap — done in `MILESTONE4_PARITY_AUDIT.md`.
+3. Validate phase 2 and phase 3 package/service manifests on additional real Artix systems (Intel, NVIDIA, laptop).
+4. ✅ Tighten README and release notes around supported assumptions and beta scope — README rewritten, release notes drafted.
+5. ✅ Identify Milestone 5 repair/reapply workflows — done; repair, migration, update, doctor, and smoke tooling are in place.
 
 ## Definition Of Done
 

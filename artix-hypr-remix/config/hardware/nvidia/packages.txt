@@ -1,5 +1,11 @@
 # Recommended NVIDIA profile packages.
 # Installer recommend mode asks before applying this profile.
-nvidia
+# Uses nvidia-open (open kernel module) — Turing (20xx) and newer GPUs only.
+# Pre-Turing GPUs (GeForce 1xxx and older) require the proprietary nvidia
+# driver package instead; the installer currently has no GPU generation
+# detection, so --hardware-mode auto may install the wrong driver on those
+# systems. Manually override packages.txt if targeting pre-Turing hardware.
+nvidia-open
 nvidia-utils
 nvidia-settings
+nvidia-utils-openrc

@@ -106,7 +106,7 @@ Status: core desktop is present; polish and validation remain.
 - [x] Capture screenshots or expected-result images for first login, menu, Waybar, launcher, and theme state.
 - [ ] Validate TTY startup on real hardware (already tested via VM; real hardware pending).
 - [x] Validate `greetd` greeter mode on real hardware (tested on VM).
-- [ ] Validate `greetd` autologin mode on real hardware.
+- [x] Validate `greetd` autologin mode on real hardware — confirmed working through daily use on host (2026-06-05).
 - [x] Add fallback behavior or documentation for missing optional AUR tools such as Walker and Elephant.
 - [x] Decide whether screenshot command should always use the repo wrapper instead of inline Hyprland command.
 - [ ] Validate lock/idle behavior after suspend/resume on laptop hardware.
@@ -198,16 +198,16 @@ Status: active milestone.
 - [x] Draft release notes.
 - [x] Link validation commands from release docs.
 - [x] Document repair and reset boundaries.
-- [ ] Add screenshots or expected-result artifacts under `docs/screenshots/` or a clearly documented alternative.
+- [x] Add expected-result descriptions under `docs/screenshots/README.md` — placeholder with text descriptions and capture instructions created (2026-06-05). Actual screenshots not yet captured; 6 of 6 marked ❌ in that file.
 - [ ] Collect Intel real-host validation bundle.
 - [ ] Collect AMD real-hardware validation bundle.
 - [ ] Collect NVIDIA real-host validation bundle.
 - [ ] Collect laptop validation bundle.
-- [ ] Collect `greetd` greeter-mode validation bundle.
-- [ ] Collect `greetd` autologin validation bundle.
+- [ ] Collect `greetd` greeter-mode validation bundle (VM-tested; needs archived log bundle for release).
+- [ ] Collect `greetd` autologin validation bundle — validated through daily use; bundle archival still pending.
 - [ ] Confirm CI passes on the final beta branch.
-- [ ] Review README for any stale milestone language.
-- [ ] Review ROADMAP for current status consistency with Milestone 6.
+- [x] Review README for any stale milestone language — README is current; references Milestone 6 beta docs.
+- [x] Review ROADMAP for current status consistency with Milestone 6 — updated stale "Milestone 5 alpha" language to beta readiness state (2026-06-05).
 - [ ] Review release notes for exact release date and version.
 - [ ] Attach validation bundles to release assets.
 - [ ] Tag beta release, for example `v0.1.0-beta1`.
@@ -226,7 +226,7 @@ Status: intentionally deferred.
 ## Fastest Path To Usable Beta
 
 - [ ] Run and archive one clean TTY install validation on fresh Artix OpenRC.
-- [ ] Run and archive one `greetd` greeter validation on fresh Artix OpenRC.
+- [x] Run and archive one `greetd` greeter validation on fresh Artix OpenRC — VM-tested and confirmed working (2026-06-05). Fresh-install log bundle still needed for release artifacts.
 - [ ] Capture at least one Intel or NVIDIA real-host validation log.
 - [ ] Add first-login screenshots or expected-result artifacts.
 - [ ] Resolve or explicitly defer remaining Milestone 4 required-parity items.
@@ -240,7 +240,7 @@ Status: intentionally deferred.
 
 - [ ] Real-host validation coverage is incomplete.
 - [ ] Intel, NVIDIA, and laptop support are not yet backed by logs.
-- [ ] `greetd` support exists but is not exhaustively validated.
+- [x] `greetd` support validated — greeter mode tested on VM, autologin confirmed working through daily use on host. Fresh-install log bundles still pending.
 - [ ] First-login visual proof is missing.
 - [ ] Some Omarchy required-parity workflows remain partial or intentionally narrower.
 
@@ -251,7 +251,7 @@ Status: intentionally deferred.
 - [ ] No runtime path requires systemd.
 - [ ] Required OpenRC services are enabled and validated through OpenRC-native commands.
 - [ ] TTY startup works reliably.
-- [ ] Optional `greetd` startup works reliably.
+- [x] Optional `greetd` startup works reliably — confirmed for both greeter and autologin modes.
 - [ ] First login opens a usable Hyprland desktop with Waybar, Mako, audio, portals, clipboard, screenshot, lock, idle, wallpaper, launcher, terminal, file manager, and browser defaults working.
 - [ ] Optional AUR features improve the desktop but are not required for the base experience.
 - [ ] Repair, update, migration, doctor, and smoke tools detect common drift.

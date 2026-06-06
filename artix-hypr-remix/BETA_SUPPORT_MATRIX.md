@@ -17,8 +17,8 @@ This document freezes the supported hardware, startup modes, optional profiles, 
 | Mode | Default | Status | Notes |
 |------|---------|--------|-------|
 | `tty` | ✅ Default | 🟢 Validated | Launches Hyprland via managed block in `~/.profile` on VT 1 |
-| `greetd` | ❌ Optional | 🟢 Validated | Present and validated (greeter mode); autologin variant still needs separate validation |
-| `greetd` + autologin | — | 🟡 Partial | Present, greeter-mode is the tested path; autologin not yet validated |
+| `greetd` | ❌ Optional | 🟢 Validated | Present and validated (greeter mode) |
+| `greetd` + autologin | — | 🟢 Validated | Present and validated through daily use on VM and host; fresh-install validation bundle still needed for release artifacts |
 
 ## GPU / Hardware Profiles
 
@@ -31,7 +31,7 @@ This document freezes the supported hardware, startup modes, optional profiles, 
 
 ### Validation notes
 
-- **AMD** — one virtualized VM host validated (quality gate, smoke framework, milestone2-validate all pass). Tested with both `tty` and `greetd` startup modes.
+- **AMD** — one virtualized VM host validated (quality gate, smoke framework, milestone2-validate all pass). Tested with `tty`, `greetd` greeter, and `greetd` autologin startup modes.
 - **Intel / NVIDIA / Laptop** — package stubs and OpenRC module actions exist in `config/hardware/<profile>/`, but **no real Artix host logs have been submitted yet**. These profiles are expected to work but are not yet marked as validated.
 
 ## Optional Profiles

@@ -168,4 +168,4 @@ ahr repair --apply
 - Rollback/reset support boundaries are documented.
 - Milestone 6 release-readiness inputs are explicit.
 
-Status: complete for the current Milestone 5 alpha scope.
+Status: complete. Milestone 5 scope (maintenance, repair, and upgrade tooling) is fully implemented. Project is now on Milestone 6 (beta readiness).
