@@ -54,22 +54,18 @@ deploy_acpi_events() {
   local elogind_lid_config="/etc/elogind/logind.conf"
   local elogind_dropin_dir="/etc/elogind/logind.conf.d"
   local handle_lid_value=""
-  local elogind_config_found=false
 
   # Read HandleLidSwitch from logind.conf and drop-ins.
-  # Whitespace-tolerant: matches "HandleLidSwitch = suspend # comment".
-  # Strips inline comments after extracting the value.
+  # Whitespace-tolerant: matches "HandleLidSwitch= suspend" etc.
   if [[ -f "$elogind_lid_config" ]]; then
-    elogind_config_found=true
-    handle_lid_value="$(grep -E '^[[:space:]]*HandleLidSwitch[[:space:]]*=' "$elogind_lid_config" 2>/dev/null | tail -1 | sed 's/^[[:space:]]*HandleLidSwitch[[:space:]]*=[[:space:]]*//; s/[[:space:]]*#.*//' | tr -d '[:space:]' || true)"
+    handle_lid_value="$(grep -E '^[[:space:]]*HandleLidSwitch[[:space:]]*=' "$elogind_lid_config" 2>/dev/null | tail -1 | sed 's/^[[:space:]]*HandleLidSwitch[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]' || true)"
   fi
   # Check drop-ins (higher priority override main config).
   if [[ -d "$elogind_dropin_dir" ]]; then
-    elogind_config_found=true
     local dropin_value
     for dropin in "$elogind_dropin_dir"/*.conf; do
       [[ -f "$dropin" ]] || continue
-      dropin_value="$(grep -E '^[[:space:]]*HandleLidSwitch[[:space:]]*=' "$dropin" 2>/dev/null | tail -1 | sed 's/^[[:space:]]*HandleLidSwitch[[:space:]]*=[[:space:]]*//; s/[[:space:]]*#.*//' | tr -d '[:space:]' || true)"
+      dropin_value="$(grep -E '^[[:space:]]*HandleLidSwitch[[:space:]]*=' "$dropin" 2>/dev/null | tail -1 | sed 's/^[[:space:]]*HandleLidSwitch[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]' || true)"
       if [[ -n "$dropin_value" ]]; then
         handle_lid_value="$dropin_value"
       fi
@@ -83,11 +79,9 @@ deploy_acpi_events() {
     else
       module_info "elogind HandleLidSwitch is set to '$handle_lid_value' — deploying acpid lid event as fallback"
     fi
-  elif [[ "$elogind_config_found" == "true" ]]; then
+  else
     module_info "elogind HandleLidSwitch not explicitly configured — elogind default may handle lid; skipping acpid lid event to avoid conflict"
     return 0
-  else
-    module_info "elogind not installed (no config found) — deploying acpid lid event as primary lid handler"
   fi
 
   if [[ "$dry_run" == "true" ]]; then
