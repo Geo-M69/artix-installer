@@ -2,5 +2,6 @@ networkmanager
 networkmanager-openrc
 iwd
 bluez
+bluez-utils
 bluez-openrc
 blueman

@@ -5,6 +5,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/openrc.sh" || true
 
 TTY_BLOCK_BEGIN="# >>> artix-hypr-remix tty hyprland >>>"
 TTY_BLOCK_END="# <<< artix-hypr-remix tty hyprland <<<"
+CONFD_BLOCK_BEGIN="# >>> artix-hypr-remix greetd confd >>>"
+CONFD_BLOCK_END="# <<< artix-hypr-remix greetd confd <<<"
 STARTUP_MODE_STATE_REL=".local/state/artix-hypr-remix/startup.mode"
 GREETD_VT="7"
 
@@ -21,6 +23,18 @@ if [[ -z "${DISPLAY:-}" ]] && [[ -z "${WAYLAND_DISPLAY:-}" ]] && [[ -z "${SSH_TT
   exec bash "$session_launcher"
 fi
 # <<< artix-hypr-remix tty hyprland <<<
+EOF
+}
+
+greetd_confd_block() {
+  cat <<'EOF'
+# >>> artix-hypr-remix greetd confd >>>
+# Ensure greetd starts after dbus and elogind are fully ready during boot.
+# The stock greetd init script only has `want logind` (soft dep) which lets
+# greetd race ahead before dbus/elogind are ready.  When that happens,
+# supervise-daemon enters a crash-retry loop and gives up.
+rc_need="dbus elogind"
+# <<< artix-hypr-remix greetd confd <<<
 EOF
 }
 
@@ -128,11 +142,34 @@ remove_tty_hyprland_autostart() {
   done
 }
 
+_remove_greetd_confd_block() {
+  local file_path="/etc/conf.d/greetd"
+
+  if [[ ! -f "$file_path" ]]; then
+    return 0
+  fi
+
+  local temp_file
+  temp_file="$(mktemp)"
+  awk -v begin="$CONFD_BLOCK_BEGIN" -v end="$CONFD_BLOCK_END" '
+    $0 == begin { in_block=1; next }
+    $0 == end { in_block=0; next }
+    !in_block { print }
+  ' "$file_path" > "$temp_file"
+
+  # If nothing non-blank remains, delete the file entirely.
+  if grep -q '[^[:space:]]' "$temp_file" 2>/dev/null; then
+    mv "$temp_file" "$file_path"
+  else
+    rm -f "$file_path" "$temp_file"
+  fi
+}
+
 disable_greetd_service() {
   local dry_run="${1:-false}"
 
   if [[ "$dry_run" == "true" ]]; then
-    info "Dry-run: would remove greetd from OpenRC default runlevel and stop service"
+    info "Dry-run: would remove greetd from OpenRC default runlevel, stop service, and remove AHR-managed conf.d block"
     return 0
   fi
 
@@ -143,6 +180,8 @@ disable_greetd_service() {
   if command -v rc-service >/dev/null 2>&1; then
     rc-service greetd stop >/dev/null 2>&1 || true
   fi
+
+  _remove_greetd_confd_block
 }
 
 ensure_session_launcher_present() {
@@ -283,6 +322,25 @@ EOF
     chmod 0644 "$greetd_config"
     info "Configured greetd startup at $greetd_config (mode=$greetd_mode vt=$GREETD_VT)"
   fi
+
+  # Write managed OpenRC conf.d block to add hard deps on dbus + elogind.
+  # The stock greetd init script only has `want logind` (soft dep), which
+  # lets greetd race ahead before dbus/elogind are fully ready during boot.
+  # When that happens greetd fails immediately, supervise-daemon enters a
+  # crash-retry loop, then gives up - leaving greetd permanently stopped.
+  # Hard-coding rc_need here ensures greetd waits for both before starting.
+  _greetd_confd="/etc/conf.d/greetd"
+  if [[ "$dry_run" == "true" ]]; then
+    info "Dry-run: would write AHR-managed conf.d block to $_greetd_confd"
+  else
+    install -d -m 0755 "$(dirname "$_greetd_confd")"
+    # Remove stale AHR block if present, then append fresh block.
+    _remove_greetd_confd_block
+    printf '\n%s\n' "$(greetd_confd_block)" >> "$_greetd_confd"
+    chmod 0644 "$_greetd_confd"
+    info "Updated $_greetd_confd (rc_need=\"dbus elogind\")"
+  fi
+  unset _greetd_confd
 
   if [[ "$dry_run" == "true" ]]; then
     info "Dry-run: would enable greetd OpenRC service (start deferred until reboot)"
