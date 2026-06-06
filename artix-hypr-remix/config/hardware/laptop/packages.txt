@@ -2,3 +2,6 @@
 # Keep this conservative for v1.
 acpi
 acpid
+# pm-utils provides pm-suspend, pm-hibernate etc. as a fallback if
+# elogind's loginctl suspend is unavailable.
+pm-utils

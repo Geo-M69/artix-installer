@@ -3,7 +3,12 @@ set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
-# Try OpenRC/pm-utils suspend, then fall back to direct /sys/power/state write.
+# elogind is always installed — try loginctl first (works on Artix OpenRC).
+if ahr_has_cmd loginctl && loginctl suspend 2>/dev/null; then
+  exit 0
+fi
+
+# Fall back to OpenRC/pm-utils suspend.
 if ahr_has_cmd pm-suspend; then
   exec pm-suspend
 fi
@@ -16,4 +21,4 @@ if [[ -w /sys/power/state ]]; then
   exec printf '%s' mem > /sys/power/state
 fi
 
-ahr_fail "No suspend method found (try installing pm-utils or acpid)"
+ahr_fail "No suspend method found (try installing pm-utils)"

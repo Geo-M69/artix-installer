@@ -1,0 +1,10 @@
+# acpid event: lid close → suspend (close events only)
+# This handler checks /proc/acpi/button/lid/*/state first and only suspends
+# if the lid is reported as closed, preventing suspend-on-open races.
+#
+# This is a fallback for systems where elogind's HandleLidSwitch is not
+# configured or not available. If elogind already handles lid events,
+# deploying this may cause duplicate suspend requests — only use it
+# if lid close does nothing on your system.
+event=button/lid.*
+action=/etc/acpi/actions/artix-hypr-remix-lid.sh

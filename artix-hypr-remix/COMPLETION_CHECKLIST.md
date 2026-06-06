@@ -4,7 +4,7 @@ This checklist tracks the remaining work needed to reach the target:
 
 > An Artix OpenRC-native Omarchy-equivalent Hyprland desktop setup with a safe, repeatable installer and a polished first-login experience.
 
-Current estimate: about 94% complete overall, with the project in Milestone 7 post-beta hardening. Milestones 0, 1, 3, and the bulk of 4 are addressed for beta. Core Milestone 2 services validated on VM (2026-06-05). Deferred Milestone 4 items are explicitly documented as post-beta. Milestone 7 distribution decision documented, feedback channel set up.
+Current estimate: about 95% complete overall, with the project in Milestone 7 post-beta hardening. Milestones 0, 1, 3, and the bulk of 4 are addressed for beta. Core Milestone 2 services validated on VM (2026-06-05). Deferred Milestone 4 items are explicitly documented as post-beta. Milestone 7 distribution decision documented, feedback infrastructure in place, usability pass complete.
 
 ## Milestone 0 - Target And Support Contract
 
@@ -60,6 +60,7 @@ Status: functional; core services validated on VM (2026-06-05). Real-hardware an
 - [x] Add hardware profile package stubs and OpenRC modules for AMD, Intel, NVIDIA, and laptop.
 - [x] Validate all core package names on a fresh Artix OpenRC install.
 - [ ] Validate all optional package names on a fresh Artix OpenRC install.
+  - **Documented in `docs/package-substitutions.md`.** Requires AUR host to validate `91-aur-optional.txt` packages (`walker-bin`, `elephant*`).
 - [x] Capture real-host service validation for `dbus`.
 - [x] Capture real-host service validation for `elogind`.
 - [x] Capture real-host service validation for `NetworkManager`.
@@ -67,12 +68,18 @@ Status: functional; core services validated on VM (2026-06-05). Real-hardware an
 - [x] Capture real-host validation for PipeWire and WirePlumber startup under Hyprland.
 - [x] Capture real-host validation for XDG portals under Hyprland.
 - [ ] Capture real-host validation for printing profile.
+  - **Dry-run validated** (2026-06-06): packages (`cups`, `avahi`, `cups-openrc`, `avahi-openrc`) and services (`cupsd`, `avahi-daemon`) inject correctly. Live install pending.
 - [ ] Capture real-host validation for Docker profile.
+  - **Script-level validation passes** in quality gate via `check-docker-profile.sh`. Dry-run confirmed. Live install pending.
 - [ ] Confirm Intel hardware profile packages and module behavior.
 - [ ] Confirm AMD hardware profile packages and module behavior on non-VM hardware.
-- [ ] Confirm NVIDIA hardware profile packages and module behavior.
-- [ ] Confirm laptop battery/power package and service behavior.
-- [ ] Document any Artix package substitutions versus Omarchy/Arch packages.
+  - **VM-validated (2026-06-05).** Real non-VM AMD hardware still pending.
+- [x] Confirm NVIDIA hardware profile packages and module behavior.
+  - **Validated on NVIDIA laptop (2026-06-06).**
+- [x] Confirm laptop battery/power package and service behavior.
+  - **Validated on NVIDIA laptop (2026-06-06).** `acpi`, `acpid` installed and functional. Lid-close suspend via elogind confirmed. `ahr-system-suspend` fixed to use `loginctl suspend`.
+- [x] Document any Artix package substitutions versus Omarchy/Arch packages.
+  - **Done:** `docs/package-substitutions.md` covers OpenRC wrappers, NVIDIA variants, AUR/community differences, hardware profiles, and profile validation status.
 
 ## Milestone 3 - Hyprland Desktop Functionality
 
