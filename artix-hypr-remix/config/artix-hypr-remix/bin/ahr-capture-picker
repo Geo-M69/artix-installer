@@ -5,18 +5,31 @@ source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Detect menu backend
+# Detect menu backend (respect AHR_MENU_BACKEND override)
 MENU_BACKEND=""
-if ahr_has_cmd wofi; then
-  MENU_BACKEND="wofi"
-elif ahr_has_cmd walker; then
-  MENU_BACKEND="walker"
-elif ahr_has_cmd rofi; then
-  MENU_BACKEND="rofi"
-elif [[ -t 0 && -t 1 ]]; then
-  MENU_BACKEND="tty"
-else
-  ahr_fail "No menu backend found (wofi/walker/rofi)"
+if [[ -n "${AHR_MENU_BACKEND:-}" ]]; then
+  case "$AHR_MENU_BACKEND" in
+    wofi|walker|rofi|tty)
+      MENU_BACKEND="$AHR_MENU_BACKEND"
+      ;;
+    *)
+      ahr_fail "Unsupported AHR_MENU_BACKEND: $AHR_MENU_BACKEND (use wofi, walker, rofi, or tty)"
+      ;;
+  esac
+fi
+
+if [[ -z "$MENU_BACKEND" ]]; then
+  if ahr_has_cmd wofi; then
+    MENU_BACKEND="wofi"
+  elif ahr_has_cmd walker; then
+    MENU_BACKEND="walker"
+  elif ahr_has_cmd rofi; then
+    MENU_BACKEND="rofi"
+  elif [[ -t 0 && -t 1 ]]; then
+    MENU_BACKEND="tty"
+  else
+    ahr_fail "No menu backend found (wofi/walker/rofi)"
+  fi
 fi
 
 # Show menu and capture selection

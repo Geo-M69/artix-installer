@@ -10,6 +10,7 @@ Primary reference points:
 
 - AHR repo root: `artix-hypr-remix/`
 - Omarchy reference checkout: `../omarchy`
+- Downloaded Omarchy manual: `../the-omarchy-manual.md`
 - Existing parity audit: `MILESTONE4_PARITY_AUDIT.md`
 - Existing completion tracker: `COMPLETION_CHECKLIST.md`
 - Installed framework source: `config/artix-hypr-remix/`
@@ -102,6 +103,57 @@ Use these classifications for differences:
 | Update/repair tooling | Present | Artix/OpenRC adaptation | `ahr-update`, `ahr-repair`, `ahr-migrate`, `doctor.sh` | `omarchy-update`, refresh/update menus | Keep AHR update safer and narrower than Omarchy system-maintenance menus. |
 | Uninstall/reset guidance | Present | Intentional difference | `RECOVERY_AND_RESET.md`, `ahr list-backups`, `ahr repair` | Omarchy remove/refresh tooling | Full uninstall remains out of scope unless explicitly accepted. |
 | Documentation | Present | Required parity | `README.md`, support/release/milestone docs | Omarchy docs/learn workflow | Keep public beta docs aligned with supported scope. |
+
+## 4.1 Manual-derived final-product backlog
+
+The downloaded Omarchy manual makes the final product surface larger than the
+beta polish surface. Keep this section as a scope ledger, not a beta blocker
+list. A future implementation pass should promote items from here only after
+deciding that the feature is Artix/OpenRC-safe, valuable for AHR users, and
+small enough to validate.
+
+Use these decision labels:
+
+- Required for stable
+- OpenRC adaptation
+- Optional polish
+- Unsupported for now
+- Probably out of scope
+- Unknown; needs design/testing
+
+| Manual feature area | AHR decision | Why / constraints | Likely follow-up |
+| --- | --- | --- | --- |
+| ISO / full-disk installer | Unsupported for now | AHR is script-first until the installer is proven across real Artix OpenRC hosts. ISO work adds storage, bootloader, encryption, and release-engineering risk. | Keep `docs/distribution-decision.md` current; revisit only after stable script installer. |
+| Full-disk encryption / boot unlock branding | Probably out of scope | Omarchy controls the whole install and boot stack; AHR starts from an existing Artix system and should not assume disk layout or bootloader. | Document as an intentional difference unless an optional ISO path is approved. |
+| System snapshots / rollback | Unknown; needs design/testing | Valuable for update recovery, but risky without choosing a filesystem/snapshot backend. Artix installs may use many layouts. | Research Artix-safe snapshot strategy; keep package update rollback manual for now. |
+| Channelized updates | Optional polish | Omarchy has stable/RC/edge/dev channels and mirror policy; AHR currently has repo update/migration tooling without channel semantics. | Consider `ahr update` channel metadata only after release process matures. |
+| Web app install/remove | Optional polish | Manual treats web apps as first-class launchable apps. AHR has no desktop-entry/favicons/browser-profile workflow yet. | Design `ahr-webapp-*` with favicon fallback, browser choice, cleanup, and no systemd assumptions. |
+| Broad app catalog | Optional polish | Omarchy documents GUIs, commercial apps, media, chat, office, and services. AHR has a smaller package/Flatpak set by design. | Add curated Artix/Flatpak app profiles gradually with availability checks. |
+| AI / agent CLI workflows | Optional polish | Omarchy includes OpenCode, Claude Code, lazy npm stubs, local LLM guidance, and an Omarchy skill. This is useful but broad and fast-moving. | Add only opt-in profile/docs after deciding supported tooling and package sources. |
+| Development environment installers | Optional polish | Omarchy leans on mise and broad runtime installers. AHR currently provides shell/dev basics, not language-stack management. | Consider a guarded dev profile; avoid making mise or language installers required for desktop success. |
+| Gaming installers | Optional polish | Steam, RetroArch, Lutris, Heroic, Moonlight, cloud gaming, and controller support have large package and hardware test surfaces. | Keep post-beta; require package matrix and rollback/removal checks. |
+| Windows VM workflow | Probably out of scope | Requires Docker/VM orchestration, storage assumptions, RDP launcher, and support burden. | Keep unsupported unless explicitly promoted to an optional profile. |
+| Rich theme gallery / extra themes | Required for stable or high-value polish | The manual makes theme previews/background switching central to the Omarchy feel. AHR has a theme engine but few themes and no rich preview/install/update/remove flow. | Prioritize local gallery/status/preview before remote theme install/remove. |
+| Font switching | Optional polish | Omarchy exposes font selection and theme synchronization. AHR has font packages and fixed template values. | Add only after terminal, Waybar, Mako, GTK, and fontconfig update behavior is designed. |
+| Background install/gallery | High-value polish | Manual encourages per-theme background folders and easy addition. AHR has `bg-next`/`bg-set`, but not a gallery or import flow. | Add local background picker/import with validation and readable fallback. |
+| Branding screensaver/about | Optional polish | Omarchy supports custom logos/screensaver/about visuals. AHR has a textual About and no branding workflow. | Keep optional; ensure no boot-stack assumptions leak in. |
+| Reminder and notices | Optional polish | Manual includes reminders, date/time/weather/battery notices. AHR has some Waybar status helpers but no reminder UX. | Add lightweight notification timers only if dependency-free and easy to explain. |
+| OCR / text extraction | Optional polish | Useful capture workflow but depends on OCR packages/language data and good failure messages. | Add after screenshot pipeline is stable; make dependency optional. |
+| Dictation / Voxtype | Optional polish | AHR has some optional Voxtype hooks, but no complete install/remove parity. | Keep optional; document hardware/model/privacy assumptions. |
+| LocalSend / share workflow | Optional polish | Manual treats sharing as a menu workflow. AHR defers LocalSend/share. | Add after package availability and network-discovery behavior are tested. |
+| Transcode workflow | Optional polish | Useful but not core desktop readiness. | Defer until file-manager integration and ffmpeg UX are designed. |
+| Monitor scaling / mirror / hardware menu | OpenRC adaptation | Manual includes rich monitor/laptop/hardware controls. These can blank displays or depend on specific hardware. | Add only safe, reversible monitor actions with fallback docs. |
+| Keyboard/mouse/trackpad setup menu | Required for stable polish | Manual guides users to input config. AHR has config files but limited menu affordance. | Add Setup entries and docs for input/monitors before adding risky toggles. |
+| System sleep toggles / hibernation setup | OpenRC adaptation | Suspend/hibernate exist in AHR, but Omarchy exposes enable/disable flows. Hibernation depends on swap/filesystem layout. | Keep suspend validated; treat hibernation setup as design-needed. |
+| Fingerprint / FIDO2 auth | Optional polish | Security hardware auth is device-specific and PAM-sensitive. | Defer until tested on Artix OpenRC with clear rollback. |
+| Package/AUR install/remove UX | OpenRC adaptation | AHR has generic package/AUR/Flatpak menu actions. Omarchy has richer curated package helpers. | Improve guards/previews first; add curated installers only after Artix validation. |
+| Broad remove/preinstall cleanup | Probably out of scope | Removal can destroy user choices and is harder to validate than install. | Keep conservative; prefer docs and explicit package remove previews. |
+| Troubleshooting/manual depth | Required for stable | Omarchy manual is broad and user-facing. AHR docs are strong but more project/release oriented. | Add user manual pages as features stabilize; avoid documenting unsupported workflows as promised. |
+
+Manual-derived stable criteria should stay narrower than "clone every manual
+feature". AHR can be stable when the supported OpenRC-native desktop is
+excellent, documented, and validated, while the unsupported or optional manual
+features are clearly classified.
 
 ## 5. UX surface implementation checklists
 
