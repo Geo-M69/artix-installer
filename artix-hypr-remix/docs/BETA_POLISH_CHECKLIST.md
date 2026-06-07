@@ -85,7 +85,7 @@ Use these classifications for differences:
 | Hyprland config | Present | Required parity | `config/hypr/hyprland.conf`, `config/hypr/*.lua` | `../omarchy/default/hypr/` | Runtime config is `.conf`; Lua files are source/planning notes. Keep runtime docs clear. |
 | Waybar | Present but rough | Optional polish | `config/waybar/config.jsonc`, `style.css`, status helpers | `../omarchy/default/waybar/`, `../omarchy/themes/*/waybar.css` | Add safer position/theme controls only after validating reload behavior. |
 | Menus | Present but rough | Required parity | `ahr-menu`, `ahr-menu-keybindings` | `../omarchy/bin/omarchy-menu` | AHR taxonomy exists; polish Capture, Toggle, Defaults, Help, and validation messages. |
-| Theme switching | Present but rough | Required parity | `ahr-theme`, `ahr-theme-lib.sh`, `default/themes/*` | `../omarchy/bin/omarchy-theme-*`, `../omarchy/themes/*` | Validate state, templates, app reloads, and rollback. |
+| Theme switching | Present | Required parity | `ahr-theme`, `ahr-theme-lib.sh`, `default/themes/*` | `../omarchy/bin/omarchy-theme-*`, `../omarchy/themes/*` | Status command, backups, post-switch validation, doctor checks added. |
 | Wallpaper/gallery | Present but rough | Optional polish | `ahr-theme bg-*`, `ahr-launch-wallpaper-session`, `scripts/wallpaper.sh` | `omarchy-theme-bg-switcher`, `../omarchy/themes/*/backgrounds/` | Add preview/gallery only if assets and fallback behavior are clean. |
 | Fonts/icons/cursor | Present but rough | Optional polish | `packages/80-fonts-themes.txt`, `default/themes/*/icons.theme`, `fontconfig/fonts.conf` | Omarchy Font menu and theme files | Add font switching only after terminal/GTK/Waybar sync is designed. |
 | Notifications | Present | Required parity | `config/mako/config`, notification toggle scripts | Omarchy notification helpers | Keep Mako restart/silence/dismiss reliable. |
@@ -259,12 +259,18 @@ Dependencies to verify:
 
 Safe implementation tasks:
 
-- [ ] Validate theme discovery from AHR default/user dirs and Omarchy-compatible dirs.
-- [ ] Add status output that names current theme, current background, template render state, and missing optional assets.
-- [ ] Add menu path for background selection from current theme backgrounds.
-- [ ] Add backups before writing rendered user config files.
-- [ ] Add validation after switching: Waybar CSS present, Mako config present, terminal template rendered, background target readable.
-- [ ] Add clear TODO markers for unsupported Omarchy assets such as `swayosd.css`, `vscode.json`, or Chromium themes.
+- [x] Validate theme discovery from AHR default/user dirs and Omarchy-compatible dirs.
+- [x] Add status output that names current theme, current background, template render state, and missing optional assets.
+- [x] Add menu path for background selection from current theme backgrounds.
+- [x] Add backups before writing rendered user config files.
+- [x] Add validation after switching: Waybar CSS present, Mako config present, terminal template rendered, background target readable.
+- [x] Add clear TODO markers for unsupported Omarchy assets such as `swayosd.css`, `vscode.json`, or Chromium themes.
+
+TODO: `ahr-theme status` reports swayosd.css and vscode.json as optional missing assets.
+TODO: `ahr_theme_apply_targets` now creates timestamped .bak.* backups before overwriting configs.
+TODO: `ahr_theme_apply_current` warns post-switch if Waybar/Mako/Ghostty configs are missing or empty.
+TODO: `scripts/doctor.sh` now has `check_theme_state` section for theme health.
+TODO: Chromium/Firefox browser theme files are intentionally omitted from AHR theme scope.
 
 Risky/deferred tasks:
 
@@ -665,13 +671,15 @@ Beta polish is complete when:
 - [ ] Add dependency guards and clearer failure messages to `ahr-menu` actions.
 - [x] Add default editor validation/setup and broaden safe `xdg-mime` defaults.
 - [x] Add screenshot/capture menu polish for fullscreen/window/open-after-capture behavior.
-- [ ] Improve theme/wallpaper state reporting and validation after switching.
+- [x] Improve theme/wallpaper state reporting and validation after switching.
 - [ ] Add or refine first-login keybinding/help menu entry based on a clean-install usability pass.
 - [ ] Add more Omarchy parity table entries from direct inspection of `../omarchy/bin/omarchy-capture-*`, `omarchy-toggle-*`, and `omarchy-theme-*`.
 
 TODO markers for future inspection/testing:
 
 - [ ] TODO: Confirm exact Omarchy commit currently used for parity after each reference update.
+- [ ] TODO: `ahr-theme status` includes swayosd.css and vscode.json in missing-optional-assets output — confirm this is correct for AHR scope.
+- [ ] TODO: Add `ahr theme status` to doctor.sh's check_theme_state once the command is installed in a real user config.
 - [ ] TODO: Validate optional AUR package availability on a real Artix host with an AUR helper.
 - [ ] TODO: Decide whether guarded elogind `loginctl` is accepted for suspend or replaced with a pure OpenRC/pm-utils path.
 - [ ] TODO: Capture final first-login screenshots once the UI polish pass is complete.

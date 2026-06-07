@@ -10,6 +10,7 @@ Usage: ahr-theme <command> [args]
 Commands:
   list [--raw]                      List available themes
   current [--raw]                   Show current theme
+  status                            Show detailed theme state report
   set [--quiet] [--skip-background] <theme>
                                     Apply a theme
   refresh [--quiet]                 Re-apply current theme
@@ -114,6 +115,14 @@ cmd_refresh() {
   ahr_theme_refresh
 }
 
+cmd_status() {
+  (( $# == 0 )) || ahr_fail "Usage: ahr-theme status"
+  if ahr_theme_status; then
+    return 0
+  fi
+  return 1
+}
+
 cmd_bg_next() {
   (( $# == 0 )) || ahr_fail "Usage: ahr-theme bg-next"
   ahr_theme_bg_next
@@ -143,6 +152,7 @@ dispatch() {
   case "$subcommand" in
     list) cmd_list "$@" ;;
     current) cmd_current "$@" ;;
+    status) cmd_status "$@" ;;
     set) cmd_set "$@" ;;
     refresh) cmd_refresh "$@" ;;
     bg-next) cmd_bg_next "$@" ;;

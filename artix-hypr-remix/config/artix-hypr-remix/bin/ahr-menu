@@ -323,7 +323,7 @@ show_theme_status() {
   local theme_cmd
 
   theme_cmd="$(resolve_command_path ahr-theme)" || ahr_fail "Command not found: ahr-theme"
-  run_terminal_script "set +e; printf '%s\n\n' 'Current theme:'; $(quote_command "$theme_cmd" current); current_status=\$?; echo; printf '%s\n\n' 'Available themes:'; $(quote_command "$theme_cmd" list); list_status=\$?; echo; if [[ \$current_status -ne 0 || \$list_status -ne 0 ]]; then echo 'Theme state may need initialization. Try Style > Theme Set or run ahr theme set artix-dark.'; echo; fi; read -r -p 'Press Enter to close...' _"
+  run_terminal_script "set +e; $(quote_command "$theme_cmd" status); status=\$?; echo; if [[ \$status -ne 0 ]]; then echo 'Theme state has issues. Try Style > Theme Set or run ahr theme refresh.'; echo; fi; echo; printf '%s\n' 'Available themes:'; $(quote_command "$theme_cmd" list); echo; read -r -p 'Press Enter to close...' _"
 }
 
 show_theme_background_set() {

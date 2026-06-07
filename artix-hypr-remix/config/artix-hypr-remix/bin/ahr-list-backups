@@ -54,6 +54,14 @@ declare -a managed_roots=(
   mako starship walker waybar yazi zsh
 )
 
+# Theme-set backups live under subdirectories within these roots.
+# ahr_theme_apply_targets creates waybar/style.css.bak.*, mako/config.bak.*, ghostty/config.bak.*
+declare -a theme_backup_globs=(
+  "$HOME/.config/waybar/style.css.bak.*"
+  "$HOME/.config/mako/config.bak.*"
+  "$HOME/.config/ghostty/config.bak.*"
+)
+
 total_count=0
 
 if [[ "$show_config" == "true" ]]; then
@@ -71,6 +79,18 @@ if [[ "$show_config" == "true" ]]; then
     done
     shopt -u nullglob
   done
+
+  # Theme-set backups (subdirectory files)
+  shopt -s nullglob
+  for glob in "${theme_backup_globs[@]}"; do
+    for backup in $glob; do
+      if [[ "$count_only" == "false" ]]; then
+        printf '  %s\n' "$backup"
+      fi
+      total_count=$((total_count + 1))
+    done
+  done
+  shopt -u nullglob
 
   if [[ "$count_only" == "false" ]] && (( total_count == 0 )); then
     printf '  (none found)\n'

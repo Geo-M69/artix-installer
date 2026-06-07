@@ -116,6 +116,23 @@ if [[ "$show_backups" == "true" ]]; then
     shopt -u nullglob
   done
 
+  # Theme-set backups (subdirectory files from ahr_theme_apply_targets)
+  local theme_globs=(
+    "$HOME/.config/waybar/style.css.bak.*"
+    "$HOME/.config/mako/config.bak.*"
+    "$HOME/.config/ghostty/config.bak.*"
+  )
+  shopt -s nullglob
+  for glob in "${theme_globs[@]}"; do
+    for backup in $glob; do
+      if [[ "$quiet" == "false" ]]; then
+        printf '  %s\n' "$backup"
+      fi
+      backup_count=$((backup_count + 1))
+    done
+  done
+  shopt -u nullglob
+
   if (( backup_count == 0 )); then
     if [[ "$quiet" == "false" ]]; then
       printf '  (none found)\n'

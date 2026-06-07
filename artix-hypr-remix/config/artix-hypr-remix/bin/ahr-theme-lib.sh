@@ -343,11 +343,28 @@ ahr_theme_set_templates() {
 
 ahr_theme_apply_targets() {
   local theme_dir="$1"
-  local source_file target_file
+  local source_file target_file backup_file timestamp
+
+  timestamp="$(date +%Y%m%d-%H%M%S)"
 
   while IFS=':' read -r source_file target_file; do
     [[ -f "$theme_dir/$source_file" ]] || continue
     install -d -m 0755 "$(dirname "$target_file")"
+
+    # Timestamped backup before overwriting (with .N collision suffix)
+    if [[ -f "$target_file" ]]; then
+      backup_file="${target_file}.bak.${timestamp}"
+      if [[ -e "$backup_file" ]]; then
+        local collision=1
+        while [[ -e "${backup_file}.$collision" ]]; do
+          collision=$((collision + 1))
+        done
+        backup_file="${backup_file}.$collision"
+      fi
+      cp "$target_file" "$backup_file"
+      ahr_theme_log "Backup saved: $(basename "$backup_file")"
+    fi
+
     cp "$theme_dir/$source_file" "$target_file"
   done <<EOF
 waybar.css:$HOME/.config/waybar/style.css
@@ -615,6 +632,23 @@ ahr_theme_apply_current() {
   ahr_theme_apply_targets "$AHR_THEME_CURRENT_THEME_DIR"
   ahr_theme_apply_gnome "$AHR_THEME_CURRENT_THEME_DIR"
   ahr_theme_reload_services
+
+  # Post-switch validation — warn but do not fail
+  local waybar_css="$HOME/.config/waybar/style.css"
+  local mako_config="$HOME/.config/mako/config"
+  local ghostty_config="$HOME/.config/ghostty/config"
+
+  if [[ ! -f "$waybar_css" || ! -s "$waybar_css" ]]; then
+    ahr_theme_warn "Post-switch: Waybar CSS not deployed or empty — run 'ahr-theme refresh'"
+  fi
+
+  if [[ ! -f "$mako_config" || ! -s "$mako_config" ]]; then
+    ahr_theme_warn "Post-switch: Mako config not deployed or empty — run 'ahr-theme refresh'"
+  fi
+
+  if ahr_has_cmd ghostty && [[ ! -f "$ghostty_config" || ! -s "$ghostty_config" ]]; then
+    ahr_theme_warn "Post-switch: Ghostty config not deployed or empty — run 'ahr-theme refresh'"
+  fi
 }
 
 ahr_theme_set() {
@@ -673,4 +707,159 @@ ahr_theme_refresh() {
   AHR_THEME_SKIP_BACKGROUND=1
   ahr_theme_set "$theme_name"
   AHR_THEME_SKIP_BACKGROUND="$prior_skip_background"
+}
+
+ahr_theme_status() {
+  local theme_name=""
+  local background_path=""
+  local has_issues=false
+  local -a status_lines=()
+
+  theme_name="$(ahr_theme_current_raw 2>/dev/null || true)"
+
+  # --- Theme name ---
+  if [[ -n "$theme_name" ]]; then
+    status_lines+=("Theme: $(ahr_theme_titleize "$theme_name")")
+  else
+    status_lines+=("Theme: (none set)")
+    has_issues=true
+  fi
+
+  # --- State directory ---
+  if [[ -d "$AHR_THEME_STATE_DIR" ]]; then
+    status_lines+=("State directory: $AHR_THEME_STATE_DIR")
+  else
+    status_lines+=("WARN: State directory missing: $AHR_THEME_STATE_DIR")
+    has_issues=true
+  fi
+
+  # --- Current theme directory ---
+  if [[ -d "$AHR_THEME_CURRENT_THEME_DIR" ]]; then
+    status_lines+=("Theme directory: $AHR_THEME_CURRENT_THEME_DIR")
+  else
+    status_lines+=("WARN: Theme directory missing: $AHR_THEME_CURRENT_THEME_DIR")
+    has_issues=true
+  fi
+
+  # --- Background ---
+  background_path="$(ahr_theme_current_background 2>/dev/null || true)"
+  if [[ -n "$background_path" ]]; then
+    if [[ "$background_path" == *".no-background"* ]]; then
+      status_lines+=("Background: (no backgrounds available, using theme color)")
+    elif [[ -f "$background_path" ]]; then
+      status_lines+=("Background: $background_path")
+    else
+      status_lines+=("WARN: Background link points to missing file: $background_path")
+      has_issues=true
+    fi
+  else
+    if [[ -L "$AHR_THEME_BACKGROUND_LINK" ]]; then
+      local broken_target
+      broken_target="$(readlink "$AHR_THEME_BACKGROUND_LINK" 2>/dev/null || echo "?")"
+      status_lines+=("WARN: Background symlink broken: → $broken_target")
+      has_issues=true
+    else
+      status_lines+=("Background: (none set)")
+    fi
+  fi
+
+  # --- Background collection count ---
+  if [[ -n "$theme_name" ]]; then
+    local -a backgrounds=()
+    if ahr_theme_collect_backgrounds "$theme_name" backgrounds; then
+      status_lines+=("Available backgrounds: ${#backgrounds[@]}")
+    fi
+  fi
+
+  # --- Deployed configs ---
+  local waybar_css="$HOME/.config/waybar/style.css"
+  local mako_config="$HOME/.config/mako/config"
+  local ghostty_config="$HOME/.config/ghostty/config"
+
+  if [[ -f "$waybar_css" && -s "$waybar_css" ]]; then
+    status_lines+=("Waybar CSS: deployed ($(wc -l < "$waybar_css" | tr -d ' ') lines)")
+  elif [[ -f "$waybar_css" ]]; then
+    status_lines+=("WARN: Waybar CSS empty: $waybar_css")
+    has_issues=true
+  else
+    status_lines+=("WARN: Waybar CSS missing: $waybar_css")
+    has_issues=true
+  fi
+
+  if [[ -f "$mako_config" && -s "$mako_config" ]]; then
+    status_lines+=("Mako config: deployed ($(wc -l < "$mako_config" | tr -d ' ') lines)")
+  elif [[ -f "$mako_config" ]]; then
+    status_lines+=("WARN: Mako config empty: $mako_config")
+    has_issues=true
+  else
+    status_lines+=("WARN: Mako config missing: $mako_config")
+    has_issues=true
+  fi
+
+  if [[ -f "$ghostty_config" && -s "$ghostty_config" ]]; then
+    status_lines+=("Ghostty config: deployed ($(wc -l < "$ghostty_config" | tr -d ' ') lines)")
+  elif [[ -f "$ghostty_config" ]]; then
+    status_lines+=("WARN: Ghostty config empty: $ghostty_config")
+    has_issues=true
+  else
+    if ahr_has_cmd ghostty; then
+      status_lines+=("WARN: Ghostty config missing (ghostty installed): $ghostty_config")
+      has_issues=true
+    fi
+  fi
+
+  # --- Template rendering ---
+  local template_count=0
+  local rendered_count=0
+  local template_dir
+
+  while IFS= read -r template_dir; do
+    [[ -d "$template_dir" ]] || continue
+    while IFS= read -r -d '' tpl; do
+      template_count=$((template_count + 1))
+      local output_file
+      output_file="$AHR_THEME_CURRENT_THEME_DIR/$(basename "${tpl%.tpl}")"
+      if [[ -f "$output_file" ]]; then
+        rendered_count=$((rendered_count + 1))
+      fi
+    done < <(find "$template_dir" -name '*.tpl' -print0 2>/dev/null)
+  done < <(ahr_theme_template_dirs)
+
+  if (( template_count > 0 )); then
+    status_lines+=("Templates: $rendered_count/$template_count rendered")
+    if (( rendered_count < template_count )); then
+      status_lines+=("  (run 'ahr-theme refresh' to re-render)")
+      has_issues=true
+    fi
+  else
+    status_lines+=("Templates: (none defined)")
+  fi
+
+  # --- Missing optional assets ---
+  if [[ -d "$AHR_THEME_CURRENT_THEME_DIR" ]]; then
+    local missing_assets=()
+
+    if [[ ! -f "$AHR_THEME_CURRENT_THEME_DIR/swayosd.css" ]]; then
+      missing_assets+=("swayosd.css")
+    fi
+    if [[ ! -f "$AHR_THEME_CURRENT_THEME_DIR/vscode.json" ]]; then
+      missing_assets+=("vscode.json")
+    fi
+
+    if (( ${#missing_assets[@]} > 0 )); then
+      status_lines+=("Optional assets not in theme: ${missing_assets[*]}")
+      status_lines+=("  (Omarchy-specific; not required for AHR)")
+    fi
+  fi
+
+  # --- Print status ---
+  local line
+  for line in "${status_lines[@]}"; do
+    printf '%s\n' "$line"
+  done
+
+  if $has_issues; then
+    return 1
+  fi
+  return 0
 }

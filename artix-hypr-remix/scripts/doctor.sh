@@ -421,6 +421,92 @@ else
 fi
 
 echo
+echo "Running theme state checks"
+check_theme_state() {
+  local framework_root theme_state_dir theme_name_file theme_name background_link background_target waybar_css mako_config ghostty_config
+  local config_dir
+
+  resolve_target_user || {
+    echo "WARN: could not resolve a non-root desktop user; skipping theme state checks"
+    return
+  }
+
+  config_dir="$target_home/.config/artix-hypr-remix"
+  theme_state_dir="$config_dir/current"
+  theme_name_file="$theme_state_dir/theme.name"
+  background_link="$theme_state_dir/background"
+
+  # State directory
+  if [[ -d "$theme_state_dir" ]]; then
+    echo "OK: theme state directory: $theme_state_dir"
+  else
+    echo "MISSING: theme state directory: $theme_state_dir"
+    mark_missing
+    return
+  fi
+
+  # Theme name file
+  if [[ -f "$theme_name_file" ]]; then
+    theme_name="$(cat "$theme_name_file" 2>/dev/null || true)"
+    if [[ -n "$theme_name" ]]; then
+      echo "OK: current theme: $theme_name"
+    else
+      echo "WARN: theme name file empty: $theme_name_file"
+    fi
+  else
+    echo "WARN: theme name file missing: $theme_name_file"
+  fi
+
+  # Background link
+  if [[ -L "$background_link" ]]; then
+    background_target="$(readlink -f "$background_link" 2>/dev/null || true)"
+    if [[ -n "$background_target" && -f "$background_target" ]]; then
+      echo "OK: background: $background_target"
+    elif [[ "$background_target" == *".no-background"* ]]; then
+      echo "OK: background: (no backgrounds available, using theme color)"
+    else
+      echo "WARN: background link target missing: $background_target"
+    fi
+  elif [[ -e "$background_link" ]]; then
+    echo "WARN: background path is not a symlink: $background_link"
+  else
+    echo "WARN: background link missing: $background_link"
+  fi
+
+  # Deployed configs
+  waybar_css="$target_home/.config/waybar/style.css"
+  mako_config="$target_home/.config/mako/config"
+  ghostty_config="$target_home/.config/ghostty/config"
+
+  if [[ -f "$waybar_css" && -s "$waybar_css" ]]; then
+    echo "OK: Waybar CSS deployed ($(wc -l < "$waybar_css" | tr -d ' ') lines)"
+  elif [[ -f "$waybar_css" ]]; then
+    echo "WARN: Waybar CSS empty: $waybar_css"
+  else
+    echo "WARN: Waybar CSS missing: $waybar_css"
+  fi
+
+  if [[ -f "$mako_config" && -s "$mako_config" ]]; then
+    echo "OK: Mako config deployed ($(wc -l < "$mako_config" | tr -d ' ') lines)"
+  elif [[ -f "$mako_config" ]]; then
+    echo "WARN: Mako config empty: $mako_config"
+  else
+    echo "WARN: Mako config missing: $mako_config"
+  fi
+
+  if [[ -f "$ghostty_config" && -s "$ghostty_config" ]]; then
+    echo "OK: Ghostty config deployed ($(wc -l < "$ghostty_config" | tr -d ' ') lines)"
+  elif [[ -f "$ghostty_config" ]]; then
+    echo "WARN: Ghostty config empty: $ghostty_config"
+  else
+    if command -v ghostty >/dev/null 2>&1; then
+      echo "WARN: Ghostty config missing (ghostty installed): $ghostty_config"
+    fi
+  fi
+}
+check_theme_state
+
+echo
 echo "Running OpenRC service health checks"
 for service in "${REQUIRED_OPENRC_SERVICES[@]}"; do
   check_openrc_service_health "$service" "true"
