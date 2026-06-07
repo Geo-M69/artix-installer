@@ -1,7 +1,8 @@
 # Artix Hypr Remix bash baseline
 
 # AHR namespace commands (ahr, ahr-theme, ahr-menu, etc.) are in ~/.local/bin
-export PATH="$HOME/.local/bin:$PATH"
+# Individual ahr-* commands are directly accessible from the framework bin dir
+export PATH="$HOME/.config/artix-hypr-remix/bin:$HOME/.local/bin:$PATH"
 
 export EDITOR="hx"
 export TERMINAL="ghostty"
