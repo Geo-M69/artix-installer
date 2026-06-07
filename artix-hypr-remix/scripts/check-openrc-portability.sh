@@ -34,7 +34,7 @@ declare -a EXCEPTION_PATH_FRAGMENTS=(
 )
 declare -a EXCEPTION_LINE_REGEXES=(
   '^(# elogind is always installed.*try loginctl first.*|if ahr_has_cmd loginctl && loginctl suspend 2>/dev/null; then)$'
-  '^(# elogind is always installed.*try loginctl first.*|if ahr_has_cmd loginctl && loginctl hibernate 2>/dev/null; then)$'
+  '^(# elogind is always installed.*try loginctl first.*|[[:space:]]*# loginctl hibernate was already attempted.*|[[:space:]]*if ahr_has_cmd loginctl && loginctl hibernate 2>/dev/null; then|[[:space:]]*if ahr_has_cmd loginctl; then)$'
   '^(# Uses loginctl.*falls back to pm-suspend.*|if command -v loginctl >/dev/null 2>&1 && loginctl suspend 2>/dev/null; then)$'
   '^# elogind'\''s loginctl suspend is unavailable\.$'
 )

@@ -3,25 +3,57 @@ set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
+ahr_hibernate_diagnose() {
+  local reasons=()
+
+  # loginctl hibernate was already attempted above and failed.
+  if ahr_has_cmd loginctl; then
+    reasons+=("elogind hibernate is unavailable or unsupported")
+  fi
+
+  local swap_entries
+  swap_entries="$(grep -v '^Filename' /proc/swaps 2>/dev/null || true)"
+  if [[ -z "$swap_entries" ]]; then
+    reasons+=("no swap configured")
+  elif ! grep -qv 'zram' <<< "$swap_entries"; then
+    reasons+=("no disk-based swap found — zram does not support hibernation")
+  fi
+
+  if [[ ! -w /sys/power/state ]]; then
+    reasons+=("/sys/power/state is not writable (may need root or kernel config)")
+  fi
+
+  if ! ahr_has_cmd pm-hibernate && ! ahr_has_cmd zzz; then
+    reasons+=("no hibernate backend installed (pm-utils or zzz)")
+  fi
+
+  if [[ ${#reasons[@]} -eq 0 ]]; then
+    reasons+=("all hibernate backends failed")
+  fi
+
+  echo "Hibernation is not available on this system:" >&2
+  printf '  - %s\n' "${reasons[@]}" >&2
+  return 1
+}
+
 # elogind is always installed — try loginctl first (works on Artix OpenRC).
 if ahr_has_cmd loginctl && loginctl hibernate 2>/dev/null; then
   exit 0
 fi
 
 # Fall back to OpenRC/pm-utils hibernate.
-if ahr_has_cmd pm-hibernate; then
-  exec pm-hibernate
+if ahr_has_cmd pm-hibernate && pm-hibernate 2>/dev/null; then
+  exit 0
 fi
 
-if ahr_has_cmd zzz; then
-  exec zzz -Z
+if ahr_has_cmd zzz && zzz -Z 2>/dev/null; then
+  exit 0
 fi
 
-if [[ -w /sys/power/state ]]; then
-  exec printf '%s' disk > /sys/power/state
+if [[ -w /sys/power/state ]] && printf '%s' disk > /sys/power/state 2>/dev/null; then
+  exit 0
 fi
 
-echo "No hibernate method found." >&2
-echo "Install pm-utils (sudo pacman -S pm-utils) or configure a swap partition for hibernation." >&2
-ahr_notify "artix-hypr-remix" "No hibernate method found — install pm-utils"
+ahr_hibernate_diagnose || true
+ahr_notify "artix-hypr-remix" "Hibernation not available — see terminal output"
 exit 1

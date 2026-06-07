@@ -873,11 +873,31 @@ TODO markers for future inspection/testing:
 - **Finding:** Exceptions were still over-suppressed — prefix-anchored regexes without rule-specificity could ignore a line for *any* rule if it happened to match a loginctl exception pattern. For example, `if ahr_has_cmd loginctl && loginctl suspend 2>/dev/null; then systemctl suspend` would be ignored for both `loginctl` and `systemctl` rules.
 - **Fix:** Added rule index parameter to `scan_rule` and `should_ignore_hit`; exceptions are now only applied when the active rule is the `loginctl` rule (index 1). Anchored all exception regexes to the full expected line with `$` (e.g., `^if ahr_has_cmd loginctl && loginctl suspend 2>/dev/null; then$`). Verified with synthetic injection of `systemctl suspend` on the same line as guarded `loginctl suspend` — correctly flagged as a `systemctl` violation.
 
+**Post-review fix 3 (same session):**
+- **Finding:** `ahr-system-hibernate` gave a generic "No hibernate method found" message that didn't explain *why* hibernation wasn't available. On the test laptop, `loginctl hibernate` failed because elogind doesn't support the `hibernate` verb, swap was on zram (RAM, not disk), and `/sys/power/state` wasn't writable without root.
+- **Fix:** Added `ahr_hibernate_diagnose()` to `ahr-system-hibernate` — checks for elogind hibernate support, disk-based swap (not zram), `/sys/power/state` writability, and backend availability (`pm-utils`/`zzz`). Prints specific reasons like "elogind hibernate is unavailable or unsupported" and "no disk-based swap found — zram does not support hibernation". Updated portability exceptions to cover the diagnostic's guarded `loginctl` references.
+
 **Files changed:** `scripts/check-openrc-portability.sh`, `config/artix-hypr-remix/bin/ahr-system-hibernate`, `docs/BETA_POLISH_CHECKLIST.md`
 
 **Validation:**
 - `./scripts/check-openrc-portability.sh` passes
+- `./scripts/quality-gate.sh` passes
 - `grep` confirms `loginctl` is found in `ahr-system-suspend` and `config/hardware/laptop/openrc-module.sh`
 - No unguarded `loginctl` usages exist outside the excepted power-management paths
 - Synthetic unguarded injection in `ahr-system-suspend` is caught and fails the check
 - Synthetic `systemctl` suffix on same line as guarded `loginctl` is caught by the `systemctl` rule
+- On Artix laptop: `ahr-system-hibernate` now reports "Hibernation is not available on this system: elogind hibernate is unavailable or unsupported, no disk-based swap found — zram does not support hibernation, /sys/power/state is not writable, no hibernate backend installed"
+
+**Post-review fix 4 (same session):**
+- **Finding 1 (Medium):** `pm-hibernate`, `zzz -Z`, and the direct `/sys/power/state` write all used `exec`, so `ahr_hibernate_diagnose()` was unreachable whenever any backend was installed — even if that backend failed at runtime (e.g., `pm-hibernate` exiting non-zero due to missing disk swap). The laptop profile installs `pm-utils`, so the diagnostic would almost never run.
+- **Fix 1:** Replaced `exec` with guarded `&&` + `exit 0` on success for all three fallback paths. Each backend is tried; if it succeeds, the script exits. If it fails, execution falls through to `ahr_hibernate_diagnose()`.
+- **Finding 2 (Low):** `/proc/swaps` always exists with a header even when no swap is active, so the "no swap configured" branch was unreachable. A header-only file was misclassified as "zram only" because `grep -v '^Filename'` produced empty output, and `grep -qv 'zram'` on empty input returns 1, making the `! ...` condition true.
+- **Fix 2:** Extract non-header swap entries into a variable first. If empty → "no swap configured". If all entries contain `zram` → "no disk-based swap found — zram does not support hibernation". If any non-zram entry exists → no swap reason added (disk swap is present).
+
+**Post-review fix 5 (same session):**
+- **Finding (Low):** If all explicit prerequisites looked okay (loginctl present, disk swap, writable `/sys/power/state`, backend installed) but every backend still failed internally, `ahr_hibernate_diagnose()` returned success with an empty `reasons` array. The caller then exited 1 with "see terminal output" but nothing was actually printed to stderr.
+- **Fix:** Changed the empty-reasons path from `return 0` to always add a fallback reason (`all hibernate backends failed`) and always print the diagnosis. `ahr_hibernate_diagnose()` now returns 1 unconditionally when called, with at least one actionable reason.
+
+**Post-review fix 6 (same session):**
+- **Finding (Low):** `ahr_hibernate_diagnose()` always returns 1, and the script uses `set -e`. Calling it as a bare command caused the shell to exit immediately before `ahr_notify` on the next line could run, so the desktop notification was never sent.
+- **Fix:** Changed the call to `ahr_hibernate_diagnose || true` so the diagnostic prints to stderr and the script continues to `ahr_notify` before the final `exit 1`.
