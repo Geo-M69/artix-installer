@@ -32,6 +32,7 @@ declare -a REQUIRED_FRAMEWORK_COMMANDS=(
   ahr-launch-wallpaper-session
   ahr-capture-screenshot
   ahr-capture-picker
+  ahr-default-editor
   start-hyprland-session.sh
 )
 
@@ -358,6 +359,66 @@ for cmd in xdg-settings xdg-mime xdg-open; do
     mark_missing
   fi
 done
+
+echo
+echo "Running default application MIME validation"
+mime_check() {
+  local label="$1"
+  local mime_type="$2"
+  local desktop_id
+
+  if ! command -v xdg-mime >/dev/null 2>&1; then
+    echo "WARN: xdg-mime unavailable; cannot validate $label"
+    return
+  fi
+
+  desktop_id="$(xdg-mime query default "$mime_type" 2>/dev/null || true)"
+  desktop_id="${desktop_id#"${desktop_id%%[![:space:]]*}"}"
+  desktop_id="${desktop_id%"${desktop_id##*[![:space:]]}"}"
+
+  if [[ -n "$desktop_id" ]]; then
+    # Verify the returned desktop entry actually exists on disk.
+    local found=false
+    for path in \
+      "${XDG_DATA_HOME:-$HOME/.local/share}/applications/$desktop_id" \
+      "$HOME/.local/share/flatpak/exports/share/applications/$desktop_id" \
+      "/var/lib/flatpak/exports/share/applications/$desktop_id" \
+      "/usr/local/share/applications/$desktop_id" \
+      "/usr/share/applications/$desktop_id"; do
+      if [[ -f "$path" ]]; then
+        found=true
+        break
+      fi
+    done
+    if $found; then
+      echo "OK: $label → $desktop_id ($mime_type)"
+    else
+      echo "WARN: $label → $desktop_id ($mime_type) but desktop entry file not found"
+    fi
+  else
+    echo "WARN: $label has no default handler ($mime_type)"
+  fi
+}
+
+mime_check "Web browser" "x-scheme-handler/http"
+mime_check "File manager" "inode/directory"
+mime_check "Text editor" "text/plain"
+mime_check "PDF viewer" "application/pdf"
+mime_check "Image viewer" "image/png"
+mime_check "Video player" "video/mp4"
+mime_check "Archive manager" "application/zip"
+
+# Check $EDITOR is set to a valid command
+if [[ -n "${EDITOR:-}" ]]; then
+  editor_cmd="${EDITOR%% *}"
+  if command -v "$editor_cmd" >/dev/null 2>&1; then
+    echo "OK: EDITOR=$EDITOR"
+  else
+    echo "WARN: EDITOR=$EDITOR but command not found"
+  fi
+else
+  echo "WARN: EDITOR is not set"
+fi
 
 echo
 echo "Running OpenRC service health checks"

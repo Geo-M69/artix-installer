@@ -281,6 +281,22 @@ show_default_terminal_menu() {
   esac
 }
 
+show_default_editor_menu() {
+  local current
+  local choice
+
+  current="$(run_command_capture ahr-default-editor)"
+  choice="$(menu_select "Setup: Default Editor (current: ${current:-unknown})" \
+    "Helix" "Neovim" "Vim" "Back")"
+
+  case "$choice" in
+    Helix) run_command_now ahr-default-editor helix ;;
+    Neovim) run_command_now ahr-default-editor neovim ;;
+    Vim) run_command_now ahr-default-editor vim ;;
+    *) return 0 ;;
+  esac
+}
+
 show_theme_set_menu() {
   local theme_cmd
   local -a themes=()
@@ -430,6 +446,7 @@ show_setup_menu() {
       "Bluetooth Control" \
       "Default Browser" \
       "Default Terminal" \
+      "Default Editor" \
       "Edit Hyprland Config" \
       "Edit Hypridle Config" \
       "Edit Hyprlock Config" \
@@ -446,6 +463,7 @@ show_setup_menu() {
       "Bluetooth Control") run_command_background ahr-launch-bluetooth ;;
       "Default Browser") show_default_browser_menu ;;
       "Default Terminal") show_default_terminal_menu ;;
+      "Default Editor") show_default_editor_menu ;;
       "Edit Hyprland Config")
         run_command_background ahr-edit-config "$HOME/.config/hypr/hyprland.conf"
         ;;

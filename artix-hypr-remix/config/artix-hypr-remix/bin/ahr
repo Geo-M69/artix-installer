@@ -36,6 +36,7 @@ Commands:
   launch-wifi         Open network control
   default-browser     Inspect or set default browser
   default-terminal    Inspect or set default terminal
+  default-editor      Inspect or set default editor
   status              Print install state, log paths, and framework summary
   list-backups        List config backups created by installer phase 4
   update              System + AUR update helper
@@ -81,6 +82,7 @@ dispatch() {
     launch-wifi) exec_ahr_command ahr-launch-wifi "$@" ;;
     default-browser) exec_ahr_command ahr-default-browser "$@" ;;
     default-terminal) exec_ahr_command ahr-default-terminal "$@" ;;
+    default-editor) exec_ahr_command ahr-default-editor "$@" ;;
     update) exec_ahr_command ahr-update "$@" ;;
     update-available) exec_ahr_command ahr-update-available "$@" ;;
     status) exec_ahr_command ahr-status "$@" ;;
@@ -118,6 +120,7 @@ dispatch() {
         "ahr-launch-wifi" \
         "ahr-default-browser" \
         "ahr-default-terminal" \
+        "ahr-default-editor" \
         "ahr-update" \
         "ahr-update-available" \
         "ahr-status" \

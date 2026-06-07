@@ -327,9 +327,9 @@ Dependencies to verify:
 
 Safe implementation tasks:
 
-- [ ] Add `ahr-default-editor` or explicitly document why editor default remains out of scope.
-- [ ] Add default validation for PDF, image, video, archive, and music MIME types where installed apps exist.
-- [ ] Add menu setup entries that only show installed default-app candidates.
+- [x] Add `ahr-default-editor` command for setting Helix/Neovim/Vim as default $EDITOR.
+- [x] Add default validation for PDF, image, video, archive, and music MIME types where installed apps exist (imv, mpv, file-roller, firefox).
+- [x] Add menu setup entries for Default Editor in Setup menu.
 - [ ] Add `--dry-run` or preview output for default-app changes.
 - [ ] Keep install/remove menus limited to package sets validated on Artix.
 - [ ] For optional apps, check package availability before install and report unsupported package names.
@@ -344,8 +344,14 @@ Validation steps:
 
 - [ ] `xdg-settings get default-web-browser`
 - [ ] `xdg-mime query default inode/directory`
+- [ ] `xdg-mime query default text/plain`
+- [ ] `xdg-mime query default application/pdf`
+- [ ] `xdg-mime query default image/png`
+- [ ] `xdg-mime query default video/mp4`
+- [ ] `xdg-mime query default application/zip`
 - [ ] Open an HTTP link, directory, text file, PDF, image, video, and archive.
 - [ ] Re-run `first-run.d/56-default-apps.sh` and confirm idempotency.
+- [ ] Run `./scripts/doctor.sh --no-aur` and verify MIME lines appear.
 
 OpenRC/Artix notes:
 
@@ -525,7 +531,7 @@ Dependencies to verify:
 
 Safe implementation tasks:
 
-- [ ] Extend doctor with default-app validation.
+- [x] Extend doctor with default-app MIME validation (browser, terminal, file-manager, editor, PDF, image, video, archive).
 - [ ] Extend doctor with menu backend and capture dependency checks.
 - [ ] Extend repair with detect-only checks before apply paths.
 - [ ] Ensure repair never overwrites user configs without backup or explicit `--apply`.
@@ -657,7 +663,7 @@ Beta polish is complete when:
 
 - [x] Add or improve beta healthcheck coverage for menu dependencies, default apps, and capture tools.
 - [ ] Add dependency guards and clearer failure messages to `ahr-menu` actions.
-- [ ] Add default editor validation/setup and broaden safe `xdg-mime` defaults.
+- [x] Add default editor validation/setup and broaden safe `xdg-mime` defaults.
 - [x] Add screenshot/capture menu polish for fullscreen/window/open-after-capture behavior.
 - [ ] Improve theme/wallpaper state reporting and validation after switching.
 - [ ] Add or refine first-login keybinding/help menu entry based on a clean-install usability pass.

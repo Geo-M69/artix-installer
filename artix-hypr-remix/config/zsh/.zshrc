@@ -7,6 +7,9 @@ export PATH="$HOME/.local/bin:$PATH"
 export EDITOR="hx"
 export TERMINAL="ghostty"
 
+# User override via ahr-default-editor (writes ~/.config/artix-hypr-remix/env)
+[[ -f "$HOME/.config/artix-hypr-remix/env" ]] && source "$HOME/.config/artix-hypr-remix/env"
+
 alias ls='eza --group-directories-first --icons=auto'
 alias ll='eza -lah --group-directories-first --icons=auto'
 alias cat='bat --style=plain'

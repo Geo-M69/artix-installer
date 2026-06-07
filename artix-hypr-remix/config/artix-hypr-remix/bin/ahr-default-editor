@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+SHELL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/artix-hypr-remix/env"
+
+if (($# == 0)); then
+  if [[ -f "$SHELL_CONFIG" ]]; then
+    current="$(grep -s '^export EDITOR=' "$SHELL_CONFIG" | sed 's/^export EDITOR=//' | head -1 || true)"
+    if [[ -n "$current" ]]; then
+      case "$current" in
+        hx) echo "helix" ;;
+        nvim) echo "neovim" ;;
+        vim) echo "vim" ;;
+        code) echo "code" ;;
+        *) echo "$current" ;;
+      esac
+      exit 0
+    fi
+  fi
+  echo "${EDITOR:-unknown}"
+  exit 0
+fi
+
+case "$1" in
+  helix) editor_cmd="hx"; desktop_id="helix.desktop"; name="Helix" ;;
+  neovim|nvim) editor_cmd="nvim"; desktop_id="nvim.desktop"; name="Neovim" ;;
+  vim) editor_cmd="vim"; desktop_id="vim.desktop"; name="Vim" ;;
+  code|vscode) editor_cmd="code"; desktop_id="code.desktop"; name="VSCode" ;;
+  *)
+    echo "Usage: ahr-default-editor <helix|neovim|vim|code>" >&2
+    exit 1
+    ;;
+esac
+
+if ! ahr_has_cmd "$editor_cmd"; then
+  ahr_fail "Editor not found: $editor_cmd"
+fi
+
+mkdir -p "$(dirname "$SHELL_CONFIG")"
+if grep -qs '^export EDITOR=' "$SHELL_CONFIG" 2>/dev/null; then
+  sed -i "s|^export EDITOR=.*|export EDITOR=$editor_cmd|" "$SHELL_CONFIG"
+else
+  printf '%s\n' "# Editor preference set by ahr-default-editor" >> "$SHELL_CONFIG"
+  printf '%s\n' "export EDITOR=$editor_cmd" >> "$SHELL_CONFIG"
+fi
+
+if ahr_desktop_entry_exists "$desktop_id"; then
+  xdg-mime default "$desktop_id" text/plain 2>/dev/null || true
+  xdg-mime default "$desktop_id" text/x-shellscript 2>/dev/null || true
+  xdg-mime default "$desktop_id" text/x-python 2>/dev/null || true
+  xdg-mime default "$desktop_id" text/x-changelog 2>/dev/null || true
+  xdg-mime default "$desktop_id" text/x-markdown 2>/dev/null || true
+  xdg-mime default "$desktop_id" application/x-zerosize 2>/dev/null || true
+fi
+
+ahr_notify "Default Editor" "$name is now the default editor (EDITOR=$editor_cmd)"
+
+exit 0
