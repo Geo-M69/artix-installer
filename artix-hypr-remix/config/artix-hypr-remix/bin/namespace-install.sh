@@ -61,6 +61,7 @@ declare -a commands=(
   ahr-edit-config
   ahr-system-suspend
   ahr-system-hibernate
+  ahr-doctor
 )
 
 declare -a aliases=(

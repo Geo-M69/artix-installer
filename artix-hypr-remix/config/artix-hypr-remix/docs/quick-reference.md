@@ -48,6 +48,16 @@ Update and migration state lives under `~/.local/state/artix-hypr-remix`.
 Update logs live at `~/.local/state/artix-hypr-remix/update.log`.
 Skipped migrations can be reviewed with `ahr migrate --status` and retried with `ahr migrate --retry-skipped`.
 
+## Health & Repair
+
+- Show install state, logs, and backup hints: `ahr status`
+- Check for fixable issues (safe, no changes): `ahr repair --dry-run`
+- Full health report: `ahr doctor`
+- Run idempotency checks: `scripts/check-first-run-idempotency.sh` (requires repo clone)
+- List config backup snapshots: `ahr list-backups`
+
+Repair actions require `--apply` and create timestamped backups before overwriting configs.
+
 ## Compatibility
 
 Artix Hypr Remix provides an `ahr-*` command namespace and a small Omarchy-compatible alias layer. Omarchy commands are only aliased when they map to native OpenRC-safe behavior.

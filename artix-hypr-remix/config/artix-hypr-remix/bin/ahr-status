@@ -117,7 +117,7 @@ if [[ "$show_backups" == "true" ]]; then
   done
 
   # Theme-set backups (subdirectory files from ahr_theme_apply_targets)
-  local theme_globs=(
+  theme_globs=(
     "$HOME/.config/waybar/style.css.bak.*"
     "$HOME/.config/mako/config.bak.*"
     "$HOME/.config/ghostty/config.bak.*"

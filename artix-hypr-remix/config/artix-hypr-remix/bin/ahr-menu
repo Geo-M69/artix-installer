@@ -217,6 +217,59 @@ open_markdown_doc() {
   run_terminal_script "printf '%s\n' $(printf '%q' "$missing_message"); read -r -p 'Press Enter to close...' _"
 }
 
+show_getting_started() {
+  local ahr_cmd
+  local status_cmd
+  local repair_cmd
+
+  ahr_cmd="$(resolve_command_path ahr)" || ahr_fail "Command not found: ahr"
+  status_cmd="$(resolve_command_path ahr-status)" || ahr_fail "Command not found: ahr-status"
+  repair_cmd="$(resolve_command_path ahr-repair)" || ahr_fail "Command not found: ahr-repair"
+
+  run_terminal_script "
+cat <<'GUIDE'
+╔══════════════════════════════════════════════════╗
+║     Artix Hypr Remix — Getting Started           ║
+╚══════════════════════════════════════════════════╝
+
+ESSENTIAL KEYBINDINGS
+  Super + Space      Main menu (this menu system)
+  Super + K          Keybinding reference
+  Super + Return     Terminal
+  Super + Shift + F  File manager
+  Super + P          Clipboard history picker
+  Print              Screenshot picker (area/fullscreen/window)
+
+MENU STRUCTURE
+  Applications  App launcher
+  Learn         Help, keybindings, docs, theme guides
+  Trigger       Screenshots, screen recording, toggles
+  Style         Themes, wallpaper, Waybar/Mako controls
+  Setup         Audio, network, Bluetooth, defaults
+  Install       Packages, Flatpak, Docker, Printing
+  Remove        Package, Flatpak, Docker, Printing
+  Update        System & framework updates, migrations
+  System        Lock, logout, suspend, reboot, power off
+
+KEY COMMANDS
+  ahr status              Show install state, logs, backups
+  ahr repair --dry-run    Check for fixable issues (safe)
+  ahr update --dry-run    Preview pending updates
+  ahr theme list          List available themes
+  ahr theme status        Show active theme and asset state
+
+GETTING HELP
+  Learn > Quick Reference     Installed quick-reference guide
+  Learn > Keybindings         Full Hyprland keybinding list
+  Learn > AHR Command Help    All ahr-* commands
+  Learn > Theme Help          Theme engine usage
+  ahr help                    CLI help for the ahr dispatcher
+  ahr doctor                Full health report
+GUIDE
+read -r -p 'Press Enter to close...' _
+"
+}
+
 show_learn_menu() {
   local ahr_cmd
   local choice
@@ -235,6 +288,7 @@ show_learn_menu() {
 
   while true; do
     choice="$(menu_select "Learn" \
+      "Getting Started" \
       "Keybindings" \
       "Quick Reference" \
       "Theme Asset Guide" \
@@ -245,6 +299,7 @@ show_learn_menu() {
       "Back")"
 
     case "$choice" in
+      "Getting Started") show_getting_started ;;
       "Keybindings") run_command_now ahr-menu-keybindings ;;
       "Quick Reference") open_markdown_doc "$quick_reference_file" "Quick reference" ;;
       "Theme Asset Guide") open_markdown_doc "$theme_asset_file" "Theme asset guide" ;;

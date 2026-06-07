@@ -36,6 +36,7 @@ Categories:
 - `ahr-update-available` - report package and migration work remaining
 - `ahr-repair` - inspect common framework drift and apply safe repairs with `--apply`
 - `ahr-status` - print install state, log paths, and framework summary
+- `ahr-doctor` - run installed-framework health checks (required commands, desktop runtime, OpenRC services, capture tools, menu backend, MIME defaults, theme state, framework deployment)
 - `ahr-list-backups` - list config backups created by installer phase 4
 - `ahr-voxtype-model` - open voxtype model setup workflow
 - `ahr-voxtype-config` - open voxtype configuration file

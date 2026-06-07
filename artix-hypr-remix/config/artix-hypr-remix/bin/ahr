@@ -42,6 +42,7 @@ Commands:
   update              System + AUR update helper
   update-available    Check whether updates are available (for status bars)
   repair              Check and apply safe framework repairs
+  doctor              Run installed-framework health checks
   voxtype-model       Open voxtype model setup
   voxtype-config      Open voxtype configuration file
   toggle-idle         Toggle hypridle daemon state
@@ -88,6 +89,7 @@ dispatch() {
     status) exec_ahr_command ahr-status "$@" ;;
     list-backups) exec_ahr_command ahr-list-backups "$@" ;;
     repair) exec_ahr_command ahr-repair "$@" ;;
+    doctor) exec_ahr_command ahr-doctor "$@" ;;
     voxtype-model) exec_ahr_command ahr-voxtype-model "$@" ;;
     voxtype-config) exec_ahr_command ahr-voxtype-config "$@" ;;
     toggle-idle) exec_ahr_command ahr-toggle-idle "$@" ;;
@@ -143,7 +145,8 @@ dispatch() {
         "ahr-capture-picker" \
         "ahr-edit-config" \
         "ahr-system-suspend" \
-        "ahr-system-hibernate"
+        "ahr-system-hibernate" \
+        "ahr-doctor"
       ;;
     help|-h|--help|"")
       usage

@@ -473,9 +473,9 @@ Dependencies to verify:
 Safe implementation tasks:
 
 - [ ] Validate first visible state on a clean install without reading source docs.
-- [ ] Add first-login notification pointing to `Super+Space`, keybindings, and repair command.
-- [ ] Add a one-command first-login health summary if it can avoid noise.
-- [ ] Keep first-run scripts idempotent and individually logged.
+- [x] Add first-login notification pointing to `Super+Space`, keybindings, and repair command.
+- [x] Add first-login health tip pointing to `ahr status`, `ahr repair --dry-run`, and `ahr doctor`. (Full "one-command health summary" deferred — the initial implementation is a notification with command suggestions rather than a self-contained summary.)
+- [x] Keep first-run scripts idempotent and individually logged.
 - [ ] Add expected-result screenshots or text updates when UI changes.
 
 Risky/deferred tasks:
@@ -672,7 +672,7 @@ Beta polish is complete when:
 - [x] Add default editor validation/setup and broaden safe `xdg-mime` defaults.
 - [x] Add screenshot/capture menu polish for fullscreen/window/open-after-capture behavior.
 - [x] Improve theme/wallpaper state reporting and validation after switching.
-- [ ] Add or refine first-login keybinding/help menu entry based on a clean-install usability pass.
+- [x] Add or refine first-login keybinding/help menu entry based on a clean-install usability pass.
 - [ ] Add more Omarchy parity table entries from direct inspection of `../omarchy/bin/omarchy-capture-*`, `omarchy-toggle-*`, and `omarchy-theme-*`.
 
 TODO markers for future inspection/testing:
@@ -707,3 +707,24 @@ TODO markers for future inspection/testing:
 - Screenshot background actions in `show_capture_menu` (Area/Fullscreen/Window) also lacked pre-check guards — added `menu_require` for `grim`/`slurp`/`jq`.
 
 **Files changed:** `ahr-lib.sh`, `ahr-menu`, `ahr-capture-screenshot`, `ahr-capture-screenrecording`, `ahr-capture-picker`, `ahr-toggle-idle`, `ahr-toggle-waybar`, `ahr-launch-audio`, `ahr-launch-wifi`, `ahr-launch-bluetooth`, `ahr-clipboard-picker`, `ahr-system-lock`, `ahr-system-suspend`, `ahr-system-hibernate`, `ahr-system-reboot`
+
+### Session 2026-06-07 (second pass): First-login and help affordance polish
+
+**What was done (initial pass):**
+
+- Expanded `110-welcome.sh` first-login notification with more keybindings (Super+P clipboard, Print screenshot), a pointer to the Learn menu, and a 12-second-delayed health-tip notification pointing to `ahr status`, `ahr repair --dry-run`, and `scripts/doctor.sh --no-aur`.
+- Added `show_getting_started()` function to `ahr-menu` — a curated terminal guide showing essential keybindings, menu structure, key CLI commands, and where to get further help.
+- Added "Getting Started" as the first entry in the Learn menu (before Keybindings) for immediate discoverability.
+- Added a "Health & Repair" section to `quick-reference.md` covering `ahr status`, `ahr repair --dry-run`, `doctor.sh`, and config backup listing.
+
+**Files changed (initial):** `first-run.d/110-welcome.sh`, `ahr-menu`, `docs/quick-reference.md`
+
+**Post-review fixes (same session):**
+
+1. **`ahr-status` local-bind error (finding 1a):** `local theme_globs=(...)` at line 120 was outside any function, causing `local: can only be used in a function` at runtime. Removed `local` — the variable is only used once within the same block.
+2. **Unused capture in `110-welcome.sh` (finding 1b):** `ahr_status="$(ahr status --quiet 2>/dev/null || true)"` captured output but never used it. Removed the line entirely.
+3. **Race condition in health-tip guard (finding 3):** The `HEALTH_NOTIFIED` guard file was touched *after* the 12-second sleep inside the background subshell, so two invocations within 12s could both schedule the tip. Fixed by switching to `$XDG_RUNTIME_DIR` (session-scoped, tmpfs) and creating/touching the guard *before* spawning the background subshell.
+4. **Doctor refs broken post-install (finding 2):** The notification, Getting Started guide, and quick-reference all referenced `scripts/doctor.sh --no-aur`, which doesn't exist in the deployed `~/.config/artix-hypr-remix` tree. Created `bin/ahr-doctor` — a lightweight installed-framework health check covering required commands, desktop runtime, OpenRC services, capture tools, menu backends, MIME defaults, theme state, and framework command deployment. Registered as `ahr doctor` in the dispatcher. Updated all three reference points to use `ahr doctor`.
+5. **Checklist overstatement (finding 4):** The health-summary completion claim was downgraded from "one-command health summary" to "health tip with command suggestions" to accurately reflect the implementation.
+
+**Files changed (fixes):** `ahr-status`, `ahr-doctor` (new), `ahr`, `first-run.d/110-welcome.sh`, `ahr-menu`, `docs/quick-reference.md`, `BETA_POLISH_CHECKLIST.md`

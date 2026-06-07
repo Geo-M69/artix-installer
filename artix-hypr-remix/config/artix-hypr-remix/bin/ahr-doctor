@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ahr-doctor — lightweight health checks for the installed framework.
+# This is a post-install-safe subset of scripts/doctor.sh.  For the full
+# suite (hardware checks, quality-gate integration, etc.) run the repo
+# script from a cloned artix-installer checkout:
+#   git clone https://github.com/geofedora/artix-installer && ./scripts/doctor.sh --no-aur
+
+overall_status=0
+
+usage() {
+  cat <<'EOF'
+Usage: ahr doctor [options]
+
+Options:
+  -h, --help Show this help
+
+Checks: required commands, desktop runtime, OpenRC services, capture tools,
+menu backends, MIME defaults, theme state, framework command deployment.
+EOF
+}
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    *) printf 'Unknown option: %s\n\n' "$1" >&2; usage >&2; exit 1 ;;
+  esac
+  shift
+done
+
+# Severity levels for command checks:
+#   check_required    — hard failure if missing (exit code 1)
+#   check_optional    — warning only, never fails
+# All three show a package install hint when a package name is provided.
+
+check_required() {
+  local label="$1" cmd="$2" pkg="${3:-}"
+  if command -v "$cmd" >/dev/null 2>&1; then
+    printf '  OK: %s\n' "$label"
+  else
+    if [[ -n "$pkg" ]]; then
+      printf '  MISSING: %s — install with: sudo pacman -S %s\n' "$label" "$pkg"
+    else
+      printf '  MISSING: %s\n' "$label"
+    fi
+    overall_status=1
+  fi
+}
+
+check_optional() {
+  local label="$1" cmd="$2" pkg="${3:-}"
+  if command -v "$cmd" >/dev/null 2>&1; then
+    printf '  OK: %s\n' "$label"
+  else
+    if [[ -n "$pkg" ]]; then
+      printf '  WARN: %s — install with: sudo pacman -S %s\n' "$label" "$pkg"
+    else
+      printf '  WARN: %s\n' "$label"
+    fi
+  fi
+}
+
+check_desktop_cmd() {
+  local label="$1" cmd="$2" fallback_path="${3:-}"
+  if command -v "$cmd" >/dev/null 2>&1; then
+    printf '  OK: %s\n' "$label"
+  elif [[ -n "$fallback_path" && -x "$fallback_path" ]]; then
+    printf '  OK: %s (via %s)\n' "$label" "$fallback_path"
+  else
+    printf '  MISSING: %s\n' "$label"
+    overall_status=1
+  fi
+}
+
+mime_check() {
+  local label="$1" mime_type="$2"
+  if ! command -v xdg-mime >/dev/null 2>&1; then
+    return
+  fi
+  local current
+  current="$(xdg-mime query default "$mime_type" 2>/dev/null || true)"
+  if [[ -n "$current" ]]; then
+    printf '  OK: %s → %s\n' "$label" "$current"
+  else
+    printf '  WARN: %s — no default handler set\n' "$label"
+  fi
+}
+
+service_check() {
+  local service="$1" required="${2:-true}"
+  if [[ ! -x "/etc/init.d/$service" ]]; then
+    if [[ "$required" == "true" ]]; then
+      printf '  MISSING: service script /etc/init.d/%s\n' "$service"
+      overall_status=1
+    else
+      printf '  WARN: optional service not installed: %s\n' "$service"
+    fi
+    return
+  fi
+
+  local enabled=false
+  local running=false
+  [[ -e "/etc/runlevels/default/$service" ]] && enabled=true
+  rc-service "$service" status >/dev/null 2>&1 && running=true
+
+  if [[ "$required" == "true" ]]; then
+    if ! $enabled; then
+      printf '  MISSING: %s not in default runlevel\n' "$service"
+      overall_status=1
+      return
+    fi
+    if ! $running; then
+      printf '  MISSING: %s installed but not running\n' "$service"
+      overall_status=1
+      return
+    fi
+    printf '  OK: %s (default runlevel, running)\n' "$service"
+  else
+    printf '  OK: /etc/init.d/%s' "$service"
+    $enabled && printf ' (default runlevel)'
+    $running && printf ' (running)' || printf ' (not running)'
+    printf '\n'
+  fi
+}
+
+framework_cmd_check() {
+  local name="$1"
+  local path="$HOME/.config/artix-hypr-remix/bin/$name"
+  if [[ -x "$path" ]]; then
+    printf '  OK: %s\n' "$name"
+  elif [[ -e "$path" ]]; then
+    printf '  MISSING: %s (not executable)\n' "$name"
+    overall_status=1
+  else
+    printf '  MISSING: %s\n' "$name"
+    overall_status=1
+  fi
+}
+
+theme_check() {
+  local current_link="$HOME/.config/artix-hypr-remix/current/theme"
+  if [[ -L "$current_link" ]]; then
+    local target
+    target="$(readlink "$current_link")"
+    printf '  OK: current theme → %s\n' "$target"
+  elif [[ -f "$current_link" ]]; then
+    printf '  WARN: current theme path is a file, not a symlink\n'
+  else
+    printf '  WARN: no current theme symlink (run ahr theme set <name>)\n'
+  fi
+}
+
+# ── Environment ────────────────────────────────────────────────
+printf '\n=== Required Commands ===\n'
+check_required pacman pacman
+check_required grim grim grim
+check_required hyprctl hyprctl hyprland
+check_required rc-update rc-update openrc
+check_required rc-service rc-service openrc
+
+printf '\n=== Desktop Runtime ===\n'
+check_desktop_cmd polkit-gnome-authentication-agent-1 \
+  polkit-gnome-authentication-agent-1 \
+  /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1
+check_desktop_cmd xdg-desktop-portal xdg-desktop-portal \
+  /usr/lib/xdg-desktop-portal
+check_desktop_cmd xdg-desktop-portal-hyprland xdg-desktop-portal-hyprland \
+  /usr/lib/xdg-desktop-portal-hyprland
+
+printf '\n=== Capture Tools ===\n'
+check_required grim grim grim
+if command -v grim >/dev/null 2>&1; then
+  check_optional slurp slurp slurp
+  check_optional jq jq jq
+fi
+check_optional gpu-screen-recorder gpu-screen-recorder gpu-screen-recorder
+check_required 'wl-clipboard' wl-paste wl-clipboard
+check_required cliphist cliphist cliphist
+
+printf '\n=== Menu Backend ===\n'
+if command -v wofi >/dev/null 2>&1; then
+  printf '  OK: wofi\n'
+elif command -v walker >/dev/null 2>&1; then
+  printf '  OK: walker\n'
+elif command -v rofi >/dev/null 2>&1; then
+  printf '  OK: rofi\n'
+else
+  printf '  MISSING: no menu backend (wofi/walker/rofi)\n'
+  overall_status=1
+fi
+
+printf '\n=== OpenRC Services ===\n'
+service_check dbus true
+service_check elogind true
+service_check NetworkManager true
+service_check bluetoothd true
+check_optional docker docker docker
+service_check cupsd false
+service_check avahi-daemon false
+
+printf '\n=== MIME Defaults ===\n'
+for tool in xdg-settings xdg-mime xdg-open; do
+  check_required "$tool" "$tool" xdg-utils
+done
+
+mime_check 'Default browser (text/html)'      text/html
+mime_check 'Default browser (x-scheme-handler/http)'  x-scheme-handler/http
+mime_check 'Default file manager (inode/directory)'   inode/directory
+mime_check 'Default PDF viewer (application/pdf)'     application/pdf
+mime_check 'Default image viewer (image/png)'         image/png
+mime_check 'Default video player (video/mp4)'         video/mp4
+mime_check 'Default archive (application/zip)'        application/zip
+
+printf '\n=== Theme State ===\n'
+theme_check
+
+printf '\n=== Framework Commands ===\n'
+framework_cmd_check ahr-menu
+framework_cmd_check ahr-menu-keybindings
+framework_cmd_check ahr-launch-terminal
+framework_cmd_check ahr-launch-apps
+framework_cmd_check ahr-launch-browser
+framework_cmd_check ahr-launch-files
+framework_cmd_check ahr-default-browser
+framework_cmd_check ahr-default-terminal
+framework_cmd_check ahr-default-editor
+framework_cmd_check ahr-repair
+framework_cmd_check ahr-system-lock
+framework_cmd_check ahr-toggle-idle
+framework_cmd_check ahr-launch-wallpaper-session
+framework_cmd_check ahr-capture-screenshot
+framework_cmd_check ahr-capture-picker
+framework_cmd_check ahr-theme
+framework_cmd_check ahr-status
+framework_cmd_check ahr-doctor
+
+printf '\n'
+if (( overall_status == 0 )); then
+  printf 'All checks passed.\n'
+else
+  printf 'Some checks failed. Run ahr repair --dry-run for fixable issues.\n'
+fi
+
+exit "$overall_status"
