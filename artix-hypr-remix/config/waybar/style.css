@@ -213,6 +213,7 @@ tooltip {
 #network.disconnected,
 #custom-screenrecording-indicator.active,
 #custom-idle-indicator.inactive,
+#custom-idle-indicator.warning,
 #custom-notification-silencing-indicator.active {
 	color: #ff7a8a;
 }

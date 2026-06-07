@@ -3,8 +3,14 @@ set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles"
+state_file="$state_dir/idle"
+
+mkdir -p "$state_dir"
+
 if pgrep -x hypridle >/dev/null 2>&1; then
   pkill -x hypridle >/dev/null 2>&1 || true
+  rm -f "$state_file"
   ahr_notify "Idle" "Idle lock disabled"
 else
   if ! ahr_require hypridle hypridle; then
@@ -13,7 +19,19 @@ else
   fi
 
   setsid hypridle >/dev/null 2>&1 &
-  ahr_notify "Idle" "Idle lock enabled"
+
+  # Wait briefly for hypridle to start, then verify it stayed up.
+  # Only write the state file on confirmed success so the Waybar
+  # indicator never shows "active" from a stale file.
+  sleep 0.3
+  if pgrep -x hypridle >/dev/null 2>&1; then
+    : > "$state_file"
+    ahr_notify "Idle" "Idle lock enabled"
+  else
+    rm -f "$state_file"
+    ahr_notify "artix-hypr-remix" "Failed to start hypridle — check your hypridle.conf"
+    exit 1
+  fi
 fi
 
 pkill -RTMIN+9 -x waybar >/dev/null 2>&1 || true

@@ -428,8 +428,8 @@ Safe implementation tasks:
 - [x] Add capture failure messages for missing compositor, selection cancellation, and unwritable output directory.
 - [x] Add menu entries for color picker only if `hyprpicker` is installed — added to Capture menu with `menu_require hyprpicker hyprpicker` guard.
 - [ ] Add recording modes only after validating audio source selection and webcam detection.
-- [ ] Add state files under `${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix`.
-- [ ] Keep Waybar indicators in sync with toggle state.
+- [x] Add state files under `${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix`.
+- [x] Keep Waybar indicators in sync with toggle state.
 
 Risky/deferred tasks:
 

@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+state_file="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles/idle"
+
 if pgrep -x hypridle >/dev/null 2>&1; then
   printf '{"text":"󰒲","class":"active","tooltip":"Idle lock enabled"}\n'
+elif [[ -f "$state_file" ]]; then
+  # State file says enabled but hypridle is not running — stale state.
+  # This can happen after a crash, logout, or failed startup.  The user
+  # should re-enable or toggle twice to clear the stale file.
+  printf '{"text":"󰒳","class":"warning","tooltip":"Idle lock requested but hypridle is not running"}\n'
 else
   printf '{"text":"󰒳","class":"inactive","tooltip":"Idle lock disabled"}\n'
 fi
