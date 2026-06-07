@@ -430,6 +430,8 @@ show_capture_menu() {
       "Fullscreen Screenshot" \
       "Window Screenshot" \
       "Toggle Screen Recording" \
+      "Clipboard History" \
+      "Color Picker" \
       "Back")"
 
     case "$choice" in
@@ -451,6 +453,19 @@ show_capture_menu() {
       "Toggle Screen Recording")
         if menu_require gpu-screen-recorder gpu-screen-recorder; then
           run_command_background ahr-capture-screenrecording
+        fi
+        ;;
+      "Clipboard History")
+        if ahr_has_cmd cliphist; then
+          run_command_background ahr-clipboard-picker
+        else
+          menu_require cliphist cliphist
+        fi
+        ;;
+      "Color Picker")
+        if menu_require hyprpicker hyprpicker && menu_require wl-copy wl-clipboard; then
+          nohup hyprpicker -az >/dev/null 2>&1 &
+          exit 0
         fi
         ;;
       "Back"|"") return 0 ;;

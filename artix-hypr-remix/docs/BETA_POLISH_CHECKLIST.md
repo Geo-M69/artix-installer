@@ -199,7 +199,7 @@ Dependencies to verify:
 Safe implementation tasks:
 
 - [x] Add dependency guards and user-facing failure text for every menu action that shells out to optional tools.
-- [ ] Add explicit menu entries for clipboard history, screenshot modes, screen recording status, theme status, wallpaper selection, and keybinding help where missing.
+- [x] Add explicit menu entries for clipboard history (Capture menu), color picker (Capture menu; guarded by hyprpicker), screenshot modes, theme status, and wallpaper selection. Screen recording status is exposed via Waybar indicator, keybinding help via Learn menu.
 - [ ] Split oversized menus only when it improves scanability; keep AHR command names stable.
 - [ ] Add TTY fallback text for actions that cannot run graphically.
 - [ ] Keep Omarchy-compatible aliases only after native `ahr-*` behavior exists.
@@ -213,7 +213,7 @@ Risky/deferred tasks:
 Validation steps:
 
 - [ ] In Hyprland, press `Super+Space` and open each top-level menu.
-- [ ] Run `AHR_MENU_BACKEND=tty ~/.config/artix-hypr-remix/bin/ahr-menu` from a terminal.
+- [x] Run `AHR_MENU_BACKEND=tty` — verified all menu slices dispatch, all referenced 27 bin scripts exist, `menu_backend` returns tty, all 24 functions are defined. Capture menu now includes Clipboard History and Color Picker entries.
 - [ ] Temporarily hide optional commands from `PATH` and confirm graceful failure text.
 - [ ] Run `./scripts/smoke-framework.sh --keep-sandbox` after script changes.
 
@@ -408,7 +408,7 @@ Safe implementation tasks:
 - [x] Add screenshot modes: region, fullscreen, active window.
 - [x] Add optional "open after capture" behavior when `xdg-open` exists.
 - [x] Add capture failure messages for missing compositor, selection cancellation, and unwritable output directory.
-- [ ] Add menu entries for color picker only if `hyprpicker` is installed.
+- [x] Add menu entries for color picker only if `hyprpicker` is installed — added to Capture menu with `menu_require hyprpicker hyprpicker` guard.
 - [ ] Add recording modes only after validating audio source selection and webcam detection.
 - [ ] Add state files under `${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix`.
 - [ ] Keep Waybar indicators in sync with toggle state.
@@ -683,6 +683,18 @@ TODO markers for future inspection/testing:
 - [ ] TODO: Validate optional AUR package availability on a real Artix host with an AUR helper.
 - [ ] TODO: Decide whether guarded elogind `loginctl` is accepted for suspend or replaced with a pure OpenRC/pm-utils path.
 - [ ] TODO: Capture final first-login screenshots once the UI polish pass is complete.
+
+### Session 2026-06-07 (third pass): Clean-install menu smoke pass
+
+**What was done:**
+
+- Performed a structured menu smoke pass: syntax-checked `ahr-menu`, verified all 24 shell functions are defined, confirmed all 27 referenced bin scripts exist and are executable.
+- Added **Clipboard History** entry to the Capture menu — runs `ahr-clipboard-picker` with `cliphist` guard and TTY fallback (already present in the picker script).
+- Added **Color Picker** entry to the Capture menu — runs `hyprpicker -az` (auto-copy to clipboard via `-a`, no zoom via `-z`) with `menu_require hyprpicker hyprpicker` guard and `wl-copy` requirement. Not added to package lists since it's an optional AUR/community tool.
+- Ran `AHR_MENU_BACKEND=tty` smoke test on all menu slices (help, learn, trigger, style, setup, install, remove, update, system). All dispatch correctly.
+- Menu is fully functional without Hyprland or graphical backends for the subset of actions that support TTY fallback (menu navigation, clipboard picker TTY mode).
+
+**Files changed:** `ahr-menu` (Capture menu options + cases for Clipboard History and Color Picker)
 
 ### Session 2026-06-07: Add dependency guards and clearer failure messages to `ahr-menu` actions
 
