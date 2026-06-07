@@ -29,21 +29,26 @@ sed -i 's/"position"[[:space:]]*:[[:space:]]*"bottom"/"position": "'"$new_positi
 # Write state file for the Waybar indicator
 printf '%s\n' "$new_position" > "$state_file"
 
-# Restart Waybar to apply
-if pgrep -x waybar >/dev/null 2>&1; then
-  pkill -x waybar >/dev/null 2>&1 || true
-  sleep 0.3
-fi
-
-if ahr_has_cmd waybar; then
-  setsid waybar >/dev/null 2>&1 &
-fi
-
+# Notify before restart so the user sees the position message
 if [[ "$new_position" == "bottom" ]]; then
   ahr_notify "Waybar" "Waybar moved to bottom"
 else
   ahr_notify "Waybar" "Waybar moved to top"
 fi
 
-# Signal Waybar to refresh position indicator
-pkill -RTMIN+13 -x waybar >/dev/null 2>&1 || true
+# Restart Waybar to pick up the new position.  Delegate to ahr-restart-waybar
+# which already handles the kill/wait/start cycle reliably.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -x "$script_dir/ahr-restart-waybar" ]]; then
+  bash "$script_dir/ahr-restart-waybar"
+else
+  # Fallback: direct restart (ahr-restart-waybar should always exist)
+  pkill -x waybar >/dev/null 2>&1 || true
+  sleep 0.5
+  if ahr_has_cmd waybar; then
+    setsid waybar >/dev/null 2>&1 &
+  fi
+fi
+
+# Signal Waybar indicator to refresh the position icon immediately
+pkill -RTMIN+13 -x waybar 2>/dev/null || true
