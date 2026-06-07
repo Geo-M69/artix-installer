@@ -102,7 +102,7 @@ Use these classifications for differences:
 | Network | Present | Artix/OpenRC adaptation | `packages/60-network-openrc.txt`, `ahr-launch-wifi`, `services/openrc-default.txt` | Omarchy Wi-Fi setup/restart | NetworkManager is project-selected; keep OpenRC service control. |
 | Bluetooth | Present | Artix/OpenRC adaptation | `packages/60-network-openrc.txt`, `ahr-launch-bluetooth`, OpenRC services | Omarchy Bluetooth setup/restart | Validate hardware-present and hardware-absent behavior. |
 | Capture: OCR/text extraction | Missing | Optional polish | — | `omarchy-capture-text-extraction` | Requires `tesseract` and language data; add after screenshot pipeline is stable. Make dependency optional. |
-| Power management | Present but rough | Artix/OpenRC adaptation | laptop profile, `ahr-system-suspend`, `ahr-system-hibernate`, `power-profiles-daemon` package | Omarchy Power Profile/System Sleep | Resolve `loginctl` portability policy and test power profile UI. |
+| Power management | Present but rough | Artix/OpenRC adaptation | laptop profile, `ahr-system-suspend`, `ahr-system-hibernate`, `power-profiles-daemon` package | Omarchy Power Profile/System Sleep | `loginctl` portability policy resolved; power profile UI testing remains. |
 | Keybindings | Present | Required parity | `config/hypr/hyprland.conf`, `keybinds.lua`, `ahr-menu-keybindings` | Omarchy bindings and keybinding viewer | Keep viewer labels synced with runtime `.conf`. |
 | Nightlight toggle | Present | Optional polish | `ahr-toggle-nightlight`, `ahr-waybar-nightlight-status`, `ahr-menu` Toggle menu, `config/waybar/config.jsonc` nightlight-indicator, `config/hypr/hyprland.conf` binding | `omarchy-toggle-nightlight` (hyprsunset 4000K/6500K) | Implemented: toggles hyprsunset 4000K/6500K, Toggle menu entry, Waybar indicator with signal 12, Super+Ctrl+N binding. |
 | Notices (date/time/battery/weather) | Missing | Optional polish | — | Omarchy hotkey-triggered notification notices | Lightweight notification commands; add after notification toggle pipeline is reliable. |
@@ -592,7 +592,7 @@ OpenRC/Artix notes:
 | --- | --- | --- | --- | --- | --- | --- |
 | Validate lock/idle after suspend/resume | First-login, power | Bad lock/suspend behavior breaks daily laptop use | `hypridle.conf`, `ahr-system-lock`, `ahr-system-suspend`, laptop OpenRC module | `hypridle`, `hyprlock`, elogind/pm-utils | Suspend/resume on laptop, then unlock and inspect logs | Medium |
 | Portal screen sharing validation | Portals/share | Browser/Flatpak screen share is expected on modern desktops | `packages/10-hyprland.txt`, `config/hypr/xdph.conf`, smoke scripts | `xdg-desktop-portal*`, PipeWire | Share screen from browser or Flatpak app | Medium |
-| Resolve OpenRC portability policy for guarded `loginctl` | Power/healthcheck | Portability check and runtime suspend helper must agree | `scripts/check-openrc-portability.sh`, `ahr-system-suspend`, laptop module | elogind `loginctl`, `pm-suspend` | `scripts/check-openrc-portability.sh`; suspend test | Medium |
+| ~~Resolve OpenRC portability policy for guarded `loginctl`~~ | Power/healthcheck | Portability check and runtime suspend helper must agree | `scripts/check-openrc-portability.sh`, `ahr-system-suspend`, laptop module | elogind `loginctl`, `pm-suspend` | `scripts/check-openrc-portability.sh`; suspend test | Medium |
 | Clean-install menu smoke pass | Launcher/first-login | User must discover core actions without docs | `ahr-menu`, `hyprland.conf`, docs | menu backend | Fresh install, open every top-level menu | Low |
 | Healthcheck covers UX-critical commands | Healthcheck | Users need actionable repair output | `scripts/doctor.sh`, `ahr-repair` | installed framework commands | `./scripts/doctor.sh --no-aur` | Low |
 
@@ -701,7 +701,7 @@ TODO markers for future inspection/testing:
 - [ ] TODO: `ahr-theme status` includes swayosd.css and vscode.json in missing-optional-assets output — confirm this is correct for AHR scope.
 - [ ] TODO: Add `ahr theme status` to doctor.sh's check_theme_state once the command is installed in a real user config.
 - [ ] TODO: Validate optional AUR package availability on a real Artix host with an AUR helper.
-- [ ] TODO: Decide whether guarded elogind `loginctl` is accepted for suspend or replaced with a pure OpenRC/pm-utils path.
+- [x] ~~TODO: Decide whether guarded elogind `loginctl` is accepted for suspend or replaced with a pure OpenRC/pm-utils path.~~ **Decision:** Guarded `loginctl` (part of elogind, not systemd) is accepted for suspend/hibernate/lid-close power management paths. `check-openrc-portability.sh` now scans extensionless files and `config/hardware/`, with explicit exceptions for guarded `loginctl` usage in `ahr-system-suspend`, `ahr-system-hibernate`, and `config/hardware/laptop/openrc-module.sh`. `ahr-system-hibernate` updated to try `loginctl hibernate` first (consistent with suspend).
 - [ ] TODO: Capture final first-login screenshots once the UI polish pass is complete.
 
 ### Session 2026-06-07 (third pass): Clean-install menu smoke pass
@@ -850,3 +850,34 @@ TODO markers for future inspection/testing:
 - Indicator updates within 30s or on signal 13
 - `ahr migrate --dry-run` shows the new migration pending; `ahr migrate` applies it
 - `ahr toggle-waybar-position` works after migration completes
+
+### Session 2026-06-07 (seventh pass): Resolve OpenRC portability policy for guarded `loginctl`
+
+**What was done:**
+
+- **Decision:** Guarded `loginctl` (part of `elogind`, not systemd) is accepted for suspend/hibernate/lid-close power management paths. This aligns with AHR's existing `elogind` dependency and provides better session handling than raw `pm-suspend`.
+- **Fixed `check-openrc-portability.sh` scan coverage:** Added `config/hardware/` to scanned directories and `--include='*'` to catch extensionless files (e.g., `ahr-system-suspend`, `config/hardware/laptop/acpi-events/lid`). The check was previously passing by accident because it missed these files.
+- **Added explicit exceptions** for guarded `loginctl` usage in:
+  - `ahr-system-suspend` — `ahr_has_cmd loginctl && loginctl suspend`
+  - `ahr-system-hibernate` — `ahr_has_cmd loginctl && loginctl hibernate`
+  - `config/hardware/laptop/openrc-module.sh` — `command -v loginctl && loginctl suspend`
+  - `config/hardware/laptop/packages.txt` — policy comment
+- **Updated `ahr-system-hibernate`** to try `loginctl hibernate` first (with guard and fallback), consistent with `ahr-system-suspend`.
+- **Updated checklist:** Marked beta blocker as resolved, updated parity audit table, and documented the policy decision.
+
+**Post-review fix 1 (same session):**
+- **Finding:** Exceptions were too broad — `'loginctl'` as a line regex matched any line containing the word in the matched files, which could let future unguarded or unrelated `loginctl` usage pass silently.
+- **Fix:** Narrowed `EXCEPTION_PATH_FRAGMENTS` to exact relative paths (`config/artix-hypr-remix/bin/ahr-system-suspend`, `config/artix-hypr-remix/bin/ahr-system-hibernate`, `config/hardware/laptop/openrc-module.sh`, `config/hardware/laptop/packages.txt`). Narrowed `EXCEPTION_LINE_REGEXES` to exact guarded patterns (`ahr_has_cmd loginctl && loginctl suspend/hibernate`, `command -v loginctl >/dev/null 2>&1 && loginctl suspend`) plus the specific policy comments. Verified with synthetic unguarded `loginctl suspend` injection — correctly flagged as a violation.
+
+**Post-review fix 2 (same session):**
+- **Finding:** Exceptions were still over-suppressed — prefix-anchored regexes without rule-specificity could ignore a line for *any* rule if it happened to match a loginctl exception pattern. For example, `if ahr_has_cmd loginctl && loginctl suspend 2>/dev/null; then systemctl suspend` would be ignored for both `loginctl` and `systemctl` rules.
+- **Fix:** Added rule index parameter to `scan_rule` and `should_ignore_hit`; exceptions are now only applied when the active rule is the `loginctl` rule (index 1). Anchored all exception regexes to the full expected line with `$` (e.g., `^if ahr_has_cmd loginctl && loginctl suspend 2>/dev/null; then$`). Verified with synthetic injection of `systemctl suspend` on the same line as guarded `loginctl suspend` — correctly flagged as a `systemctl` violation.
+
+**Files changed:** `scripts/check-openrc-portability.sh`, `config/artix-hypr-remix/bin/ahr-system-hibernate`, `docs/BETA_POLISH_CHECKLIST.md`
+
+**Validation:**
+- `./scripts/check-openrc-portability.sh` passes
+- `grep` confirms `loginctl` is found in `ahr-system-suspend` and `config/hardware/laptop/openrc-module.sh`
+- No unguarded `loginctl` usages exist outside the excepted power-management paths
+- Synthetic unguarded injection in `ahr-system-suspend` is caught and fails the check
+- Synthetic `systemctl` suffix on same line as guarded `loginctl` is caught by the `systemctl` rule
