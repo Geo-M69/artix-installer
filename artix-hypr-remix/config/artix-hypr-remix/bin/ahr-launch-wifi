@@ -19,4 +19,7 @@ if ahr_has_cmd nmcli; then
   fi
 fi
 
-ahr_fail "No network control app found"
+echo "No network control app found." >&2
+echo "Install one of: nm-connection-editor (network-manager-applet), nmtui (networkmanager)" >&2
+ahr_notify "artix-hypr-remix" "No network control app found — install network-manager-applet"
+exit 1

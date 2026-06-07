@@ -15,4 +15,7 @@ if ahr_has_cmd openrc-shutdown; then
   exec openrc-shutdown -r now
 fi
 
-ahr_fail "No reboot command found"
+echo "No reboot command found." >&2
+echo "Ensure util-linux (reboot) or openrc-shutdown is installed." >&2
+ahr_notify "artix-hypr-remix" "No reboot command found — install util-linux"
+exit 1

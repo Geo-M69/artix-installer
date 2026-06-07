@@ -23,4 +23,7 @@ if ahr_has_cmd bluetoothctl; then
   fi
 fi
 
-ahr_fail "No Bluetooth control app found"
+echo "No Bluetooth control app found." >&2
+echo "Install one of: blueman-manager (blueman), bluetui, bluez-utils (bluetoothctl)" >&2
+ahr_notify "artix-hypr-remix" "No Bluetooth control app found — install blueman or bluez-utils"
+exit 1

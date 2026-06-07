@@ -42,8 +42,9 @@ if pgrep -f "^gpu-screen-recorder" >/dev/null 2>&1; then
   exit 0
 fi
 
-if ! ahr_has_cmd gpu-screen-recorder; then
-  ahr_fail "gpu-screen-recorder is required for screen recording"
+if ! ahr_require gpu-screen-recorder gpu-screen-recorder; then
+  ahr_notify "artix-hypr-remix" "gpu-screen-recorder is not installed — install with: sudo pacman -S gpu-screen-recorder"
+  exit 1
 fi
 
 monitor_name=""

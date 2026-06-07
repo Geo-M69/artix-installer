@@ -5,6 +5,17 @@ source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Quick pre-flight: grim is required for all screenshot modes.
+if ! ahr_has_cmd grim; then
+  ahr_notify "artix-hypr-remix" "grim is required for screenshots — install with: sudo pacman -S grim"
+  if [[ -t 0 && -t 1 ]]; then
+    printf 'ERROR: grim is required for screenshots.\n'
+    printf '       Install with: sudo pacman -S grim\n'
+    read -r -p 'Press Enter to close...' _
+  fi
+  exit 1
+fi
+
 # Detect menu backend (respect AHR_MENU_BACKEND override)
 MENU_BACKEND=""
 if [[ -n "${AHR_MENU_BACKEND:-}" ]]; then

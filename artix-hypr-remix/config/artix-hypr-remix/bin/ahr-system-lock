@@ -11,4 +11,7 @@ if ahr_has_cmd swaylock; then
   exec swaylock
 fi
 
-ahr_fail "No screen locker found"
+echo "No screen locker found." >&2
+echo "Install hyprlock (sudo pacman -S hyprlock) or swaylock." >&2
+ahr_notify "artix-hypr-remix" "No screen locker found — install hyprlock"
+exit 1

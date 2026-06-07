@@ -34,23 +34,32 @@ target_file="$target_dir/screenshot-$(date +%s).png"
 
 mkdir -p "$target_dir"
 
+# Helper: check a dep, print an install hint to stderr, and send a
+# notification so the user sees feedback even when stderr is redirected
+# (e.g. when launched from the menu background).
+require_capture_dep() {
+  local cmd="$1"
+  local pkg="${2:-$1}"
+  if ! ahr_require "$cmd" "$pkg"; then
+    ahr_notify "artix-hypr-remix" "'$cmd' is not installed — install with: sudo pacman -S $pkg"
+    exit 1
+  fi
+}
+
 case "$mode" in
   area)
-    if ! ahr_has_cmd slurp || ! ahr_has_cmd grim; then
-      ahr_fail "slurp and grim are required for area screenshots"
-    fi
+    require_capture_dep slurp slurp
+    require_capture_dep grim grim
     grim -g "$(slurp)" "$target_file"
     ;;
   fullscreen)
-    if ! ahr_has_cmd grim; then
-      ahr_fail "grim is required for fullscreen screenshots"
-    fi
+    require_capture_dep grim grim
     grim "$target_file"
     ;;
   window)
-    if ! ahr_has_cmd grim || ! ahr_has_cmd hyprctl || ! ahr_has_cmd jq; then
-      ahr_fail "grim, hyprctl, and jq are required for window screenshots"
-    fi
+    require_capture_dep grim grim
+    require_capture_dep hyprctl hyprland
+    require_capture_dep jq jq
     geometry="$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"' 2>/dev/null)" || ahr_fail "Failed to get active window geometry (is a window focused?)"
     grim -g "$geometry" "$target_file"
     ;;

@@ -198,7 +198,7 @@ Dependencies to verify:
 
 Safe implementation tasks:
 
-- [ ] Add dependency guards and user-facing failure text for every menu action that shells out to optional tools.
+- [x] Add dependency guards and user-facing failure text for every menu action that shells out to optional tools.
 - [ ] Add explicit menu entries for clipboard history, screenshot modes, screen recording status, theme status, wallpaper selection, and keybinding help where missing.
 - [ ] Split oversized menus only when it improves scanability; keep AHR command names stable.
 - [ ] Add TTY fallback text for actions that cannot run graphically.
@@ -538,7 +538,7 @@ Dependencies to verify:
 Safe implementation tasks:
 
 - [x] Extend doctor with default-app MIME validation (browser, terminal, file-manager, editor, PDF, image, video, archive).
-- [ ] Extend doctor with menu backend and capture dependency checks.
+- [x] Extend doctor with menu backend and capture dependency checks.
 - [ ] Extend repair with detect-only checks before apply paths.
 - [ ] Ensure repair never overwrites user configs without backup or explicit `--apply`.
 - [ ] Add health output that names likely files to inspect.
@@ -668,7 +668,7 @@ Beta polish is complete when:
 ## 10. Immediate next-session starter tasks
 
 - [x] Add or improve beta healthcheck coverage for menu dependencies, default apps, and capture tools.
-- [ ] Add dependency guards and clearer failure messages to `ahr-menu` actions.
+- [x] Add dependency guards and clearer failure messages to `ahr-menu` actions.
 - [x] Add default editor validation/setup and broaden safe `xdg-mime` defaults.
 - [x] Add screenshot/capture menu polish for fullscreen/window/open-after-capture behavior.
 - [x] Improve theme/wallpaper state reporting and validation after switching.
@@ -683,3 +683,27 @@ TODO markers for future inspection/testing:
 - [ ] TODO: Validate optional AUR package availability on a real Artix host with an AUR helper.
 - [ ] TODO: Decide whether guarded elogind `loginctl` is accepted for suspend or replaced with a pure OpenRC/pm-utils path.
 - [ ] TODO: Capture final first-login screenshots once the UI polish pass is complete.
+
+### Session 2026-06-07: Add dependency guards and clearer failure messages to `ahr-menu` actions
+
+**What was done (initial pass):**
+
+- Added `ahr_require()` to `ahr-lib.sh` — a standardized helper that checks for a command on PATH and prints an install hint (`sudo pacman -S <package>`) if missing. Returns 1 so callers can decide how to respond (menu pre-check, fallback, etc.).
+- Added `menu_require()` to `ahr-menu` — wraps `ahr_require` with a notification + stderr message and returns to the menu instead of exiting.
+- Updated all capture/toggle/launch/system commands to use `ahr_require` for friendlier failure messages with explicit package install hints instead of bare `ahr_fail` messages.
+- Added pre-check guards in `ahr-menu` sub-menus:
+  - **Capture menu**: checks `grim`+`slurp` / `grim` / `grim`+`jq` before screenshot commands, `gpu-screen-recorder` before recording
+  - **Toggle menu**: checks `hypridle` before "Idle Lock"
+  - **Setup menu**: checks for audio/network/bluetooth control apps before offering their menu entries
+  - **System menu**: checks for `hyprlock`/`swaylock` before "Lock Screen", `grim`+`slurp` before "Capture Screenshot", `gpu-screen-recorder` before recording; in-menu message for `hyprctl`-unavailable logout
+- Added `require_capture_dep` helper in `ahr-capture-screenshot` that sends a notification on missing deps (covers the case where stderr is discarded by `nohup >/dev/null 2>&1`).
+- Added grim pre-flight check to `ahr-capture-picker` (PrtSc key handler).
+
+**Post-review fixes (same session):**
+
+- `menu_require` was calling `run_terminal_script` which `exit 0`s on success, killing the menu. Changed to direct stderr `printf` + notification + `return 1` — no terminal spawning.
+- `ahr-toggle-waybar` and `ahr-capture-screenrecording` had bare `ahr_require` calls under `set -e`, making subsequent `ahr_notify`+`exit 1` lines unreachable. Wrapped in `if ! ahr_require ...; then ahr_notify ...; exit 1; fi`.
+- Screenshot dependencies in `show_system_menu`'s inline "Capture Screenshot" and "Toggle Screen Recording" had no pre-check guards. Added `menu_require` calls.
+- Screenshot background actions in `show_capture_menu` (Area/Fullscreen/Window) also lacked pre-check guards — added `menu_require` for `grim`/`slurp`/`jq`.
+
+**Files changed:** `ahr-lib.sh`, `ahr-menu`, `ahr-capture-screenshot`, `ahr-capture-screenrecording`, `ahr-capture-picker`, `ahr-toggle-idle`, `ahr-toggle-waybar`, `ahr-launch-audio`, `ahr-launch-wifi`, `ahr-launch-bluetooth`, `ahr-clipboard-picker`, `ahr-system-lock`, `ahr-system-suspend`, `ahr-system-hibernate`, `ahr-system-reboot`

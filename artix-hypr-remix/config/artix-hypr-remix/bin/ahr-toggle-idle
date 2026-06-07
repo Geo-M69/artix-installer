@@ -7,8 +7,9 @@ if pgrep -x hypridle >/dev/null 2>&1; then
   pkill -x hypridle >/dev/null 2>&1 || true
   ahr_notify "Idle" "Idle lock disabled"
 else
-  if ! ahr_has_cmd hypridle; then
-    ahr_fail "hypridle is not installed"
+  if ! ahr_require hypridle hypridle; then
+    ahr_notify "artix-hypr-remix" "hypridle is not installed — install with: sudo pacman -S hypridle"
+    exit 1
   fi
 
   setsid hypridle >/dev/null 2>&1 &

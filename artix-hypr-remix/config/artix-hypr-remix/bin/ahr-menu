@@ -60,6 +60,26 @@ run_command_background() {
   exit 0
 }
 
+# Pre-check that a command is available before presenting or running a menu
+# action.  If the command is missing, show a notification and return 1 so the
+# caller can skip the action and stay in the menu.
+# Usage: menu_require <command> [package_name]
+menu_require() {
+  local cmd="$1"
+  local pkg="${2:-$1}"
+
+  if ahr_has_cmd "$cmd"; then
+    return 0
+  fi
+
+  cat >&2 <<EOF
+ERROR: '$cmd' is required but not installed.
+       Install with: sudo pacman -S $pkg
+EOF
+  ahr_notify "artix-hypr-remix" "'$cmd' is not installed — install with: sudo pacman -S $pkg"
+  return 1
+}
+
 quote_command() {
   local output=""
   local arg
@@ -358,10 +378,26 @@ show_capture_menu() {
       "Back")"
 
     case "$choice" in
-      "Area Screenshot") run_command_background ahr-capture-screenshot --area ;;
-      "Fullscreen Screenshot") run_command_background ahr-capture-screenshot --fullscreen ;;
-      "Window Screenshot") run_command_background ahr-capture-screenshot --window ;;
-      "Toggle Screen Recording") run_command_background ahr-capture-screenrecording ;;
+      "Area Screenshot")
+        if menu_require grim grim && menu_require slurp slurp; then
+          run_command_background ahr-capture-screenshot --area
+        fi
+        ;;
+      "Fullscreen Screenshot")
+        if menu_require grim grim; then
+          run_command_background ahr-capture-screenshot --fullscreen
+        fi
+        ;;
+      "Window Screenshot")
+        if menu_require grim grim && menu_require jq jq && menu_require hyprctl hyprland; then
+          run_command_background ahr-capture-screenshot --window
+        fi
+        ;;
+      "Toggle Screen Recording")
+        if menu_require gpu-screen-recorder gpu-screen-recorder; then
+          run_command_background ahr-capture-screenrecording
+        fi
+        ;;
       "Back"|"") return 0 ;;
       *) return 0 ;;
     esac
@@ -379,7 +415,13 @@ show_toggle_menu() {
       "Back")"
 
     case "$choice" in
-      "Idle Lock") run_command_now ahr-toggle-idle ;;
+      "Idle Lock")
+        if ahr_has_cmd hypridle; then
+          run_command_now ahr-toggle-idle
+        else
+          menu_require hypridle hypridle
+        fi
+        ;;
       "Notifications") run_command_now ahr-toggle-notification-silencing ;;
       "Waybar") run_command_now ahr-toggle-waybar ;;
       "Back"|"") return 0 ;;
@@ -458,9 +500,27 @@ show_setup_menu() {
       "Back")"
 
     case "$choice" in
-      "Audio Control") run_command_background ahr-launch-audio ;;
-      "Network Control") run_command_background ahr-launch-wifi ;;
-      "Bluetooth Control") run_command_background ahr-launch-bluetooth ;;
+      "Audio Control")
+        if ahr_has_cmd pavucontrol || ahr_has_cmd pwvucontrol || ahr_has_cmd alsamixer; then
+          run_command_background ahr-launch-audio
+        else
+          menu_require pavucontrol pavucontrol
+        fi
+        ;;
+      "Network Control")
+        if ahr_has_cmd nm-connection-editor || ahr_has_cmd nmtui || ahr_has_cmd nmcli; then
+          run_command_background ahr-launch-wifi
+        else
+          menu_require nm-connection-editor network-manager-applet
+        fi
+        ;;
+      "Bluetooth Control")
+        if ahr_has_cmd blueman-manager || ahr_has_cmd bluetui || ahr_has_cmd bluetoothctl; then
+          run_command_background ahr-launch-bluetooth
+        else
+          menu_require blueman-manager blueman
+        fi
+        ;;
       "Default Browser") show_default_browser_menu ;;
       "Default Terminal") show_default_terminal_menu ;;
       "Default Editor") show_default_editor_menu ;;
@@ -635,13 +695,24 @@ show_system_menu() {
       "Back")"
 
     case "$choice" in
-      "Lock Screen") run_command_background ahr-system-lock ;;
+      "Lock Screen")
+        if ahr_has_cmd hyprlock || ahr_has_cmd swaylock; then
+          run_command_background ahr-system-lock
+        else
+          menu_require hyprlock hyprlock
+        fi
+        ;;
       "Logout Hyprland")
         if ahr_has_cmd hyprctl; then
           nohup hyprctl dispatch exit >/dev/null 2>&1 &
           exit 0
         fi
-        ahr_fail "hyprctl is not available to end the current session"
+        cat >&2 <<EOF
+ERROR: hyprctl is not available.
+       Is Hyprland running?
+EOF
+        ahr_notify "artix-hypr-remix" "hyprctl is not available — is Hyprland running?"
+        # Fall through — let the menu loop continue.
         ;;
       "Suspend")
         if confirm_yes "Suspend to RAM now?"; then
@@ -665,8 +736,16 @@ show_system_menu() {
         ;;
       "Open Terminal") run_command_background ahr-launch-terminal ;;
       "Open App Launcher") open_application_launcher ;;
-      "Capture Screenshot") run_command_background ahr-capture-screenshot ;;
-      "Toggle Screen Recording") run_command_background ahr-capture-screenrecording ;;
+      "Capture Screenshot")
+        if menu_require grim grim && menu_require slurp slurp; then
+          run_command_background ahr-capture-screenshot
+        fi
+        ;;
+      "Toggle Screen Recording")
+        if menu_require gpu-screen-recorder gpu-screen-recorder; then
+          run_command_background ahr-capture-screenrecording
+        fi
+        ;;
       "Back"|"") return 0 ;;
       *) return 0 ;;
     esac

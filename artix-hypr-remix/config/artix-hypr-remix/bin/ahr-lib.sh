@@ -66,6 +66,24 @@ ahr_fail() {
   exit 1
 }
 
+# Check that a command is available on PATH.  If missing, print a user-facing
+# message with an install hint and return 1 so the caller can choose how to
+# respond (show a dialog, skip a menu item, fall back, etc.).
+# Usage: ahr_require <command> [package_name]
+# If package_name is omitted the command name is used as the package hint.
+ahr_require() {
+  local cmd="$1"
+  local pkg="${2:-$1}"
+
+  command -v "$cmd" >/dev/null 2>&1 && return 0
+
+  cat >&2 <<EOF
+ERROR: '$cmd' is required but not installed.
+       Install with: sudo pacman -S $pkg
+EOF
+  return 1
+}
+
 ahr_terminal_preference_file() {
   printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/xdg-terminals.list"
 }

@@ -3,8 +3,9 @@ set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
-if ! ahr_has_cmd cliphist; then
-  ahr_fail "cliphist is not installed"
+if ! ahr_require cliphist cliphist; then
+  ahr_notify "artix-hypr-remix" "cliphist is not installed — install with: sudo pacman -S cliphist"
+  exit 1
 fi
 
 pick_command() {
@@ -57,7 +58,10 @@ if selection="$(cliphist list | pick_command)"; then
 elif [[ -t 0 && -t 1 ]] && selection="$(pick_tty)"; then
   :
 else
-  ahr_fail "No clipboard picker found (wofi/walker/rofi) and no TTY fallback available"
+  echo "No clipboard picker backend found." >&2
+  echo "Install wofi, walker, or rofi for a graphical picker." >&2
+  ahr_notify "artix-hypr-remix" "No clipboard picker backend — install wofi, walker, or rofi"
+  exit 1
 fi
 
 if [[ -z "${selection:-}" ]]; then
