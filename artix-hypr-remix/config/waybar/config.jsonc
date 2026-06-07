@@ -6,7 +6,7 @@
   "height": 28,
   "spacing": 0,
   "modules-left": ["custom/remix", "hyprland/workspaces"],
-  "modules-center": ["clock#horizontal", "clock#vertical", "custom/weather", "custom/update", "custom/voxtype", "custom/screenrecording-indicator", "custom/idle-indicator", "custom/nightlight-indicator", "custom/notification-silencing-indicator"],
+  "modules-center": ["clock#horizontal", "clock#vertical", "custom/weather", "custom/update", "custom/voxtype", "custom/screenrecording-indicator", "custom/idle-indicator", "custom/nightlight-indicator", "custom/notification-silencing-indicator", "custom/waybar-position-indicator"],
   "modules-right": ["group/tray-expander", "bluetooth", "network", "pulseaudio", "cpu", "battery"],
 
   "custom/remix": {
@@ -69,6 +69,14 @@
     "return-type": "json",
     "on-click": "bash ~/.config/artix-hypr-remix/bin/ahr-toggle-nightlight",
     "signal": 12,
+    "interval": 30
+  },
+
+  "custom/waybar-position-indicator": {
+    "exec": "bash ~/.config/artix-hypr-remix/bin/ahr-waybar-position-status",
+    "return-type": "json",
+    "on-click": "bash ~/.config/artix-hypr-remix/bin/ahr-toggle-waybar-position",
+    "signal": 13,
     "interval": 30
   },
 

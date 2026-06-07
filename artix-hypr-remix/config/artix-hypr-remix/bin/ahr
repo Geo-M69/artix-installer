@@ -49,6 +49,7 @@ Commands:
   toggle-notifications Toggle notification silencing mode
   toggle-waybar       Toggle Waybar visibility
   toggle-nightlight    Toggle nightlight screen temperature
+  toggle-waybar-position Toggle Waybar position (top/bottom)
   notification-dismiss Dismiss a mako notification
   restart-mako        Restart Mako notification daemon
   restart-waybar      Restart Waybar
@@ -96,6 +97,7 @@ dispatch() {
     toggle-idle) exec_ahr_command ahr-toggle-idle "$@" ;;
     toggle-notifications) exec_ahr_command ahr-toggle-notification-silencing "$@" ;;
     toggle-waybar) exec_ahr_command ahr-toggle-waybar "$@" ;;
+    toggle-waybar-position) exec_ahr_command ahr-toggle-waybar-position "$@" ;;
     toggle-nightlight) exec_ahr_command ahr-toggle-nightlight "$@" ;;
     notification-dismiss) exec_ahr_command ahr-notification-dismiss "$@" ;;
     restart-mako) exec_ahr_command ahr-restart-mako "$@" ;;
@@ -135,6 +137,7 @@ dispatch() {
         "ahr-toggle-idle" \
         "ahr-toggle-notification-silencing" \
         "ahr-toggle-waybar" \
+        "ahr-toggle-waybar-position" \
         "ahr-toggle-nightlight" \
         "ahr-notification-dismiss" \
         "ahr-restart-mako" \

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+waybar_config="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/config.jsonc"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles"
+state_file="$state_dir/waybar-position"
+
+mkdir -p "$state_dir"
+
+# Ensure waybar config exists
+if [[ ! -f "$waybar_config" ]]; then
+  ahr_notify "artix-hypr-remix" "Waybar config not found: $waybar_config"
+  exit 1
+fi
+
+# Determine current position from live grep of the config file
+if grep -q '"position"[[:space:]]*:[[:space:]]*"top"' "$waybar_config" 2>/dev/null; then
+  new_position="bottom"
+else
+  new_position="top"
+fi
+
+# Apply the change
+sed -i 's/"position"[[:space:]]*:[[:space:]]*"top"/"position": "'"$new_position"'"/' "$waybar_config"
+sed -i 's/"position"[[:space:]]*:[[:space:]]*"bottom"/"position": "'"$new_position"'"/' "$waybar_config"
+
+# Write state file for the Waybar indicator
+printf '%s\n' "$new_position" > "$state_file"
+
+# Restart Waybar to apply
+if pgrep -x waybar >/dev/null 2>&1; then
+  pkill -x waybar >/dev/null 2>&1 || true
+  sleep 0.3
+fi
+
+if ahr_has_cmd waybar; then
+  setsid waybar >/dev/null 2>&1 &
+fi
+
+if [[ "$new_position" == "bottom" ]]; then
+  ahr_notify "Waybar" "Waybar moved to bottom"
+else
+  ahr_notify "Waybar" "Waybar moved to top"
+fi
+
+# Signal Waybar to refresh position indicator
+pkill -RTMIN+13 -x waybar >/dev/null 2>&1 || true

@@ -613,6 +613,7 @@ OpenRC/Artix notes:
 | Color picker menu | Capture | Small, useful utility | `ahr-menu`, new helper if needed | `hyprpicker`, clipboard | Pick color and paste result | Low |
 | Night light/gamma toggle | Toggles | Common comfort feature | toggle helper, Waybar status, menu | tool TBD | Toggle twice, confirm state | Medium |
 | Waybar position/style toggle | Theme/Waybar | Omarchy-like customization | `waybar/config.jsonc`, templates, theme scripts | `waybar`, `jq` or structured edit tool | Change position and restore | Medium |
+✅ Implemented 2026-06-07: `ahr-toggle-waybar-position` toggles position between top/bottom in `config.jsonc` via `sed`, restarts Waybar. `ahr-waybar-position-status` provides Waybar indicator with / icons. Added to Toggle and Style menus, registered in `ahr` dispatcher, indicator in Waybar modules-center with signal 13. |
 | Theme/gallery preview | Theme/gallery | Higher perceived polish | theme menu/helpers | preview assets, image-capable picker | Select theme/background from preview | Medium |
 | Share workflow | Capture/share | Useful for screenshots/files | menu/helpers | LocalSend or selected share tool | Share clipboard/file/folder | Medium |
 
@@ -795,3 +796,57 @@ TODO markers for future inspection/testing:
 - Added keybinding `$mod CTRL, n` → `ahr-toggle-nightlight` in `hyprland.conf` (matches Omarchy's Super+Ctrl+N).
 
 **Files changed:** `ahr-toggle-nightlight` (new), `ahr-waybar-nightlight-status` (new), `ahr-menu`, `ahr`, `config/waybar/config.jsonc`, `config/hypr/hyprland.conf`, `BETA_POLISH_CHECKLIST.md`
+
+**Post-review fixes (same session):**
+
+1. **RTMIN signal mismatch (finding P2):** Script sent `-RTMIN+11` but Waybar expected signal 12. Changed to `-RTMIN+12`.
+2. **Missing package dependency (finding P2):** `hyprsunset` was absent from `packages/10-hyprland.txt`. Added it.
+3. **Missing CSS selectors (finding P3):** `#custom-nightlight-indicator` was not in `style.css` or `waybar.css.tpl` selector groups. Added to base layout, left/right variants, and active state groups.
+4. **Stale state file on reboot (finding P2):** Status script trusted state file before live `hyprctl` query. Reordered to check `pgrep -x hyprsunset` first, then live temperature, then state file as fallback.
+5. **Alert color mismatch (open question):** Nightlight active was grouped with red alerts. Moved to its own warm peach accent (`#f5a97f`).
+6. **Extra brace in template (finding P2):** `waybar.css.tpl` had a dangling `}` after the nightlight rule. Removed.
+
+**Validated on Artix laptop (2026-06-07):**
+- `ahr toggle-nightlight` → notification + Waybar  icon appears
+- `Super+Ctrl+N` keybinding works
+- Toggle menu entry works
+- Toggling again switches back to 
+- `pkill hyprsunset` + wait → Waybar indicator shows inactive (state file no longer trusted over live state)
+
+### Session 2026-06-07 (sixth pass): Waybar position/style toggle
+
+**What was done:**
+
+- Created `ahr-toggle-waybar-position` — toggles `position` in `~/.config/waybar/config.jsonc` between `"top"` and `"bottom"` via `sed`, writes state file under `$XDG_STATE_HOME/artix-hypr-remix/toggles/waybar-position`, restarts Waybar, sends notification.
+- Created `ahr-waybar-position-status` — outputs Waybar JSON with  (top) or  (bottom) icon and tooltip. Prefers live config state over state file for accuracy.
+- Added `custom/waybar-position-indicator` to `config/waybar/config.jsonc` — placed in modules-center after nightlight indicator, signal 13, 30-second interval.
+- Added **Waybar Position** entry to both the **Toggle menu** (between Nightlight and Back) and the **Style menu** (between Toggle Waybar and Restart Waybar) in `ahr-menu`.
+- Registered `toggle-waybar-position` in the `ahr` dispatcher (usage text, case dispatch, list command).
+
+**Files changed:** `ahr-toggle-waybar-position` (new), `ahr-waybar-position-status` (new), `ahr-menu`, `ahr`, `config/waybar/config.jsonc`, `BETA_POLISH_CHECKLIST.md`
+
+**Post-review fixes (same session, five findings resolved):**
+
+1. **P1: `namespace-install.sh` missing command.** Added `ahr-toggle-waybar-position` to the `commands` array in `namespace-install.sh` so the deployed `~/.local/bin/ahr` dispatcher can find it.
+2. **P2: Stale state could override live config in status helper.** Fixed `ahr-waybar-position-status` to detect *both* `"top"` and `"bottom"` from the live config first, and only fall back to the state file when the config is missing or has no recognizable position.
+3. **P3: Existing installs need a migration.** Created `migrations/20260607-waybar-position-indicator.sh` — backs up `~/.config/waybar/config.jsonc`, adds `custom/waybar-position-indicator` to `modules-center` and inserts the indicator block after the nightlight-indicator block, then re-runs `namespace-install.sh --quiet`.
+4. **P4 (second review): Migration sed block insertion was a no-op.** Replaced the complex sed loop with a two-step approach: find the nightlight-indicator block's closing line via `sed -n` with a range + `=` line-number output, then use `sed -i` with the `r` (read file) command and a temp file to insert the new block cleanly. Added a `grep` post-check that fails+restores from backup if the block is still absent.
+5. **P5 (second review): Idempotency check skipped namespace reinstall.** Changed the early `exit 0` on config-already-patched to a `patched` boolean flag. The namespace installer always runs at the end, so a half-applied migration gets its missing `~/.local/bin/ahr-toggle-waybar-position` symlink even when the config is already up to date.
+6. **P6 (third review): Only block insertion was verified, not module-center registration.** The post-check verified the block definition existed but not whether `modules-center` included the new module. If the single-line sed for the array failed (e.g., multi-line or reordered config), the migration would still report success. Fixed: the `modules-center` sed was changed from targeting a specific last-element pattern to finding the array's closing `]` directly (works for single-line and multi-line arrays). The post-check now verifies **both** that the block exists and that the module name appears in the `modules-center` array; if either is missing, the backup is restored and the migration exits 1.
+7. **P7 (third review): Migration hard-failed if nightlight-indicator block was absent.** Older installs that never received the nightlight config update would fail the migration entirely. Fixed: the insertion anchor now tries `custom/nightlight-indicator` first, then falls back to `custom/notification-silencing-indicator`. If neither anchor is found, the migration skips config patching gracefully (still refreshes namespace).
+8. **P8 (fourth review): Unescaped `/` in sed address crashed with `set -e` before backup restore.** The anchor variable interpolated into a sed `/pattern/` address without escaping the `/` in `custom/nightlight-indicator`. Fixed: `${anchor//\//\\/}` escapes `/` → `\/` before building the sed expression. The anchor-finding sed now also has `|| true` to prevent `set -e` from aborting before the graceful skip path.
+9. **P9 (fourth review): `modules-center` extraction regex did not match space after `:`.** `grep -o '"modules-center":\[...\]'` missed `"modules-center": [...]` (space after colon) and multiline arrays. Fixed: switched to `sed -n '/"modules-center"[[:space:]]*:[[:space:]]*\[/,/\]/p'` which handles any whitespace and multiline layouts.
+10. **P10 (fourth review): Idempotency check was too loose.** `grep -q 'custom/waybar-position-indicator'` matched any occurrence (e.g., the block definition alone without the array entry). Fixed: pre-check now verifies **both** the `modules-center` array includes the module name **and** the block definition exists before declaring "already fully patched". Attempted patches are tracked with `tried_array`/`tried_block` booleans so verification only checks what was actually changed.
+11. **P11 (fifth review): Multiline with trailing comma produced duplicate `]` insertion.** The single `s/\]/.../` substitution ran even after the multiline-with-comma `s/,[[:space:]]*\n[[:space:]]*\]/.../` had already matched, producing two copies of the new module. Fixed: added `t` (test/branch on success) after the multiline substitution so the fallback `s/\]/.../` is skipped when the multiline pattern already matched. Verified on single-line, multiline-no-comma, and multiline-with-comma.
+12. **P12 (fifth review): "No anchor" path left partial config and claimed patched.** When neither anchor block was found, the array entry was kept but no block definition was inserted, and `patched=true` was still set. Fixed: the no-anchor branch now restores the backup, resets `tried_array`/`tried_block`, and skips setting `patched=true`. The namespace installer still runs, and the migration exits cleanly with "config not modified".
+13. **P13 (sixth review): Block insertion assumed anchor closing brace always has trailing comma.** If the anchor block's closing `}` was bare (no `,`), the inserted new block would create invalid JSON (`}` immediately followed by a new property with no separator). Fixed: before inserting, `sed -i "${insert_after}s/}[[:space:]]*$/},/"` ensures the anchor closing line ends with `},`. When it already has a comma (normal case), the substitution is a no-op. Verified on both `}` and `},` inputs.
+14. **P14 (seventh review): Trailing comma on last block before root `}`.** The inserted block always ended with `},`. If the anchor was the last top-level block, the result was a trailing comma before the root `}`, which `jq` rejects. Fixed: the block file now ends with `}` (no comma). After insertion, the migration checks if the line after the new block is the root closing `}` — if not (another block follows), a trailing comma is added to the new block's closing line. Both cases confirmed valid with `jq`.
+
+**Validation plan (run on target):**
+- `ahr toggle-waybar-position` → notification + Waybar  icon appears, bar moves to bottom
+- Toggle menu entry works
+- Style menu entry works
+- Toggling again switches back to top
+- Indicator updates within 30s or on signal 13
+- `ahr migrate --dry-run` shows the new migration pending; `ahr migrate` applies it
+- `ahr toggle-waybar-position` works after migration completes

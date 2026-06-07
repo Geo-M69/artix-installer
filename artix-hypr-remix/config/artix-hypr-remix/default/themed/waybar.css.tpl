@@ -38,6 +38,7 @@
 #custom-screenrecording-indicator,
 #custom-idle-indicator,
 #custom-nightlight-indicator,
+#custom-waybar-position-indicator,
 #custom-notification-silencing-indicator {
 	min-width: 12px;
 	margin: 0 7.5px;
@@ -79,7 +80,8 @@ tooltip {
 #custom-update.hidden,
 #custom-weather.hidden,
 #custom-voxtype.hidden,
-#custom-screenrecording-indicator.hidden {
+#custom-screenrecording-indicator.hidden,
+#custom-waybar-position-indicator.hidden {
 	opacity: 0;
 	font-size: 0;
 	min-width: 0;
@@ -123,6 +125,8 @@ tooltip {
 .right #custom-idle-indicator,
 .left #custom-nightlight-indicator,
 .right #custom-nightlight-indicator,
+.left #custom-waybar-position-indicator,
+.right #custom-waybar-position-indicator,
 .left #custom-notification-silencing-indicator,
 .right #custom-notification-silencing-indicator {
 	margin: 1.5px 0;

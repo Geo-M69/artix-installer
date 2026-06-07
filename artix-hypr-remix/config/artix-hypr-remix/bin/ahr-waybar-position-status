@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+waybar_config="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/config.jsonc"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles"
+state_file="$state_dir/waybar-position"
+
+position="top"
+
+# Prefer live config state — detect both positions
+if [[ -f "$waybar_config" ]]; then
+  if grep -q '"position"[[:space:]]*:[[:space:]]*"bottom"' "$waybar_config" 2>/dev/null; then
+    position="bottom"
+  elif grep -q '"position"[[:space:]]*:[[:space:]]*"top"' "$waybar_config" 2>/dev/null; then
+    position="top"
+  elif [[ -f "$state_file" ]]; then
+    # Config exists but has no recognizable position — trust state file
+    content="$(cat "$state_file" 2>/dev/null || true)"
+    if [[ "$content" == "bottom" ]]; then
+      position="bottom"
+    fi
+  fi
+elif [[ -f "$state_file" ]]; then
+  # No config at all — trust state file
+  content="$(cat "$state_file" 2>/dev/null || true)"
+  if [[ "$content" == "bottom" ]]; then
+    position="bottom"
+  fi
+fi
+
+if [[ "$position" == "bottom" ]]; then
+  printf '{"text":"","class":"bottom","tooltip":"Waybar at bottom — click to toggle to top"}\n'
+else
+  printf '{"text":"","class":"top","tooltip":"Waybar at top — click to toggle to bottom"}\n'
+fi

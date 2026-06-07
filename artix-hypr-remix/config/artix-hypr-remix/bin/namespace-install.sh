@@ -48,6 +48,7 @@ declare -a commands=(
   ahr-toggle-idle
   ahr-toggle-notification-silencing
   ahr-toggle-waybar
+  ahr-toggle-waybar-position
   ahr-notification-dismiss
   ahr-restart-mako
   ahr-restart-waybar

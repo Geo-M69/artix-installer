@@ -483,6 +483,7 @@ show_toggle_menu() {
       "Notifications" \
       "Waybar" \
       "Nightlight" \
+      "Waybar Position" \
       "Back")"
 
     case "$choice" in
@@ -496,6 +497,7 @@ show_toggle_menu() {
       "Notifications") run_command_now ahr-toggle-notification-silencing ;;
       "Waybar") run_command_now ahr-toggle-waybar ;;
       "Nightlight") run_command_now ahr-toggle-nightlight ;;
+      "Waybar Position") run_command_now ahr-toggle-waybar-position ;;
       "Back"|"") return 0 ;;
       *) return 0 ;;
     esac
@@ -531,6 +533,7 @@ show_style_menu() {
       "Theme Set Background Path" \
       "Theme Refresh" \
       "Toggle Waybar" \
+      "Waybar Position" \
       "Restart Waybar" \
       "Restart Mako" \
       "Back")"
@@ -542,6 +545,7 @@ show_style_menu() {
       "Theme Set Background Path") show_theme_background_set ;;
       "Theme Refresh") run_command_now ahr-theme refresh ;;
       "Toggle Waybar") run_command_now ahr-toggle-waybar ;;
+      "Waybar Position") run_command_now ahr-toggle-waybar-position ;;
       "Restart Waybar") run_command_now ahr-restart-waybar ;;
       "Restart Mako") run_command_now ahr-restart-mako ;;
       "Back"|"") return 0 ;;
