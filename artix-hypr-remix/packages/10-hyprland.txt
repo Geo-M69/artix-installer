@@ -19,3 +19,4 @@ wofi
 brightnessctl
 playerctl
 pamixer
+hyprsunset

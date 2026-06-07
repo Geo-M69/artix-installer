@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+ON_TEMP=4000
+OFF_TEMP=6500
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles"
+state_file="$state_dir/nightlight"
+
+mkdir -p "$state_dir"
+
+# Ensure hyprsunset is installed
+if ! ahr_require hyprsunset hyprsunset; then
+  ahr_notify "artix-hypr-remix" "hyprsunset is not installed — install with: sudo pacman -S hyprsunset"
+  exit 1
+fi
+
+# Ensure hyprsunset process is running
+if ! pgrep -x hyprsunset >/dev/null 2>&1; then
+  setsid hyprsunset >/dev/null 2>&1 &
+  sleep 0.2
+fi
+
+# Query current temperature from hyprctl
+current_temp="$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' || true)"
+
+if [[ "$current_temp" == "$OFF_TEMP" || -z "$current_temp" ]]; then
+  # Currently daylight (or unknown) — switch to night
+  hyprctl hyprsunset temperature "$ON_TEMP" >/dev/null 2>&1 || true
+  : > "$state_file"
+  ahr_notify "Nightlight" "Nightlight enabled (4000K)"
+else
+  # Currently night — switch to daylight
+  hyprctl hyprsunset temperature "$OFF_TEMP" >/dev/null 2>&1 || true
+  rm -f "$state_file"
+  ahr_notify "Nightlight" "Nightlight disabled (6500K)"
+fi
+
+# Signal Waybar to update the nightlight indicator
+pkill -RTMIN+12 -x waybar >/dev/null 2>&1 || true

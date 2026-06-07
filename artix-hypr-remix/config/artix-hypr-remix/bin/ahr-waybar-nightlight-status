@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+
+state_file="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles/nightlight"
+
+nightlight=false
+# Prefer live state: if hyprsunset isn't running, nightlight is off.
+if pgrep -x hyprsunset >/dev/null 2>&1; then
+  if ahr_has_cmd hyprctl; then
+    current_temp="$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' || true)"
+    if [[ -n "$current_temp" && "$current_temp" -lt 6000 ]]; then
+      nightlight=true
+    fi
+  elif [[ -f "$state_file" ]]; then
+    # hyprctl unavailable (e.g. early startup) — trust state file as best-effort
+    nightlight=true
+  fi
+fi
+
+if [[ "$nightlight" == "true" ]]; then
+  printf '{"text":"","class":"active","tooltip":"Nightlight enabled (4000K)"}\n'
+else
+  printf '{"text":"","class":"inactive","tooltip":"Nightlight disabled (6500K)"}\n'
+fi

@@ -482,6 +482,7 @@ show_toggle_menu() {
       "Idle Lock" \
       "Notifications" \
       "Waybar" \
+      "Nightlight" \
       "Back")"
 
     case "$choice" in
@@ -494,6 +495,7 @@ show_toggle_menu() {
         ;;
       "Notifications") run_command_now ahr-toggle-notification-silencing ;;
       "Waybar") run_command_now ahr-toggle-waybar ;;
+      "Nightlight") run_command_now ahr-toggle-nightlight ;;
       "Back"|"") return 0 ;;
       *) return 0 ;;
     esac

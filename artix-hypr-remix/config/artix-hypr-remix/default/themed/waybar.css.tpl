@@ -37,6 +37,7 @@
 #custom-voxtype,
 #custom-screenrecording-indicator,
 #custom-idle-indicator,
+#custom-nightlight-indicator,
 #custom-notification-silencing-indicator {
 	min-width: 12px;
 	margin: 0 7.5px;
@@ -120,6 +121,8 @@ tooltip {
 .right #custom-screenrecording-indicator,
 .left #custom-idle-indicator,
 .right #custom-idle-indicator,
+.left #custom-nightlight-indicator,
+.right #custom-nightlight-indicator,
 .left #custom-notification-silencing-indicator,
 .right #custom-notification-silencing-indicator {
 	margin: 1.5px 0;
@@ -208,4 +211,8 @@ tooltip {
 #custom-idle-indicator.inactive,
 #custom-notification-silencing-indicator.active {
 	color: {{ color9 }};
+}
+
+#custom-nightlight-indicator.active {
+	color: #f5a97f;
 }

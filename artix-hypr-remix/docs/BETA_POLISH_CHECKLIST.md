@@ -86,21 +86,32 @@ Use these classifications for differences:
 | Waybar | Present but rough | Optional polish | `config/waybar/config.jsonc`, `style.css`, status helpers | `../omarchy/default/waybar/`, `../omarchy/themes/*/waybar.css` | Add safer position/theme controls only after validating reload behavior. |
 | Menus | Present but rough | Required parity | `ahr-menu`, `ahr-menu-keybindings` | `../omarchy/bin/omarchy-menu` | AHR taxonomy exists; polish Capture, Toggle, Defaults, Help, and validation messages. |
 | Theme switching | Present | Required parity | `ahr-theme`, `ahr-theme-lib.sh`, `default/themes/*` | `../omarchy/bin/omarchy-theme-*`, `../omarchy/themes/*` | Status command, backups, post-switch validation, doctor checks added. |
+| Theme: install/remove/update | Missing | Required for stable | — | `omarchy-theme-install`, `omarchy-theme-remove`, `omarchy-theme-update` | Git remote theme management; add after validating theme engine stability and Artix git/network assumptions. |
+| Theme: browser/editor/foot sync | Missing | Optional polish | — | `omarchy-theme-set-browser`, `omarchy-theme-set-vscode`, `omarchy-theme-set-foot`, `omarchy-theme-set-obsidian`, `omarchy-theme-set-gnome` | Chromium/VS Code/Cursor/Foot/Obsidian/GNOME theme sync. Safe to add incrementally per app. |
 | Wallpaper/gallery | Present but rough | Optional polish | `ahr-theme bg-*`, `ahr-launch-wallpaper-session`, `scripts/wallpaper.sh` | `omarchy-theme-bg-switcher`, `../omarchy/themes/*/backgrounds/` | Add preview/gallery only if assets and fallback behavior are clean. |
 | Fonts/icons/cursor | Present but rough | Optional polish | `packages/80-fonts-themes.txt`, `default/themes/*/icons.theme`, `fontconfig/fonts.conf` | Omarchy Font menu and theme files | Add font switching only after terminal/GTK/Waybar sync is designed. |
 | Notifications | Present | Required parity | `config/mako/config`, notification toggle scripts | Omarchy notification helpers | Keep Mako restart/silence/dismiss reliable. |
 | Screenshots | Present | Required parity | `ahr-capture-screenshot`, Hyprland Print binding | Omarchy screenshot commands | Fullscreen/window/area modes and open-after-capture implemented. |
 | Screen recording | Present but rough | Optional polish | `ahr-capture-screenrecording`, Waybar recording indicator | Omarchy screenrecord menu | Add audio/webcam modes only after device detection and failure handling are tested. |
+| Screensaver/suspend availability toggles | Missing | Optional polish | — | `omarchy-toggle-screensaver`, `omarchy-toggle-suspend` | State-flag toggles that hide menu items. Low-risk; add if menu structure supports conditional visibility. |
 | Clipboard | Present | Required parity | `ahr-clipboard-picker`, Hyprland autostart | Omarchy clipboard bindings | Validate image history and picker backend fallback. |
+| Clipboard: unified hotkeys | Missing | Optional polish | — | Omarchy Super+C/V/X clipboard via keyd/wtype | Requires keyd remapping layer; keep as intentional difference unless AHR adopts a similar approach. |
 | Lock/idle | Present but rough | Required parity | `hypridle.conf`, `hyprlock.conf`, idle toggle/status | Omarchy lock/screensaver/idle helpers | Validate suspend/resume and screensaver scope. |
 | Portals | Present but needs testing | Required parity | `packages/10-hyprland.txt`, `config/hypr/xdph.conf`, smoke scripts | Omarchy portal setup | Test browser and Flatpak screen sharing. |
 | Audio | Present | Required parity | `packages/50-audio.txt`, `ahr-launch-audio`, Waybar pulseaudio | Omarchy audio launcher/restart | Add output/mic toggle polish if `pavucontrol`/`pamixer` behavior is reliable. |
 | Network | Present | Artix/OpenRC adaptation | `packages/60-network-openrc.txt`, `ahr-launch-wifi`, `services/openrc-default.txt` | Omarchy Wi-Fi setup/restart | NetworkManager is project-selected; keep OpenRC service control. |
 | Bluetooth | Present | Artix/OpenRC adaptation | `packages/60-network-openrc.txt`, `ahr-launch-bluetooth`, OpenRC services | Omarchy Bluetooth setup/restart | Validate hardware-present and hardware-absent behavior. |
+| Capture: OCR/text extraction | Missing | Optional polish | — | `omarchy-capture-text-extraction` | Requires `tesseract` and language data; add after screenshot pipeline is stable. Make dependency optional. |
 | Power management | Present but rough | Artix/OpenRC adaptation | laptop profile, `ahr-system-suspend`, `ahr-system-hibernate`, `power-profiles-daemon` package | Omarchy Power Profile/System Sleep | Resolve `loginctl` portability policy and test power profile UI. |
 | Keybindings | Present | Required parity | `config/hypr/hyprland.conf`, `keybinds.lua`, `ahr-menu-keybindings` | Omarchy bindings and keybinding viewer | Keep viewer labels synced with runtime `.conf`. |
+| Nightlight toggle | Present | Optional polish | `ahr-toggle-nightlight`, `ahr-waybar-nightlight-status`, `ahr-menu` Toggle menu, `config/waybar/config.jsonc` nightlight-indicator, `config/hypr/hyprland.conf` binding | `omarchy-toggle-nightlight` (hyprsunset 4000K/6500K) | Implemented: toggles hyprsunset 4000K/6500K, Toggle menu entry, Waybar indicator with signal 12, Super+Ctrl+N binding. |
+| Notices (date/time/battery/weather) | Missing | Optional polish | — | Omarchy hotkey-triggered notification notices | Lightweight notification commands; add after notification toggle pipeline is reliable. |
+| Reminders | Missing | Optional polish | — | Omarchy reminder CLI/menu (`omarchy reminder`) | Notification-based countdown timer; requires only `notify-send` and state file. |
 | Help/welcome/discoverability | Present but rough | Required parity | `first-run.d/110-welcome.sh`, `docs/quick-reference.md`, Learn menu | Omarchy welcome/manual links | Add clearer "next action" affordance if tester confusion appears. |
 | Update/repair tooling | Present | Artix/OpenRC adaptation | `ahr-update`, `ahr-repair`, `ahr-migrate`, `doctor.sh` | `omarchy-update`, refresh/update menus | Keep AHR update safer and narrower than Omarchy system-maintenance menus. |
+| Toggle state framework | Missing | Optional polish | — | `omarchy-toggle-enabled`, `~/.local/state/omarchy/toggles/` | Shared flag-file toggle pattern; useful foundation before adding individual toggles. |
+| Touchpad toggle | Missing | Optional polish | — | `omarchy-toggle-touchpad` | Enable/disable with state file; requires hardware detection helper. |
+| Touchscreen toggle | Missing | Unsupported for now | — | `omarchy-toggle-touchscreen` | Hardware-dependent; defer until touchpad toggle is validated. |
 | Uninstall/reset guidance | Present | Intentional difference | `RECOVERY_AND_RESET.md`, `ahr list-backups`, `ahr repair` | Omarchy remove/refresh tooling | Full uninstall remains out of scope unless explicitly accepted. |
 | Documentation | Present | Required parity | `README.md`, support/release/milestone docs | Omarchy docs/learn workflow | Keep public beta docs aligned with supported scope. |
 
@@ -149,6 +160,13 @@ Use these decision labels:
 | Package/AUR install/remove UX | OpenRC adaptation | AHR has generic package/AUR/Flatpak menu actions. Omarchy has richer curated package helpers. | Improve guards/previews first; add curated installers only after Artix validation. |
 | Broad remove/preinstall cleanup | Probably out of scope | Removal can destroy user choices and is harder to validate than install. | Keep conservative; prefer docs and explicit package remove previews. |
 | Troubleshooting/manual depth | Required for stable | Omarchy manual is broad and user-facing. AHR docs are strong but more project/release oriented. | Add user manual pages as features stabilize; avoid documenting unsupported workflows as promised. |
+| Unified clipboard hotkeys (Super+C/V/X) | Optional polish | Omarchy unifies clipboard hotkeys via keyd/wtype so Super+C/V/X work everywhere. AHR uses default Ctrl+Shift+C/V in terminals. | Keep as intentional difference unless AHR adopts a similar keyd remapping layer. |
+| Nightlight toggle (hyprsunset) | Optional polish | Omarchy toggles screen temperature (4000K/6500K) with Super+Ctrl+N. | ✅ Implemented in session 2026-06-07: `ahr-toggle-nightlight`, Waybar indicator, Toggle menu entry, Super+Ctrl+N binding. |
+| Screensaver/suspend availability toggles | Optional polish | Omarchy can hide Suspend/Screensaver from menus via state flags. AHR always shows all power options. | Add if menu structure supports conditional item visibility. |
+| Theme: browser/editor/foot sync | Optional polish | Omarchy syncs themes to Chromium, VS Code, Cursor, Foot terminal, Obsidian, and GNOME. AHR only applies theme to desktop shell/config templates. | Safe to add incrementally per app; start with one (e.g. Foot terminal). |
+| Theme: install/remove/update via git | Required for stable or high-value polish | Omarchy supports `omarchy theme install <git-url>`, remove, and update. AHR has local themes only, no remote install flow. | Add after local theme engine is stable; require git availability check. |
+| Toggle state framework | Optional polish | Omarchy uses `~/.local/state/omarchy/toggles/` flag files and `omarchy-toggle-enabled` for consistent toggle state. AHR toggles are ad-hoc. | Adopt if multiple toggles are implemented; keeps state queryable by Waybar and menus. |
+| Touchpad toggle | Optional polish | Omarchy can enable/disable/toggle touchpad. AHR has no touchpad control. | Add after hardware detection helper is designed; safe on non-laptop hardware (no-op). |
 
 Manual-derived stable criteria should stay narrower than "clone every manual
 feature". AHR can be stable when the supported OpenRC-native desktop is
@@ -673,7 +691,8 @@ Beta polish is complete when:
 - [x] Add screenshot/capture menu polish for fullscreen/window/open-after-capture behavior.
 - [x] Improve theme/wallpaper state reporting and validation after switching.
 - [x] Add or refine first-login keybinding/help menu entry based on a clean-install usability pass.
-- [ ] Add more Omarchy parity table entries from direct inspection of `../omarchy/bin/omarchy-capture-*`, `omarchy-toggle-*`, and `omarchy-theme-*`.
+- [x] Add more Omarchy parity table entries from direct inspection of `omarchy-capture-*`, `omarchy-toggle-*`, `omarchy-theme-*`, and `the-omarchy-manual.md`.
+- [x] Implement nightlight toggle: create `ahr-toggle-nightlight` using `hyprsunset` (4000K/6500K), add to Toggle menu and Waybar indicator, register in dispatcher.
 
 TODO markers for future inspection/testing:
 
@@ -740,3 +759,39 @@ TODO markers for future inspection/testing:
 5. **Checklist overstatement (finding 4):** The health-summary completion claim was downgraded from "one-command health summary" to "health tip with command suggestions" to accurately reflect the implementation.
 
 **Files changed (fixes):** `ahr-status`, `ahr-doctor` (new), `ahr`, `first-run.d/110-welcome.sh`, `ahr-menu`, `docs/quick-reference.md`, `BETA_POLISH_CHECKLIST.md`
+
+### Session 2026-06-07 (fourth pass): Omarchy parity table expansion from direct inspection
+
+**What was done:**
+
+- Inspected all Omarchy capture/toggle/theme bin scripts (`omarchy-capture-*`, `omarchy-toggle-*`, `omarchy-theme-*`) and the downloaded Omarchy manual (`the-omarchy-manual.md`) for parity gaps.
+- Added **10 new rows** to the section 4 parity audit table documenting missing AHR features:
+  - **Capture**: OCR/text extraction — Missing / Optional polish
+  - **Clipboard**: unified hotkeys (Super+C/V/X) — Missing / Optional polish
+  - **Screensaver/suspend availability toggles** — Missing / Optional polish
+  - **Theme**: install/remove/update via git — Missing / Required for stable
+  - **Theme**: browser/editor/foot sync — Missing / Optional polish
+  - **Nightlight toggle** (hyprsunset) — Missing / Optional polish
+  - **Notices** (date/time/battery/weather) — Missing / Optional polish
+  - **Reminders** — Missing / Optional polish
+  - **Toggle state framework** — Missing / Optional polish
+  - **Touchpad toggle** — Missing / Optional polish
+  - **Touchscreen toggle** — Missing / Unsupported for now
+- Added **8 new entries** to the section 4.1 manual-derived backlog for broader feature gaps.
+- Marked the Omarchy parity inspection starter task as complete.
+- Added a new starter task: implement nightlight toggle (`ahr-toggle-nightlight` via `hyprsunset`).
+
+**Files changed:** `BETA_POLISH_CHECKLIST.md`
+
+### Session 2026-06-07 (fifth pass): Implement nightlight toggle
+
+**What was done:**
+
+- Created `ahr-toggle-nightlight` — toggles `hyprsunset` between 4000K (night) and 6500K (day). Starts `hyprsunset` if not running. Uses state file under `$XDG_STATE_HOME/artix-hypr-remix/toggles/nightlight` for Waybar indicator. Sends signal 12 to Waybar on state change.
+- Created `ahr-waybar-nightlight-status` — outputs Waybar JSON with  (active) or  (inactive) icon with tooltip, respecting both state file and `hyprctl hyprsunset temperature` live query.
+- Added **Nightlight** entry to the Toggle menu in `ahr-menu` (menu_select list + case dispatch).
+- Added `custom/nightlight-indicator` to `config/waybar/config.jsonc` — placed in modules-center, signal 12, 30-second interval.
+- Registered `toggle-nightlight` in the `ahr` dispatcher (usage text, case dispatch, list command).
+- Added keybinding `$mod CTRL, n` → `ahr-toggle-nightlight` in `hyprland.conf` (matches Omarchy's Super+Ctrl+N).
+
+**Files changed:** `ahr-toggle-nightlight` (new), `ahr-waybar-nightlight-status` (new), `ahr-menu`, `ahr`, `config/waybar/config.jsonc`, `config/hypr/hyprland.conf`, `BETA_POLISH_CHECKLIST.md`
