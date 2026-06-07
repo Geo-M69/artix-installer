@@ -29,6 +29,12 @@ sed -i 's/"position"[[:space:]]*:[[:space:]]*"bottom"/"position": "'"$new_positi
 # Write state file for the Waybar indicator
 printf '%s\n' "$new_position" > "$state_file"
 
+# Verify the config was actually changed
+if ! grep -q '"position"[[:space:]]*:[[:space:]]*"'"$new_position"'"' "$waybar_config" 2>/dev/null; then
+  ahr_notify "artix-hypr-remix" "Failed to update Waybar position in config"
+  exit 1
+fi
+
 # Notify before restart so the user sees the position message
 if [[ "$new_position" == "bottom" ]]; then
   ahr_notify "Waybar" "Waybar moved to bottom"
@@ -36,18 +42,29 @@ else
   ahr_notify "Waybar" "Waybar moved to top"
 fi
 
-# Restart Waybar to pick up the new position.  Delegate to ahr-restart-waybar
-# which already handles the kill/wait/start cycle reliably.
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -x "$script_dir/ahr-restart-waybar" ]]; then
-  bash "$script_dir/ahr-restart-waybar"
-else
-  # Fallback: direct restart (ahr-restart-waybar should always exist)
-  pkill -x waybar >/dev/null 2>&1 || true
+# ---- Restart Waybar with a robust kill/wait/start cycle ----
+# Kill all Waybar processes and wait until fully dead (up to 3 s).
+if pgrep -x waybar >/dev/null 2>&1; then
+  pkill -x waybar 2>/dev/null || true
+  for _ in 1 2 3 4 5 6; do
+    if ! pgrep -x waybar >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.5
+  done
+fi
+
+# If Waybar is still alive after the wait loop, something is wrong
+# (e.g., it's ignoring SIGTERM).  Do NOT start a duplicate instance.
+if pgrep -x waybar >/dev/null 2>&1; then
+  ahr_notify "artix-hypr-remix" "Waybar did not exit — position will apply on next manual restart"
+  exit 1
+fi
+
+# Start Waybar and give it time to initialise
+if ahr_has_cmd waybar; then
+  setsid waybar >/dev/null 2>&1 &
   sleep 0.5
-  if ahr_has_cmd waybar; then
-    setsid waybar >/dev/null 2>&1 &
-  fi
 fi
 
 # Signal Waybar indicator to refresh the position icon immediately
