@@ -16,7 +16,9 @@ alias ll='eza -lah --group-directories-first --icons=auto'
 alias cat='bat --style=plain'
 
 if command -v zoxide >/dev/null 2>&1; then
-  eval "$(zoxide init zsh)"
+  # Ensure zoxide data directory exists (silent fallback if permissions wrong)
+  [[ -d "$HOME/.local/share/zoxide" ]] || mkdir -p "$HOME/.local/share/zoxide" 2>/dev/null
+  eval "$(zoxide init zsh 2>/dev/null)" || true
 fi
 
 if command -v fzf >/dev/null 2>&1; then
