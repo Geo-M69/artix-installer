@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_THEME_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-theme-lib.sh}"
+
+OMARCHY_REPO_URL="https://github.com/basecamp/omarchy.git"
+OMARCHY_BRANCH="dev"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr-theme-install-omarchy [--set] [--force] <theme-name>
+
+Download a single Omarchy theme via git sparse checkout.
+
+Options:
+  --set    Apply the theme immediately after downloading
+  --force  Overwrite existing theme directory if present
+
+Available themes:
+  catppuccin, catppuccin-latte, ethereal, everforest, flexoki-light,
+  gruvbox, hackerman, kanagawa, last-horizon, lumon, matte-black,
+  miasma, nord, osaka-jade, retro-82, ristretto, rose-pine, solitude,
+  tokyo-night, vantablack, white
+EOF
+}
+
+main() {
+  local apply_theme=false
+  local force=false
+  local theme_name=""
+  local -a positional=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --set) apply_theme=true ;;
+      --force) force=true ;;
+      -h|--help) usage; exit 0 ;;
+      --) shift; positional+=("$@"); break ;;
+      -*) ahr_fail "Unknown option: $1" ;;
+      *) positional+=("$1") ;;
+    esac
+    shift
+  done
+
+  (( ${#positional[@]} == 1 )) || ahr_fail "Usage: ahr-theme-install-omarchy [--set] [--force] <theme-name>"
+  theme_name="${positional[0]}"
+
+  theme_name="$(ahr_theme_slugify "$theme_name")"
+  [[ -n "$theme_name" ]] || ahr_fail "Invalid theme name"
+  [[ "$theme_name" == "." || "$theme_name" == ".." || "$theme_name" == */* ]] && ahr_fail "Invalid theme name: $theme_name"
+
+  if ! ahr_has_cmd git; then
+    ahr_fail "Git is required. Install it with: sudo pacman -S git"
+  fi
+
+  local install_dir="$AHR_THEME_USER_DIR/$theme_name"
+
+  if [[ -d "$install_dir" || -L "$install_dir" ]]; then
+    if [[ "$force" != "true" ]]; then
+      ahr_fail "Theme already exists: $theme_name. Use --force to overwrite."
+    fi
+    rm -rf "$install_dir"
+  fi
+
+  local tmp_dir=""
+  tmp_dir="$(mktemp -d)"
+  trap '[[ -n "${tmp_dir:-}" ]] && rm -rf "$tmp_dir"' EXIT
+
+  printf 'Downloading Omarchy theme "%s" via sparse checkout...\n' "$theme_name"
+
+  # Sparse checkout: only fetch the requested theme directory
+  (
+    cd "$tmp_dir"
+    git init --quiet
+    git remote add origin "$OMARCHY_REPO_URL"
+    git config core.sparseCheckout true
+    printf 'themes/%s\n' "$theme_name" > .git/info/sparse-checkout
+    if ! git fetch --depth 1 --filter=blob:none origin "$OMARCHY_BRANCH" --quiet; then
+      ahr_fail "Failed to download theme from Omarchy repository. Check network and theme name."
+    fi
+    git checkout FETCH_HEAD --quiet
+  )
+
+  local source_dir="$tmp_dir/themes/$theme_name"
+  if [[ ! -d "$source_dir" ]]; then
+    ahr_fail "Theme not found in Omarchy repository: $theme_name"
+  fi
+
+  if [[ ! -f "$source_dir/colors.toml" ]]; then
+    ahr_fail "Downloaded theme is missing colors.toml — not a valid theme."
+  fi
+
+  install -d -m 0755 "$(dirname "$install_dir")"
+  cp -a "$source_dir" "$install_dir"
+
+  # Strip VCS metadata from active state (sparse checkout may leave .git)
+  rm -rf "$install_dir/.git"
+
+  printf 'Omarchy theme installed: %s\n' "$theme_name"
+
+  if [[ "$apply_theme" == "true" ]]; then
+    ahr_theme_set "$theme_name"
+  else
+    printf 'Apply it with: ahr theme set %s\n' "$theme_name"
+  fi
+}
+
+main "$@"

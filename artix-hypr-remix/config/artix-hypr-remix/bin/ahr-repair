@@ -131,6 +131,7 @@ check_namespace() {
     ahr-status
     ahr-list-backups
     ahr-theme
+    ahr-theme-install-omarchy
     ahr-update
     ahr-update-available
     ahr-migrate

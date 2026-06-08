@@ -27,6 +27,7 @@ Commands:
   menu                Open command menu (learn/trigger/style/setup/install/remove/update/system)
   menu-keybindings    Show Hyprland keybinding help
   theme               Theme engine command group
+  theme-install-omarchy Download an Omarchy theme via sparse checkout
   launch-terminal     Open terminal
   launch-apps         Open application launcher
   launch-browser      Open browser
@@ -76,6 +77,7 @@ dispatch() {
     menu) exec_ahr_command ahr-menu "$@" ;;
     menu-keybindings) exec_ahr_command ahr-menu-keybindings "$@" ;;
     theme) exec_ahr_command ahr-theme "$@" ;;
+    theme-install-omarchy) exec_ahr_command ahr-theme-install-omarchy "$@" ;;
     launch-terminal) exec_ahr_command ahr-launch-terminal "$@" ;;
     launch-apps) exec_ahr_command ahr-launch-apps "$@" ;;
     launch-browser) exec_ahr_command ahr-launch-browser "$@" ;;
@@ -117,6 +119,7 @@ dispatch() {
         "ahr-menu" \
         "ahr-menu-keybindings" \
         "ahr-theme" \
+        "ahr-theme-install-omarchy" \
         "ahr-launch-terminal" \
         "ahr-launch-apps" \
         "ahr-launch-browser" \

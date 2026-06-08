@@ -21,6 +21,7 @@ declare -a commands=(
   ahr-menu
   ahr-menu-keybindings
   ahr-theme
+  ahr-theme-install-omarchy
   ahr-theme-list
   ahr-theme-current
   ahr-theme-set
