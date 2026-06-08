@@ -16,6 +16,10 @@ Commands:
   refresh [--quiet]                 Re-apply current theme
   bg-next                           Cycle to next background for current theme
   bg-set <path>                     Set specific background image
+  install [--set] [--force] [--name <name>] <git-url>
+                                    Install a theme from a git repository
+  remove [--force] <name>           Remove a user-installed theme
+  update [<name>]                   Update user-installed themes via git pull
   set-templates [dir]               Render templates into target directory
   colors-from-alacritty [dir]       Generate colors.toml from alacritty.toml
   help                              Show this help
@@ -145,6 +149,238 @@ cmd_colors_from_alacritty() {
   ahr_theme_colors_from_alacritty "$target_dir"
 }
 
+cmd_install() {
+  local apply_theme=false
+  local force=false
+  local custom_name=""
+  local repo_url=""
+  local -a positional=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --set) apply_theme=true ;;
+      --force) force=true ;;
+      --name)
+        shift
+        custom_name="$1"
+        ;;
+      -h|--help)
+        cat <<'HELP'
+Usage: ahr-theme install [--set] [--force] [--name <name>] <git-url>
+
+Install a theme from a git repository into your user themes directory.
+
+Options:
+  --set          Apply the theme immediately after installing
+  --force        Overwrite existing theme directory if present
+  --name <name>  Use this name instead of deriving from the URL
+HELP
+        return 0
+        ;;
+      --) shift; positional+=("$@"); break ;;
+      -*)
+        ahr_fail "Unknown option for install: $1"
+        ;;
+      *)
+        positional+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  # Last positional argument is the git URL
+  if (( ${#positional[@]} > 0 )); then
+    repo_url="${positional[-1]}"
+  fi
+
+  [[ -z "$repo_url" ]] && ahr_fail "Usage: ahr-theme install [--set] [--force] [--name <name>] <git-url>"
+
+  if ! ahr_has_cmd git; then
+    ahr_fail "Git is required to install themes. Install it with: sudo pacman -S git"
+  fi
+
+  # Derive theme name from URL
+  local repo_path="$repo_url"
+  # Strip user@host: prefix from scp-style SSH URLs
+  [[ "$repo_path" != *"://"* && "$repo_path" == *:*/* ]] && repo_path="${repo_path#*:}"
+  local theme_name="${custom_name:-$(basename "$repo_path" .git | sed -E 's/^omarchy-//; s/-theme$//' | tr '[:upper:]' '[:lower:]')}"
+  [[ -n "$theme_name" ]] || ahr_fail "Could not derive theme name from URL. Use --name to specify one."
+
+  local install_dir="$AHR_THEME_USER_DIR/$theme_name"
+
+  if [[ -d "$install_dir" || -L "$install_dir" ]]; then
+    if [[ "$force" != "true" ]]; then
+      ahr_fail "Theme already exists: $theme_name. Use --force to overwrite."
+    fi
+    rm -rf "$install_dir"
+  fi
+
+  install -d -m 0755 "$(dirname "$install_dir")"
+
+  printf 'Cloning theme "%s" from %s ...\n' "$theme_name" "$repo_url"
+  if ! git clone "$repo_url" "$install_dir"; then
+    rm -rf "$install_dir"
+    ahr_fail "Failed to clone theme repository: $repo_url"
+  fi
+
+  if [[ ! -f "$install_dir/colors.toml" ]]; then
+    ahr_theme_warn "Theme installed but missing colors.toml — it may not work correctly."
+  fi
+
+  printf 'Theme installed: %s\n' "$theme_name"
+
+  if [[ "$apply_theme" == "true" ]]; then
+    ahr_theme_set "$theme_name"
+  else
+    printf 'Apply it with: ahr theme set %s\n' "$theme_name"
+  fi
+}
+
+cmd_remove() {
+  local force=false
+  local theme_name=""
+  local -a positional=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --force) force=true ;;
+      -h|--help)
+        cat <<'HELP'
+Usage: ahr-theme remove [--force] <name>
+
+Remove a user-installed theme. Refuses to remove built-in or Omarchy themes.
+
+Options:
+  --force  Remove even if it is the currently active theme
+HELP
+        return 0
+        ;;
+      --) shift; positional+=("$@"); break ;;
+      -*)
+        ahr_fail "Unknown option for remove: $1"
+        ;;
+      *)
+        positional+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  if (( ${#positional[@]} > 0 )); then
+    theme_name="${positional[-1]}"
+  fi
+
+  [[ -z "$theme_name" ]] && ahr_fail "Usage: ahr-theme remove [--force] <name>"
+
+  theme_name="$(ahr_theme_slugify "$theme_name")"
+  local install_dir="$AHR_THEME_USER_DIR/$theme_name"
+
+  if [[ ! -d "$install_dir" && ! -L "$install_dir" ]]; then
+    ahr_fail "Theme not found in user themes: $theme_name"
+  fi
+
+  # Safety: refuse to remove current theme unless --force
+  if [[ "$force" != "true" ]]; then
+    local current
+    current="$(ahr_theme_current_raw 2>/dev/null || true)"
+    if [[ "$current" == "$theme_name" ]]; then
+      ahr_fail "Theme is currently active: $theme_name. Use --force to remove anyway."
+    fi
+  fi
+
+  rm -rf "$install_dir"
+  printf 'Theme removed: %s\n' "$theme_name"
+
+  local current
+  current="$(ahr_theme_current_raw 2>/dev/null || true)"
+  if [[ "$current" == "$theme_name" ]]; then
+    ahr_theme_warn "The removed theme was active. Run 'ahr theme set <name>' to choose another."
+  fi
+}
+
+cmd_update() {
+  local target_name=""
+  local -a positional=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      -h|--help)
+        cat <<'HELP'
+Usage: ahr-theme update [<name>]
+
+Update user-installed themes by running git pull.
+
+If no name is given, all git-tracked directories in the user themes folder
+are updated.
+HELP
+        return 0
+        ;;
+      --) shift; positional+=("$@"); break ;;
+      -*)
+        ahr_fail "Unknown option for update: $1"
+        ;;
+      *)
+        positional+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  if (( ${#positional[@]} > 0 )); then
+    target_name="${positional[-1]}"
+  fi
+
+  if ! ahr_has_cmd git; then
+    ahr_fail "Git is required to update themes."
+  fi
+
+  if [[ -n "$target_name" ]]; then
+    target_name="$(ahr_theme_slugify "$target_name")"
+    local target_dir="$AHR_THEME_USER_DIR/$target_name"
+
+    if [[ ! -d "$target_dir" ]]; then
+      ahr_fail "Theme not found in user themes: $target_name"
+    fi
+
+    if ! git -C "$target_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      ahr_fail "Not a git repository: $target_dir"
+    fi
+
+    printf 'Updating theme: %s\n' "$target_name"
+    if git -C "$target_dir" pull --ff-only; then
+      printf 'Theme updated: %s\n' "$target_name"
+    else
+      ahr_fail "Failed to update theme: $target_name"
+    fi
+    return 0
+  fi
+
+  # Update all git-tracked user themes
+  [[ -d "$AHR_THEME_USER_DIR" ]] || { printf 'No user themes directory found.\n'; return 0; }
+
+  local updated=0
+  local failed=0
+  local dir
+
+  while IFS= read -r -d '' dir; do
+    local name
+    name="$(basename "$dir")"
+    if git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      printf 'Updating theme: %s\n' "$name"
+      if git -C "$dir" pull --ff-only; then
+        printf '  Updated.\n'
+        updated=$((updated + 1))
+      else
+        ahr_theme_warn "  Failed to update: $name"
+        failed=$((failed + 1))
+      fi
+    fi
+  done < <(find -L "$AHR_THEME_USER_DIR" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+
+  printf 'Themes updated: %d, failed: %d\n' "$updated" "$failed"
+  (( failed == 0 )) || return 1
+}
+
 dispatch() {
   local subcommand="${1:-help}"
   shift || true
@@ -157,6 +393,9 @@ dispatch() {
     refresh) cmd_refresh "$@" ;;
     bg-next) cmd_bg_next "$@" ;;
     bg-set) cmd_bg_set "$@" ;;
+    install) cmd_install "$@" ;;
+    remove) cmd_remove "$@" ;;
+    update) cmd_update "$@" ;;
     set-templates) cmd_set_templates "$@" ;;
     colors-from-alacritty) cmd_colors_from_alacritty "$@" ;;
     help|-h|--help) usage ;;

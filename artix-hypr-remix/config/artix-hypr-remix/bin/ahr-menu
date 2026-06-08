@@ -375,7 +375,9 @@ show_default_editor_menu() {
 show_theme_set_menu() {
   local theme_cmd
   local -a themes=()
-  local choice
+  local -a menu_entries=()
+  local current current_pretty choice choice_raw
+  local line
 
   theme_cmd="$(resolve_command_path ahr-theme)" || ahr_fail "Command not found: ahr-theme"
   mapfile -t themes < <("$theme_cmd" list --raw 2>/dev/null | sed '/^[[:space:]]*$/d')
@@ -384,14 +386,45 @@ show_theme_set_menu() {
     ahr_fail "No themes found"
   fi
 
-  themes+=("Back")
-  choice="$(menu_select "Style: Theme" "${themes[@]}")"
+  current="$("$theme_cmd" current --raw 2>/dev/null || true)"
+  current_pretty="$(printf '%s' "$current" | sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g')"
+
+  # Build menu with current-theme marker
+  for line in "${themes[@]}"; do
+    if [[ "$line" == "$current" ]]; then
+      menu_entries+=("✓ $(printf '%s' "$line" | sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g')")
+    else
+      menu_entries+=("  $(printf '%s' "$line" | sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g')")
+    fi
+  done
+
+  menu_entries+=("")
+  menu_entries+=("Install from URL...")
+  menu_entries+=("Update User Themes")
+  menu_entries+=("Back")
+
+  choice="$(menu_select "Style: Theme (${current_pretty:-none})" "${menu_entries[@]}")"
 
   if [[ -z "$choice" || "$choice" == "Back" ]]; then
     return 0
   fi
 
-  exec "$theme_cmd" set "$choice"
+  if [[ "$choice" == "Install from URL..." ]]; then
+    run_terminal_script "set -e; read -r -p 'Git URL: ' repo_url; [[ -n \"\$repo_url\" ]] || exit 0; $(quote_command "$theme_cmd") install --set \"\$repo_url\"; echo; read -r -p 'Press Enter to close...' _"
+    return 0
+  fi
+
+  if [[ "$choice" == "Update User Themes" ]]; then
+    run_terminal_script "set +e; $(quote_command "$theme_cmd") update; echo; read -r -p 'Press Enter to close...' _"
+    return 0
+  fi
+
+  # Strip marker prefix to get raw theme name, then slugify
+  choice_raw="${choice#✓ }"
+  choice_raw="${choice_raw#  }"
+  choice_raw="$(printf '%s' "$choice_raw" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g')"
+
+  exec "$theme_cmd" set "$choice_raw"
 }
 
 show_theme_status() {

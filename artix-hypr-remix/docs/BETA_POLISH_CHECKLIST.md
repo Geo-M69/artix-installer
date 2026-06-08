@@ -86,7 +86,7 @@ Use these classifications for differences:
 | Waybar | Present but rough | Optional polish | `config/waybar/config.jsonc`, `style.css`, status helpers | `../omarchy/default/waybar/`, `../omarchy/themes/*/waybar.css` | Add safer position/theme controls only after validating reload behavior. |
 | Menus | Present but rough | Required parity | `ahr-menu`, `ahr-menu-keybindings` | `../omarchy/bin/omarchy-menu` | AHR taxonomy exists; polish Capture, Toggle, Defaults, Help, and validation messages. |
 | Theme switching | Present | Required parity | `ahr-theme`, `ahr-theme-lib.sh`, `default/themes/*` | `../omarchy/bin/omarchy-theme-*`, `../omarchy/themes/*` | Status command, backups, post-switch validation, doctor checks added. |
-| Theme: install/remove/update | Missing | Required for stable | — | `omarchy-theme-install`, `omarchy-theme-remove`, `omarchy-theme-update` | Git remote theme management; add after validating theme engine stability and Artix git/network assumptions. |
+| Theme: install/remove/update | Present | Required for stable | `ahr theme install`, `ahr theme remove`, `ahr theme update` | `omarchy-theme-install`, `omarchy-theme-remove`, `omarchy-theme-update` | ✅ Implemented 2026-06-08: install clones from git URL, remove deletes user themes, update runs git pull; all with safety guards and consistent arg parsing. |
 | Theme: browser/editor/foot sync | Missing | Optional polish | — | `omarchy-theme-set-browser`, `omarchy-theme-set-vscode`, `omarchy-theme-set-foot`, `omarchy-theme-set-obsidian`, `omarchy-theme-set-gnome` | Chromium/VS Code/Cursor/Foot/Obsidian/GNOME theme sync. Safe to add incrementally per app. |
 | Wallpaper/gallery | Present but rough | Optional polish | `ahr-theme bg-*`, `ahr-launch-wallpaper-session`, `scripts/wallpaper.sh` | `omarchy-theme-bg-switcher`, `../omarchy/themes/*/backgrounds/` | Add preview/gallery only if assets and fallback behavior are clean. |
 | Fonts/icons/cursor | Present but rough | Optional polish | `packages/80-fonts-themes.txt`, `default/themes/*/icons.theme`, `fontconfig/fonts.conf` | Omarchy Font menu and theme files | Add font switching only after terminal/GTK/Waybar sync is designed. |
@@ -164,7 +164,7 @@ Use these decision labels:
 | Nightlight toggle (hyprsunset) | Optional polish | Omarchy toggles screen temperature (4000K/6500K) with Super+Ctrl+N. | ✅ Implemented in session 2026-06-07: `ahr-toggle-nightlight`, Waybar indicator, Toggle menu entry, Super+Ctrl+N binding. |
 | Screensaver/suspend availability toggles | Optional polish | Omarchy can hide Suspend/Screensaver from menus via state flags. AHR always shows all power options. | Add if menu structure supports conditional item visibility. |
 | Theme: browser/editor/foot sync | Optional polish | Omarchy syncs themes to Chromium, VS Code, Cursor, Foot terminal, Obsidian, and GNOME. AHR only applies theme to desktop shell/config templates. | Safe to add incrementally per app; start with one (e.g. Foot terminal). |
-| Theme: install/remove/update via git | Required for stable or high-value polish | Omarchy supports `omarchy theme install <git-url>`, remove, and update. AHR has local themes only, no remote install flow. | Add after local theme engine is stable; require git availability check. |
+| Theme: install/remove/update via git | Required for stable or high-value polish | Omarchy supports `omarchy theme install <git-url>`, remove, and update. AHR now has full parity. | ✅ Implemented 2026-06-08 alongside light-theme auto-detection. |
 | Toggle state framework | Optional polish | Omarchy uses `~/.local/state/omarchy/toggles/` flag files and `omarchy-toggle-enabled` for consistent toggle state. AHR toggles are ad-hoc. | Adopt if multiple toggles are implemented; keeps state queryable by Waybar and menus. |
 | Touchpad toggle | Optional polish | Omarchy can enable/disable/toggle touchpad. AHR has no touchpad control. | Add after hardware detection helper is designed; safe on non-laptop hardware (no-op). |
 
@@ -172,6 +172,206 @@ Manual-derived stable criteria should stay narrower than "clone every manual
 feature". AHR can be stable when the supported OpenRC-native desktop is
 excellent, documented, and validated, while the unsupported or optional manual
 features are clearly classified.
+
+## 4.2 Manual-derived application and feature gap ledger
+
+This section is the long-form backlog for the specific concern that AHR still
+feels thinner than Omarchy in applications, workflows, and product polish. It is
+intentionally broader than the beta checklist. Use it to decide what to promote
+into implementation, not as a promise that every Omarchy manual item must ship.
+
+Decision labels:
+
+- Required for final: needed before calling AHR an Omarchy-class final product.
+- High-value polish: strongly improves perceived completeness; good early work.
+- Optional profile: useful, but should be opt-in and removable.
+- OpenRC adaptation: should exist only through Artix/OpenRC-safe behavior.
+- Intentional difference: AHR should document the difference and not implement.
+- Unsupported for now: too risky or too broad until the script installer is fully proven.
+- Unknown; needs package validation: depends on Artix repo/AUR/Flatpak availability.
+
+| Manual app / feature | AHR status | Decision | Missing AHR surface | Implementation checklist |
+| --- | --- | --- | --- | --- |
+| Alacritty terminal | Missing; Ghostty is default | Intentional difference or optional profile | Terminal installer/default chooser | Decide whether Ghostty remains AHR default; optionally add Alacritty install/default path after Artix package validation. |
+| Ghostty terminal | Present | Required for final | Rich terminal-default UX | Keep default helper, theme template, and launcher validated. |
+| Foot terminal | Missing | Optional profile | Terminal install/default chooser; theme sync | Validate Artix package name; add Foot config/template only if chosen as supported terminal. |
+| Kitty terminal | Missing | Optional profile | Terminal install/default chooser; theme sync | Validate package; add only after terminal chooser is safe. |
+| Tmux tuned workflow | Present but thinner than Omarchy | High-value polish | Tmux keybinding learn page; layout helpers | Compare Omarchy tmux functions; port only shell functions that are distro-neutral. |
+| Tmux layout functions / dev layouts | Missing | Optional profile | Shell functions and Learn menu docs | Add `tdl`-style helper only after deciding supported editor/agent conventions. |
+| Neovim / LazyVim-style experience | Present but thinner | High-value polish | Editor setup docs, plugin defaults, health checks | Decide whether AHR owns a Neovim distribution or only installs Neovim. Avoid silently mutating user config without backups. |
+| Helix editor | Present | Required for final | Default-editor UX | Keep default editor command and MIME validation current. |
+| VS Code | Missing | Optional profile | Install > Editor; theme sync | Validate package/AUR/Flatpak path; add guarded installer and theme sync only after package source is chosen. |
+| VSCodium | Missing | Optional profile | Install > Editor; theme sync | Prefer if AHR wants open-source editor path; validate package availability. |
+| Cursor | Missing | Optional profile | Install > Editor; theme sync | Likely AUR/proprietary; keep opt-in with explicit source/risk text. |
+| Zed | Missing | Optional profile | Install > Editor; theme sync | Validate package source; add only with clean uninstall path. |
+| Sublime Text | Missing | Optional profile | Install > Editor | Proprietary repo/AUR considerations; keep optional. |
+| Chromium | Missing; Firefox/Zen present | Optional profile | Browser install/default chooser; web app runtime option | Validate package; decide whether web apps require Chromium-style app windows or can use selected browser. |
+| Firefox | Present | Required for final | Browser default validation | Keep default browser helper and portal testing current. |
+| Zen Browser | Present via Flatpak | Optional profile | Browser default chooser polish | Validate default browser behavior with Flatpak desktop entry. |
+| Browser install/remove/default flow | Partial | Required for final | Install > Browser, Remove > Browser, Setup > Default Browser | Add curated browser matrix with package source, desktop entry, default command, remove behavior, and validation. |
+| Nautilus file manager | Present | Required for final | File-manager extensions | Keep directory MIME/default behavior validated. |
+| Yazi file manager | Present | High-value polish | TUI launch/default docs | Add Learn/Setup docs for TUI file workflow if retained. |
+| Nautilus LocalSend extension | Missing | Optional profile | Share integration | Port only after LocalSend package/profile is supported. |
+| Nautilus transcode extension | Missing | Optional polish | File-manager context actions | Defer until transcode CLI is implemented and tested. |
+| Document Viewer / PDF viewer | Partial/unknown | Required for final | PDF default app and form/signing guidance | Decide supported PDF viewer (`evince`, browser, Okular, Xournal++); add package/MIME/docs. |
+| Xournal++ PDF annotation | Missing | Optional profile | Install > Apps or Documents | Validate package; add docs for signing/filling PDFs if supported. |
+| LibreOffice / OnlyOffice | OnlyOffice Flatpak optional; LibreOffice missing | High-value polish | Office profile; defaults for office docs | Decide whether final ships LibreOffice, OnlyOffice, or both as profiles; validate MIME defaults. |
+| Obsidian | Optional Flatpak present | Optional profile | Notes app launch/docs/theme sync | Add Setup/Install menu entry and optional theme sync if supported. |
+| Typora | Missing | Optional profile | Install > Writing; desktop entry; theme assets | Proprietary/trial; keep opt-in and document source. |
+| Pinta | Missing | Optional profile | Install > Graphics | Validate package/Flatpak; add only if image editing is a final app goal. |
+| mpv | Missing | High-value polish | Media player package/default | Add `mpv` package or profile and MIME validation for video/audio. |
+| OBS Studio | Optional Flatpak present | Optional profile | Install > Media; portal validation | Keep optional; validate screen capture/portal flow. |
+| Kdenlive | Missing | Optional profile | Install > Media | Validate package/Flatpak; add only with package size warning. |
+| Spotify | Optional Flatpak present | Optional profile | Install > Media; launcher/hotkey | Keep optional; decide whether final default profile should include it. |
+| Signal | Optional Flatpak present | Optional profile | Install > Communication; launcher/hotkey | Keep optional; validate desktop entry and notifications. |
+| Discord / Vesktop | Optional Flatpak present | Optional profile | Install > Communication | Keep optional; validate portals and audio. |
+| Zoom | Missing | Optional profile | Web app or native package; launch entry | Prefer web app after web app framework exists; native app may be AUR/Flatpak. |
+| 1Password | Missing | Optional profile | Install > Security/Services; SSH agent docs | Requires package source, browser integration, keyring behavior, and rollback docs. |
+| Dropbox | Missing | Optional profile | Install > Service; OpenRC/user autostart adaptation | Avoid systemd user-service assumptions; validate daemon autostart and removal. |
+| Tailscale | Missing | OpenRC adaptation / optional profile | Install > Service; rc-service/rc-update integration | Validate Artix package and OpenRC service name before adding. |
+| NordVPN | Missing | Optional profile | Install > Service; service integration | Proprietary source and service behavior need research; keep opt-in. |
+| LocalSend app | Missing | High-value polish | Trigger > Share; package/Flatpak profile | Add profile and guarded menu after package availability and firewall behavior are tested. |
+| HEY web app | Missing | Optional profile | Web app installer; default web app catalog | Blocked on generic web app framework. |
+| Basecamp web app | Missing | Optional profile | Web app installer/catalog | Blocked on generic web app framework. |
+| ChatGPT web app | Missing | Optional profile | Web app installer/catalog; AI launch hotkey | Blocked on generic web app framework. |
+| WhatsApp web app | Missing | Optional profile | Web app installer/catalog | Blocked on generic web app framework. |
+| X web app | Missing | Optional profile | Web app installer/catalog | Blocked on generic web app framework. |
+| YouTube web app | Missing | Optional profile | Web app installer/catalog | Blocked on generic web app framework. |
+| Generic web app install/remove | Missing | High-value polish for final | `ahr-webapp-install`, `ahr-webapp-remove`, desktop entries, icon cache | Design browser backend, favicon fetching, icon fallback, profile/window mode, update/remove safety, and menu integration. |
+| Generic package installer | Partial/narrow | OpenRC adaptation | Install > Package with preview/search | Add only after safe package search, confirmation, install log, and failure handling are designed. |
+| Generic AUR installer | Partial/narrow | Optional profile | Install > AUR with helper detection | Never assume helper; require explicit opt-in and warning. |
+| Generic Flatpak installer | Partial | High-value polish | Install > Flatpak profile/app search | Use `flatpak remote-info/search` if available; keep profile-based path first. |
+| Remove package/app workflows | Partial/narrow | High-value polish | Remove > Package/App with preview | Must preview owned files/config impact; avoid broad destructive cleanup. |
+| Gaming: Steam | Missing | Optional profile | Install > Gaming; lib32/multilib considerations | Validate Artix package/multilib requirements; add clear install time and startup-delay text. |
+| Gaming: RetroArch | Missing | Optional profile | Install > Gaming; preset config | Validate package; avoid ROM/BIOS assumptions. |
+| Gaming: Lutris | Missing | Optional profile | Install > Gaming | Validate package/AUR and Wine deps; expect high support burden. |
+| Gaming: Heroic | Missing | Optional profile | Install > Gaming | Validate Flatpak/package path. |
+| Gaming: Moonlight | Missing | Optional profile | Install > Gaming | Validate package; no server-side assumptions. |
+| Gaming: Xbox Cloud / GeForce Now | Missing | Optional profile | Web app catalog | Blocked on web app framework. |
+| Gaming: Minecraft | Missing | Optional profile | Install > Gaming | Validate launcher source; avoid proprietary account assumptions in docs. |
+| Xbox controller support | Missing | Optional profile | Install > Gaming / Hardware | Validate Bluetooth stack and packages; keep no-op path for wired controllers. |
+| Windows VM via Docker | Missing | Unsupported for now | Install > Windows; Docker VM orchestration | Too broad for final unless explicitly promoted; requires storage, RDP, Docker profile, security docs. |
+| AI chat web apps | Missing | Optional profile | Web app catalog and hotkeys | Blocked on generic web app framework. |
+| Agent CLI installers | Missing | Optional profile | Install > AI; shell docs; theme/help | Fast-moving package sources; keep opt-in and avoid desktop dependency. |
+| Local LLM tooling | Missing | Optional profile | Install > AI | Validate LM Studio/Ollama package/service behavior before adding. |
+| Voxtype dictation | Partial hooks present | Optional profile | Install/remove/config/model/menu docs | Finish install/remove parity only after model download, privacy, and hotkey behavior are tested. |
+| Development environment installers | Missing | Optional profile | Install > Development; language runtimes | Start with documentation or a guarded dev profile; avoid making language stacks part of base desktop. |
+| Docker DB helpers | Missing | Optional profile | Install > Development > Docker DB | Requires Docker profile, compose files, ports, persistence, and removal docs. |
+| GitHub CLI | Missing | Optional profile | Install > Development | Validate package; add only if useful to target audience. |
+| TUI catalog: lazygit/lazydocker/impala/bluetui/cliamp | Missing or partial | Optional profile | Install > TUI; launcher docs | Validate each package on Artix before adding. |
+| FZF/zoxide/ripgrep/eza/fd/bat/tldr | Present | Required for final | Shell docs and Learn menu | Keep shell experience documented. |
+| Shell functions: compression/drives/SSH port forwarding/transcoding/worktrees | Partial/missing | Optional polish | Shell function library | Port only distro-neutral functions; drive formatting must remain explicit and guarded. |
+| Quick emoji/completion via XCompose | Partial | Optional polish | XCompose docs and keybinding help | Validate `XCOMPOSEFILE` behavior and document remapping. |
+| Reminder CLI/menu | Missing | High-value polish | `ahr reminder`; Trigger > Reminder | Implement lightweight stateful timer notifications with list/clear; no service required initially. |
+| Notices: time/date/weather/battery | Partial Waybar helpers | High-value polish | `ahr-notice-*`; hotkeys/menu | Add notification commands that degrade cleanly when no battery/weather config exists. |
+| OCR text extraction | Missing | Optional profile | Capture > Text Extraction | Requires OCR package/language data and clear missing-dependency text. |
+| Share workflow | Missing | High-value polish | Trigger > Share; LocalSend profile | Start with share clipboard/file/folder after LocalSend validation. |
+| Transcode workflow | Missing | Optional polish | Trigger > Transcode; Nautilus extension | Implement CLI first, then menu/file-manager integration. |
+| Audio output/input toggles | Partial | High-value polish | Toggle/Setup audio actions | Use `wpctl`/`pamixer`; validate default sink/source switching. |
+| Webcam privacy toggle | Missing | Optional polish | Toggle menu | Hardware-specific; require device detection and clear state. |
+| Power profile UX | Partial | OpenRC adaptation | Setup/Toggle power profile | Validate `powerprofilesctl` on Artix/OpenRC and no-service edge cases. |
+| Monitor scaling/mirror/recovery | Partial | OpenRC adaptation / high-risk | Trigger > Hardware; monitor helper docs | Add only reversible actions; keep internal-monitor recovery command. |
+| Touchpad toggle | Missing | Optional polish | Trigger > Hardware / Toggle | Use `hyprctl devices`/device names carefully; no-op on missing touchpad. |
+| Touchscreen toggle | Missing | Unsupported for now | Trigger > Hardware | Defer until hardware is available. |
+| Fingerprint/FIDO2 auth | Missing | Optional profile | Install > Security | PAM/security-sensitive; requires tested rollback. |
+| System snapshots/rollback | Missing | Unknown; needs design/testing | Update rollback docs/tooling | Do not implement until filesystem/snapshot backend is chosen. |
+| Update channels | Missing | Optional polish | Update > Channel | Only after release process and package mirror/channel story exists. |
+
+### 4.2.1 Application backlog sequencing
+
+Recommended app/workflow order for a final-product push:
+
+- [ ] Finalize default apps first: browser, terminal, file manager, editor, PDF, image, video, archive, office docs.
+- [ ] Add one curated app profile category at a time: Communication, Office/Media, Development, Gaming, Services.
+- [ ] Build generic web app install/remove before adding many individual web apps.
+- [ ] Build package-source validation before any broad Install/Remove menu.
+- [ ] Treat proprietary/commercial apps as opt-in profiles with explicit source notes.
+- [ ] Keep every optional profile removable or at least clearly documented with manual removal steps.
+
+## 4.3 Omarchy-like UI and UX replication checklist
+
+The goal is not to copy Omarchy pixel-for-pixel. The goal is to reproduce the
+same feeling: keyboard-first, discoverable, beautiful, complete, and coherent.
+Use this checklist for the "overall UI/UX is lacking" workstream.
+
+### Menu information architecture
+
+- [ ] Main menu ordering feels deliberate: Apps, Learn, Trigger, Style, Setup, Install, Remove, Update, About, System.
+- [ ] Apps opens the application launcher immediately and does not compete with the command menu.
+- [ ] Learn includes Getting Started, keybindings, tmux keybindings if supported, AHR manual, Hyprland docs, shell docs, editor docs, troubleshooting.
+- [ ] Trigger includes Reminder, Capture, Share, Transcode, Toggle, Hardware, with unsupported entries hidden or marked clearly.
+- [ ] Style includes Theme, Background, Font, Waybar, Mako, Hyprland appearance, lock screen, screensaver/about branding where supported.
+- [ ] Setup includes Defaults, Browser, Terminal, Editor, File Manager, Audio, Wi-Fi, Bluetooth, Power, Monitors, Keyboard/Mouse/Trackpad, config editing.
+- [ ] Install is category-based: Package, AUR, Flatpak, Web App, Browser, Terminal, Editor, Communication, Office/Media, Development, AI, Gaming, Services, Style.
+- [ ] Remove mirrors Install only where removal is safe and validated.
+- [ ] Update explains exactly what will change: repo code, migrations, packages, Flatpaks, AUR, themes.
+- [ ] System actions require confirmation for logout, reboot, shutdown, suspend, hibernate, and explain unavailable states.
+- [ ] Every menu action has one of three outcomes: performs the action, names the missing dependency/source, or states that the feature is unsupported for now.
+
+### Visual polish and first impression
+
+- [ ] First login shows coherent wallpaper/background, Waybar, Mako styling, terminal theme, launcher theme, lock theme, GTK/icon/cursor defaults.
+- [ ] Waybar modules are not visually crowded; status indicators have consistent icon style, spacing, tooltip text, and click actions.
+- [ ] Theme switching updates Waybar, Mako, terminal, GTK/icons/cursor where supported, and records missing optional theme assets without failing.
+- [ ] Theme list shows current theme, light/dark mode, preview availability, background count, and missing optional app assets.
+- [ ] Background selection has a picker/gallery path, not only a "next" command.
+- [ ] Wallpaper fallback for imageless themes is visually intentional, not an error-looking blank state.
+- [ ] Notification copy is short, action-oriented, and consistent with AHR command names.
+- [ ] First-run notifications point to the menu, keybindings, healthcheck, and quick reference without repeating after success.
+- [ ] About screen communicates "Artix OpenRC-native Omarchy-equivalent" plus supported scope and version/status.
+- [ ] Screenshots or expected-result artifacts exist for first login, menu, theme picker, Waybar, and capture flow.
+
+### Keyboard-first daily workflow
+
+- [ ] Hotkeys from the manual are mapped, adapted, or explicitly classified as intentionally different.
+- [ ] Super+Space and Super+Alt+Space behavior is documented and consistent.
+- [ ] Super+Return, Super+Shift+Return, Super+Shift+F, Super+Ctrl+T, Super+K, Print, Super+P, Super+Ctrl+N all work or are documented.
+- [ ] Clipboard history works for text and image content.
+- [ ] Universal clipboard hotkeys are either implemented via a safe remapping layer or documented as an intentional difference.
+- [ ] Screenshot modes support area, fullscreen, active window, copy/open-after-capture, and clear failure states.
+- [ ] Screen recording supports start/stop, status indicator, output path, and later optional audio/webcam modes.
+- [ ] Reminder and notices are accessible from both hotkeys and Trigger menu if implemented.
+- [ ] App-specific hotkeys exist only for apps that are installed or have graceful fallback text.
+- [ ] Keybinding viewer is generated from the runtime Hyprland config and stays in sync after changes.
+
+### Application completeness UX
+
+- [ ] Default install has a complete "can live here today" baseline: browser, terminal, file manager, editor, PDF viewer, image viewer, video/audio player, archive manager, office/docs option, settings tools.
+- [ ] Optional app profiles are discoverable from Install menu and docs.
+- [ ] Each app profile declares source: Artix repo, AUR, Flatpak, external/proprietary, or web app.
+- [ ] Each app profile declares install command, launch command, desktop entry, default/MIME changes, validation command, and removal story.
+- [ ] Web apps install into the app launcher with icons and clean removal.
+- [ ] Commercial/proprietary apps are opt-in and never required for desktop success.
+- [ ] Gaming/dev/AI profiles are opt-in and not part of the core support promise until validated.
+- [ ] Missing optional app dependencies never break first login.
+
+### OpenRC-native adaptation UX
+
+- [ ] Service actions shown in menus use `rc-service` and `rc-update`, never `systemctl`.
+- [ ] Guarded elogind `loginctl` paths are documented as elogind/OpenRC-compatible, with fallbacks.
+- [ ] TTY startup and `greetd` startup are explained as AHR's OpenRC-native replacement for Omarchy's systemd/UWSM/SDDM stack.
+- [ ] Unsupported systemd/Plymouth/Limine/snapshot features are not hidden behind broken menu entries.
+- [ ] Network, Bluetooth, printing, Docker, Tailscale, and other services document their OpenRC service names before becoming supported menu actions.
+- [ ] Hardware actions are reversible or provide recovery instructions before shipping.
+
+### Manual and support UX
+
+- [ ] AHR has a user manual, not just release/project docs.
+- [ ] Manual pages follow the app/workflow structure users see in the menu.
+- [ ] Manual clearly separates supported, optional, experimental, and unsupported features.
+- [ ] Troubleshooting page starts from symptoms: black screen, no audio, no network, portal/screen sharing broken, suspend broken, theme broken, package failed.
+- [ ] Healthcheck output points to the same terms used in the manual and menu.
+- [ ] Release notes summarize which Omarchy manual surfaces AHR intentionally does and does not cover.
+
+### Final-product promotion gates
+
+- [ ] At least one clean install validated by a user who did not read source docs first.
+- [ ] Intel, AMD, NVIDIA, laptop, TTY, and `greetd` paths have validation bundles or explicit support limits.
+- [ ] Core app/default/MIME workflow validated with real files and URLs.
+- [ ] Theme/background/gallery workflow validated across login/reboot.
+- [ ] Main menu smoke test covers every top-level entry.
+- [ ] Optional app profiles have package-source validation before being documented as supported.
+- [ ] Unsupported Omarchy manual features are documented as intentional differences, optional future work, or unsupported for now.
 
 ## 5. UX surface implementation checklists
 
@@ -908,3 +1108,28 @@ TODO markers for future inspection/testing:
 - `./scripts/quality-gate.sh` → passes
 - `./scripts/check-openrc-portability.sh` → passes
 - Lid-close suspend already functional on user's hardware (existing behavior, not changed in this pass)
+
+### Session 2026-06-08 (eighth pass): Theme engine — Omarchy compatibility and remote management
+
+**What was done:**
+
+- **Light theme auto-detection:** Added `ahr_theme_is_light()` to `ahr-theme-lib.sh` — computes WCAG 2.x relative luminance from the theme's `background` color in `colors.toml` via awk with sRGB linearization. If luminance > 0.45, the theme is treated as light (GTK `prefer-light` + `Adwaita`). Explicit `light.mode` file still takes precedence. Validated against all 21 Omarchy themes and all 4 AHR built-ins — correctly classifies catppuccin-latte (0.88), flexoki-light (0.97), white (1.00), and rose-pine (0.91) as light; all 17 dark themes classify correctly with luminance < 0.04.
+- **`ahr theme install <git-url>`:** Clones a theme from a git repository into `~/.config/artix-hypr-remix/themes/<name>`. Options: `--set` (apply immediately), `--force` (overwrite existing), `--name <name>` (override derived name). Validates git availability and `colors.toml` presence. Derives theme name from URL (strips `omarchy-` prefix and `-theme` suffix). Supports http/https and scp-style SSH URLs.
+- **`ahr theme remove <name>`:** Removes a user-installed theme. Refuses to remove the currently active theme without `--force`. Only operates on `~/.config/artix-hypr-remix/themes/` (not built-in or Omarchy themes).
+- **`ahr theme update [<name>]`:** Runs `git pull --ff-only` on user-installed themes. Without a name, updates all git-tracked directories in the user themes folder. Reports updated/failed counts.
+- All three commands use a consistent positional-array argument parsing pattern that tolerates flag/argument ordering in any position.
+- **Analysis: Omarchy theme compatibility** — AHR's theme engine already handles Omarchy themes correctly: `colors.toml` format matches, `waybar.css` is preserved (template rendering skips existing files), `backgrounds/` is cycled by `bg-next`, `mako.ini` and `ghostty.conf` are template-rendered. Only gap was light theme detection (now fixed). AHR can delegate theming entirely to Omarchy's 21-theme ecosystem with no structural changes needed.
+
+**Files changed:** `bin/ahr-theme` (install/remove/update subcommands), `bin/ahr-theme-lib.sh` (`ahr_theme_is_light`, updated `ahr_theme_apply_gnome`), `docs/BETA_POLISH_CHECKLIST.md`
+
+**Validation:**
+- `bash -n` syntax check passes on both `ahr-theme` and `ahr-theme-lib.sh`
+- `ahr theme install --name demo file:///tmp/test-repo` → clones, validates colors.toml
+- `ahr theme install` (duplicate) → fails with clear message; `--force` overwrites
+- `ahr theme update demo` → `git pull --ff-only`, reports "Already up to date"
+- `ahr theme update` (all) → loops user themes, reports updated/failed counts
+- `ahr theme remove demo --force` → removes cleanly
+- Light detection validated against all 25 themes (21 Omarchy + 4 AHR): 21 dark, 4 light — all correct
+- `ahr theme list` continues to work with Omarchy themes visible when `OMARCHY_PATH` is set
+
+**Fedora dev note:** Developed on Fedora; git clone against `file://` URLs works. Pacman package names in error messages (e.g., `sudo pacman -S git`) are Arch/Artix-correct. Install/remove/update use no distro-specific paths beyond what `ahr-theme-lib.sh` already provides — ready for Artix laptop validation.

@@ -373,6 +373,44 @@ ghostty.conf:$HOME/.config/ghostty/config
 EOF
 }
 
+ahr_theme_is_light() {
+  local theme_dir="$1"
+  local bg_color
+
+  # Explicit light.mode marker always wins
+  if [[ -f "$theme_dir/light.mode" ]]; then
+    return 0
+  fi
+
+  # Auto-detect from background color luminance
+  bg_color="$(ahr_theme_read_color_value "$theme_dir" background 2>/dev/null || true)"
+  [[ -n "$bg_color" ]] || return 1
+
+  # Compute relative luminance (sRGB) via awk.
+  # Returns 0 (light) if luminance > 0.45, otherwise 1 (dark).
+  # Threshold chosen to classify all Omarchy light themes correctly
+  # while keeping dark themes dark.
+  awk -v hex="$bg_color" '
+    BEGIN {
+      hex = tolower(hex)
+      sub(/^#/, "", hex)
+      r = strtonum("0x" substr(hex,1,2)) / 255
+      g = strtonum("0x" substr(hex,3,2)) / 255
+      b = strtonum("0x" substr(hex,5,2)) / 255
+
+      # sRGB linearization
+      if (r <= 0.04045) r = r / 12.92; else r = ((r + 0.055) / 1.055) ^ 2.4
+      if (g <= 0.04045) g = g / 12.92; else g = ((g + 0.055) / 1.055) ^ 2.4
+      if (b <= 0.04045) b = b / 12.92; else b = ((b + 0.055) / 1.055) ^ 2.4
+
+      # Relative luminance (WCAG 2.x)
+      lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+      if (lum > 0.45) exit 0; else exit 1
+    }
+  '
+}
+
 ahr_theme_apply_gnome() {
   local theme_dir="$1"
   local icon_name=""
@@ -381,7 +419,7 @@ ahr_theme_apply_gnome() {
     return 0
   fi
 
-  if [[ -f "$theme_dir/light.mode" ]]; then
+  if ahr_theme_is_light "$theme_dir"; then
     gsettings set org.gnome.desktop.interface color-scheme "prefer-light" >/dev/null 2>&1 || true
     gsettings set org.gnome.desktop.interface gtk-theme "Adwaita" >/dev/null 2>&1 || true
   else
@@ -659,6 +697,7 @@ ahr_theme_set() {
 
   theme_name="$(ahr_theme_slugify "$theme_input")"
   [[ -n "$theme_name" ]] || ahr_fail "Invalid theme name"
+  [[ "$theme_name" == "." || "$theme_name" == ".." || "$theme_name" == */* ]] && ahr_fail "Invalid theme name: $theme_name"
 
   if ! ahr_theme_collect_theme_layers "$theme_name" layers; then
     ahr_fail "Theme not found: $theme_name"
@@ -672,6 +711,9 @@ ahr_theme_set() {
   for layer in "${layers[@]}"; do
     cp -a "$layer/." "$AHR_THEME_NEXT_THEME_DIR/" 2>/dev/null || true
   done
+
+  # Strip VCS metadata from active theme state; keep .git in user themes dir for update
+  rm -rf "$AHR_THEME_NEXT_THEME_DIR/.git"
 
   if [[ ! -f "$AHR_THEME_NEXT_THEME_DIR/colors.toml" && -f "$AHR_THEME_NEXT_THEME_DIR/alacritty.toml" ]]; then
     ahr_theme_colors_from_alacritty "$AHR_THEME_NEXT_THEME_DIR"
