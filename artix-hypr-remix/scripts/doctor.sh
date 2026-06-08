@@ -128,6 +128,28 @@ resolve_target_user() {
   [[ -n "$target_home" && -d "$target_home" ]]
 }
 
+run_as_target_user() {
+  local current_user
+  current_user="$(id -un 2>/dev/null || true)"
+
+  if [[ "$current_user" == "$target_user" ]]; then
+    env HOME="$target_home" "$@"
+    return $?
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -H -u "$target_user" env HOME="$target_home" "$@"
+    return $?
+  fi
+
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u "$target_user" -- env HOME="$target_home" "$@"
+    return $?
+  fi
+
+  return 1
+}
+
 service_enabled_in_default_runlevel() {
   local service="$1"
   [[ -e "/etc/runlevels/default/$service" ]]
@@ -435,6 +457,36 @@ check_theme_state() {
   theme_state_dir="$config_dir/current"
   theme_name_file="$theme_state_dir/theme.name"
   background_link="$theme_state_dir/background"
+
+  # Prefer ahr-theme status for detailed report
+  local repo_ahr_theme
+  repo_ahr_theme="$(cd "$SCRIPT_DIR/../config/artix-hypr-remix/bin" && pwd)/ahr-theme"
+
+  local ahr_theme_cmd=""
+  if command -v ahr-theme >/dev/null 2>&1; then
+    ahr_theme_cmd="$(command -v ahr-theme)"
+  elif [[ -x "$target_home/.local/bin/ahr-theme" ]]; then
+    ahr_theme_cmd="$target_home/.local/bin/ahr-theme"
+  elif [[ -x "$repo_ahr_theme" ]]; then
+    ahr_theme_cmd="$repo_ahr_theme"
+  fi
+
+  if [[ -n "$ahr_theme_cmd" ]]; then
+    echo "ahr-theme status:"
+    local -a theme_status_cmd=()
+    if [[ "$ahr_theme_cmd" == "$repo_ahr_theme" ]]; then
+      theme_status_cmd+=(env AHR_THEME_LIB_PATH="$SCRIPT_DIR/../config/artix-hypr-remix/bin/ahr-theme-lib.sh" AHR_LIB_PATH="$SCRIPT_DIR/../config/artix-hypr-remix/bin/ahr-lib.sh")
+    fi
+    theme_status_cmd+=("$ahr_theme_cmd" status)
+    if run_as_target_user "${theme_status_cmd[@]}"; then
+      :
+    else
+      echo "WARN: ahr-theme status reported issues (see above)"
+      mark_missing
+      recommend_repair
+    fi
+    echo
+  fi
 
   # State directory
   if [[ -d "$theme_state_dir" ]]; then

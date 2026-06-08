@@ -699,7 +699,7 @@ TODO markers for future inspection/testing:
 
 - [ ] TODO: Confirm exact Omarchy commit currently used for parity after each reference update.
 - [ ] TODO: `ahr-theme status` includes swayosd.css and vscode.json in missing-optional-assets output — confirm this is correct for AHR scope.
-- [ ] TODO: Add `ahr theme status` to doctor.sh's check_theme_state once the command is installed in a real user config.
+- [x] TODO: Add `ahr theme status` to doctor.sh's check_theme_state once the command is installed in a real user config.
 - [ ] TODO: Validate optional AUR package availability on a real Artix host with an AUR helper.
 - [x] ~~TODO: Decide whether guarded elogind `loginctl` is accepted for suspend or replaced with a pure OpenRC/pm-utils path.~~ **Decision:** Guarded `loginctl` (part of elogind, not systemd) is accepted for suspend/hibernate/lid-close power management paths. `check-openrc-portability.sh` now scans extensionless files and `config/hardware/`, with explicit exceptions for guarded `loginctl` usage in `ahr-system-suspend`, `ahr-system-hibernate`, and `config/hardware/laptop/openrc-module.sh`. `ahr-system-hibernate` updated to try `loginctl hibernate` first (consistent with suspend).
 - [ ] TODO: Capture final first-login screenshots once the UI polish pass is complete.
@@ -901,3 +901,10 @@ TODO markers for future inspection/testing:
 **Post-review fix 6 (same session):**
 - **Finding (Low):** `ahr_hibernate_diagnose()` always returns 1, and the script uses `set -e`. Calling it as a bare command caused the shell to exit immediately before `ahr_notify` on the next line could run, so the desktop notification was never sent.
 - **Fix:** Changed the call to `ahr_hibernate_diagnose || true` so the diagnostic prints to stderr and the script continues to `ahr_notify` before the final `exit 1`.
+
+**Laptop validation (Artix OpenRC, 2026-06-07):**
+- `ahr-system-hibernate` → prints diagnostic with all four reasons (elogind hibernate unavailable, zram swap, /sys/power/state not writable, no backend) and sends Mako notification
+- `ahr-system-suspend` → works via `loginctl suspend`
+- `./scripts/quality-gate.sh` → passes
+- `./scripts/check-openrc-portability.sh` → passes
+- Lid-close suspend already functional on user's hardware (existing behavior, not changed in this pass)
