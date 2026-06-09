@@ -434,11 +434,10 @@ show_theme_status() {
   run_terminal_script "set +e; $(quote_command "$theme_cmd" status); status=\$?; echo; if [[ \$status -ne 0 ]]; then echo 'Theme state has issues. Try Style > Theme Set or run ahr theme refresh.'; echo; fi; echo; printf '%s\n' 'Available themes:'; $(quote_command "$theme_cmd" list); echo; read -r -p 'Press Enter to close...' _"
 }
 
-show_theme_background_set() {
-  local theme_cmd
-
-  theme_cmd="$(resolve_command_path ahr-theme)" || ahr_fail "Command not found: ahr-theme"
-  run_terminal_script "set -e; read -r -p 'Background image path: ' image_path; [[ -n \"\$image_path\" ]] || exit 0; $(quote_command "$theme_cmd") bg-set \"\$image_path\"; echo; read -r -p 'Press Enter to close...' _"
+show_theme_background_install() {
+  local install_cmd
+  install_cmd="$(resolve_command_path ahr-theme-bg-install)" || ahr_fail "Command not found: ahr-theme-bg-install"
+  run_terminal_script "set -e; read -r -p 'Wallpaper path: ' image_path; [[ -n \"\$image_path\" ]] || exit 0; $(quote_command "$install_cmd") \"\$image_path\"; echo; read -r -p 'Press Enter to close...' _"
 }
 
 show_omarchy_theme_menu() {
@@ -606,6 +605,7 @@ show_style_menu() {
       "Theme Set" \
       "Download Omarchy Theme..." \
       "Background Picker" \
+      "Install Background..." \
       "Background Next" \
       "Theme Refresh" \
       "Toggle Waybar" \
@@ -619,6 +619,7 @@ show_style_menu() {
       "Theme Set") show_theme_set_menu ;;
       "Download Omarchy Theme...") show_omarchy_theme_menu ;;
       "Background Picker") run_command_now ahr-theme-bg-switcher ;;
+      "Install Background...") show_theme_background_install ;;
       "Background Next") run_command_now ahr-theme bg-next ;;
       "Theme Refresh") run_command_now ahr-theme refresh ;;
       "Toggle Waybar") run_command_now ahr-toggle-waybar ;;

@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ahr-theme-bg-install — import a wallpaper image into the current theme.
+#
+# Copies the given image into the user background directory for the current
+# theme so it becomes available in bg-next / bg-switcher.  By default the new
+# wallpaper is applied immediately; pass --no-set to skip that.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AHR_THEME_LIB_PATH="${AHR_THEME_LIB_PATH:-$SCRIPT_DIR/ahr-theme-lib.sh}"
+AHR_LIB_PATH="${AHR_LIB_PATH:-$SCRIPT_DIR/ahr-lib.sh}"
+
+source "$AHR_THEME_LIB_PATH"
+source "$AHR_LIB_PATH"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr-theme-bg-install [--no-set] <image-path>
+
+Import an image file into the current theme's user background collection.
+The image is copied to ~/.config/artix-hypr-remix/backgrounds/<theme>/
+and becomes available for bg-next and bg-switcher.
+
+Options:
+  --no-set    Copy the image but do not apply it immediately
+  -h, --help  Show this help
+EOF
+}
+
+main() {
+  local apply=true
+  local src_path=""
+  local -a positional=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --no-set) apply=false ;;
+      -h|--help) usage; exit 0 ;;
+      --) shift; positional+=("$@"); break ;;
+      -*) ahr_fail "Unknown option: $1" ;;
+      *) positional+=("$1") ;;
+    esac
+    shift
+  done
+
+  if (( ${#positional[@]} == 1 )); then
+    src_path="${positional[0]}"
+  else
+    usage >&2
+    exit 1
+  fi
+
+  # --- Resolve source path ---
+  if ahr_has_cmd realpath; then
+    src_path="$(realpath "$src_path")"
+  else
+    src_path="$(readlink -f "$src_path" 2>/dev/null || printf '%s' "$src_path")"
+  fi
+
+  [[ -f "$src_path" ]] || ahr_fail "File not found: $src_path"
+
+  # --- Validate it's an image by extension ---
+  local ext="${src_path##*.}"
+  ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+  case "$ext" in
+    jpg|jpeg|png|gif|bmp|webp) ;;
+    *) ahr_fail "Unsupported image format: .$ext (supported: jpg, jpeg, png, gif, bmp, webp)" ;;
+  esac
+
+  # --- Determine target directory ---
+  local theme_name
+  theme_name="$(ahr_theme_current_raw 2>/dev/null || true)"
+  [[ -n "$theme_name" ]] || ahr_fail "No current theme set — cannot install background"
+
+  local target_dir="$AHR_THEME_USER_BACKGROUNDS_DIR/$theme_name"
+  install -d -m 0755 "$target_dir"
+
+  local filename
+  filename="$(basename "$src_path")"
+
+  # Avoid overwriting: append a number suffix if the path already exists
+  # (catches files, directories, symlinks — anything in the way).
+  local target_path="$target_dir/$filename"
+  if [[ -e "$target_path" || -L "$target_path" ]]; then
+    local base="${filename%.*}"
+    local collision=1
+    while [[ -e "$target_dir/${base}_$collision.$ext" || -L "$target_dir/${base}_$collision.$ext" ]]; do
+      collision=$((collision + 1))
+    done
+    target_path="$target_dir/${base}_$collision.$ext"
+    ahr_theme_log "File $filename already exists — saving as $(basename "$target_path")"
+  fi
+
+  # --- Copy ---
+  cp "$src_path" "$target_path"
+  printf 'Background installed: %s\n' "$(basename "$target_path")"
+
+  # --- Optionally apply ---
+  if $apply; then
+    ahr_theme_bg_set "$target_path"
+  else
+    printf 'Apply it with: ahr theme bg-set %s\n' "$target_path"
+  fi
+}
+
+main "$@"
