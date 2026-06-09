@@ -605,8 +605,8 @@ show_style_menu() {
       "Theme Status" \
       "Theme Set" \
       "Download Omarchy Theme..." \
-      "Theme Next Background" \
-      "Theme Set Background Path" \
+      "Background Picker" \
+      "Background Next" \
       "Theme Refresh" \
       "Toggle Waybar" \
       "Waybar Position" \
@@ -618,8 +618,8 @@ show_style_menu() {
       "Theme Status") show_theme_status ;;
       "Theme Set") show_theme_set_menu ;;
       "Download Omarchy Theme...") show_omarchy_theme_menu ;;
-      "Theme Next Background") run_command_now ahr-theme bg-next ;;
-      "Theme Set Background Path") show_theme_background_set ;;
+      "Background Picker") run_command_now ahr-theme-bg-switcher ;;
+      "Background Next") run_command_now ahr-theme bg-next ;;
       "Theme Refresh") run_command_now ahr-theme refresh ;;
       "Toggle Waybar") run_command_now ahr-toggle-waybar ;;
       "Waybar Position") run_command_now ahr-toggle-waybar-position ;;

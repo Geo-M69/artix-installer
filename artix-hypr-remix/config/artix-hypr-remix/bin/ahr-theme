@@ -16,6 +16,7 @@ Commands:
   refresh [--quiet]                 Re-apply current theme
   bg-next                           Cycle to next background for current theme
   bg-set <path>                     Set specific background image
+  bg-switcher                       Interactive background picker for current theme
   install [--set] [--force] [--name <name>] <git-url>
                                     Install a theme from a git repository
   remove [--force] <name>           Remove a user-installed theme
@@ -135,6 +136,17 @@ cmd_bg_next() {
 cmd_bg_set() {
   (( $# == 1 )) || ahr_fail "Usage: ahr-theme bg-set <path>"
   ahr_theme_bg_set "$1"
+}
+
+cmd_bg_switcher() {
+  (( $# == 0 )) || ahr_fail "Usage: ahr-theme bg-switcher"
+  local script_dir switcher_path
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  switcher_path="$script_dir/ahr-theme-bg-switcher"
+  if [[ -x "$switcher_path" ]]; then
+    exec "$switcher_path"
+  fi
+  ahr_fail "Background switcher not found at: $switcher_path"
 }
 
 cmd_set_templates() {
@@ -393,6 +405,7 @@ dispatch() {
     refresh) cmd_refresh "$@" ;;
     bg-next) cmd_bg_next "$@" ;;
     bg-set) cmd_bg_set "$@" ;;
+    bg-switcher) cmd_bg_switcher "$@" ;;
     install) cmd_install "$@" ;;
     remove) cmd_remove "$@" ;;
     update) cmd_update "$@" ;;

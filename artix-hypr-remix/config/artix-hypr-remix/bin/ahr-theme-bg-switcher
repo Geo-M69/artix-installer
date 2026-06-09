@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ahr-theme-bg-switcher — interactive background picker for the current theme.
+#
+# Presents all available backgrounds for the currently active theme using the
+# configured menu backend (walker/wofi/rofi/tty).  Marks the currently applied
+# background with a ✓ prefix.  Selecting an entry applies it immediately via
+# ahr-theme bg-set.
+#
+# Image-preview support for Walker is provided by the companion elephant
+# plugin (ahrBackgroundSelector.lua), deployed during install.  When Walker
+# is the active menu backend, users can also browse backgrounds with image
+# previews by searching "AHR" inside Walker directly.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AHR_THEME_LIB_PATH="${AHR_THEME_LIB_PATH:-$SCRIPT_DIR/ahr-theme-lib.sh}"
+AHR_LIB_PATH="${AHR_LIB_PATH:-$SCRIPT_DIR/ahr-lib.sh}"
+
+source "$AHR_THEME_LIB_PATH"
+source "$AHR_LIB_PATH"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr-theme-bg-switcher
+
+Open an interactive background picker for the current theme.
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Menu backend detection (mirrors ahr-menu logic)
+# ---------------------------------------------------------------------------
+
+_bg_menu_backend() {
+  if [[ -n "${AHR_MENU_BACKEND:-}" ]]; then
+    case "$AHR_MENU_BACKEND" in
+      walker|wofi|rofi|tty) printf '%s\n' "$AHR_MENU_BACKEND"; return 0 ;;
+    esac
+  fi
+
+  if ahr_has_cmd wofi;        then printf 'wofi\n';   return 0; fi
+  if ahr_has_cmd walker;      then printf 'walker\n'; return 0; fi
+  if ahr_has_cmd rofi;        then printf 'rofi\n';   return 0; fi
+  if [[ -t 0 && -t 1 ]];      then printf 'tty\n';    return 0; fi
+
+  printf 'none\n'
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Display-name formatting from a file path
+# ---------------------------------------------------------------------------
+
+_bg_display_name() {
+  local name
+  name="$(basename "$1")"
+
+  # Strip leading numbers + optional separator:  "01-foo.png" → "foo.png"
+  name="$(printf '%s' "$name" | sed -E 's/^[0-9]{1,2}[-_ ]?//; s/^-+//')"
+
+  # Strip extension (case-insensitive)
+  name="${name%.jpg}";   name="${name%.jpeg}";  name="${name%.png}"
+  name="${name%.gif}";   name="${name%.bmp}";   name="${name%.webp}"
+  name="${name%.JPG}";   name="${name%.JPEG}";  name="${name%.PNG}"
+  name="${name%.GIF}";   name="${name%.BMP}";   name="${name%.WEBP}"
+
+  # Replace dashes/underscores with spaces, capitalise each word
+  printf '%s' "$name" | sed -E 's/[-_]/ /g; s/(^| )([a-z])/\1\u\2/g'
+}
+
+# ---------------------------------------------------------------------------
+# dmenu-style menu (walker/wofi/rofi)
+# ---------------------------------------------------------------------------
+
+_bg_dmenu() {
+  local backend="$1" prompt="$2"; shift 2
+  local -a entries=("$@")
+
+  case "$backend" in
+    wofi)   printf '%s\n' "${entries[@]}" | wofi   --dmenu --prompt "$prompt" 2>/dev/null || true ;;
+    walker) printf '%s\n' "${entries[@]}" | walker --dmenu -p "$prompt"        2>/dev/null || true ;;
+    rofi)   printf '%s\n' "${entries[@]}" | rofi   -dmenu -p "$prompt"        2>/dev/null || true ;;
+    *)      return 1 ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# TTY fallback — numbered list
+# ---------------------------------------------------------------------------
+
+_bg_tty_menu() {
+  local -n _ref="$1"
+  local current_bg="$2"
+  local i selection display marker
+
+  for i in "${!_ref[@]}"; do
+    display="$(_bg_display_name "${_ref[$i]}")"
+    marker=" "
+    [[ "${_ref[$i]}" == "$current_bg" ]] && marker="✓"
+    printf '  %2d) %s %s\n' "$((i + 1))" "$marker" "$display"
+  done
+
+  printf '\n  0) Back\n> '
+  read -r selection || true
+
+  [[ "$selection" == "0" || -z "$selection" ]] && return 1
+  if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#_ref[@]} )); then
+    printf '%s\n' "${_ref[$((selection - 1))]}"
+    return 0
+  fi
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+main() {
+  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then usage; exit 0; fi
+
+  local theme_name theme_display current_bg backend choice target
+  local -a backgrounds=()
+  local -a menu_lines=()
+  local -A path_by_display=()
+  local i display collision suffix
+
+  # --- Resolve current theme ---
+  theme_name="$(ahr_theme_current_raw 2>/dev/null || true)"
+  [[ -n "$theme_name" ]] || ahr_fail "No current theme set — cannot browse backgrounds"
+  theme_display="$(ahr_theme_titleize "$theme_name")"
+
+  # --- Collect backgrounds ---
+  if ! ahr_theme_collect_backgrounds "$theme_name" backgrounds; then
+    ahr_fail "No backgrounds found for theme: $theme_display"
+  fi
+
+  current_bg="$(ahr_theme_current_background 2>/dev/null || true)"
+
+  # --- Build menu entries with ✓ marker; handle display-name collisions ---
+  for i in "${!backgrounds[@]}"; do
+    display="$(_bg_display_name "${backgrounds[$i]}")"
+
+    # Resolve collisions: append " (2)", " (3)", …
+    suffix=""; collision=2
+    while [[ -n "${path_by_display[$display$suffix]:-}" ]]; do
+      suffix=" ($collision)"; collision=$((collision + 1))
+    done
+    display="$display$suffix"
+    path_by_display["$display"]="${backgrounds[$i]}"
+
+    if [[ "${backgrounds[$i]}" == "$current_bg" ]]; then
+      menu_lines+=("✓ $display")
+    else
+      menu_lines+=("  $display")
+    fi
+  done
+
+  menu_lines+=("")
+  menu_lines+=("Back")
+
+  # --- Present menu ---
+  backend="$(_bg_menu_backend 2>/dev/null || printf 'tty')"
+
+  if [[ "$backend" == "tty" ]]; then
+    printf '\nBackgrounds for %s:\n' "$theme_display"
+    choice="$(_bg_tty_menu backgrounds "$current_bg" || true)"
+    # _bg_tty_menu returns a raw file path on success, empty on cancel
+    if [[ -n "$choice" && -f "$choice" ]]; then
+      exec "$SCRIPT_DIR/ahr-theme" bg-set "$choice"
+    fi
+    return 0
+  fi
+
+  choice="$(_bg_dmenu "$backend" "Background: $theme_display" "${menu_lines[@]}")"
+
+  [[ -z "$choice" || "$choice" == "Back" ]] && return 0
+
+  # --- Resolve display name → file path ---
+  local raw_choice="${choice#✓ }"
+  raw_choice="${raw_choice#  }"
+  target="${path_by_display[$raw_choice]:-}"
+
+  if [[ -n "$target" && -f "$target" ]]; then
+    exec "$SCRIPT_DIR/ahr-theme" bg-set "$target"
+  fi
+
+  # Fallback: user typed or pasted a raw file path (walker/wofi/rofi allow this)
+  if [[ -f "$raw_choice" ]]; then
+    exec "$SCRIPT_DIR/ahr-theme" bg-set "$raw_choice"
+  fi
+
+  ahr_theme_warn "Could not match background selection: $choice"
+  return 1
+}
+
+main "$@"
