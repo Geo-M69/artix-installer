@@ -87,6 +87,7 @@ Use these classifications for differences:
 | Menus | Present but rough | Required parity | `ahr-menu`, `ahr-menu-keybindings` | `../omarchy/bin/omarchy-menu` | AHR taxonomy exists; polish Capture, Toggle, Defaults, Help, and validation messages. |
 | Theme switching | Present | Required parity | `ahr-theme`, `ahr-theme-lib.sh`, `default/themes/*` | `../omarchy/bin/omarchy-theme-*`, `../omarchy/themes/*` | Status command, backups, post-switch validation, doctor checks added. |
 | Theme: install/remove/update | Present | Required for stable | `ahr theme install`, `ahr theme remove`, `ahr theme update` | `omarchy-theme-install`, `omarchy-theme-remove`, `omarchy-theme-update` | ✅ Implemented 2026-06-08: install clones from git URL, remove deletes user themes, update runs git pull; all with safety guards and consistent arg parsing. |
+| Theme: first-run Omarchy seed | Present | Required for stable | `first-run.d/57-theme-omarchy-seed.sh`, `ahr-theme-install-omarchy` | Omarchy out-of-box theme experience | ✅ Implemented 2026-06-08: synchronous best-effort first-run task downloads 5 popular Omarchy themes (nord, catppuccin, tokyo-night, gruvbox, rose-pine). One-shot — always marks attempted, never retries. Misses are covered by the menu. No install.sh changes. |
 | Theme: browser/editor/foot sync | Missing | Optional polish | — | `omarchy-theme-set-browser`, `omarchy-theme-set-vscode`, `omarchy-theme-set-foot`, `omarchy-theme-set-obsidian`, `omarchy-theme-set-gnome` | Chromium/VS Code/Cursor/Foot/Obsidian/GNOME theme sync. Safe to add incrementally per app. |
 | Wallpaper/gallery | Present but rough | Optional polish | `ahr-theme bg-*`, `ahr-launch-wallpaper-session`, `scripts/wallpaper.sh` | `omarchy-theme-bg-switcher`, `../omarchy/themes/*/backgrounds/` | Add preview/gallery only if assets and fallback behavior are clean. |
 | Fonts/icons/cursor | Present but rough | Optional polish | `packages/80-fonts-themes.txt`, `default/themes/*/icons.theme`, `fontconfig/fonts.conf` | Omarchy Font menu and theme files | Add font switching only after terminal/GTK/Waybar sync is designed. |
@@ -1133,3 +1134,33 @@ TODO markers for future inspection/testing:
 - `ahr theme list` continues to work with Omarchy themes visible when `OMARCHY_PATH` is set
 
 **Fedora dev note:** Developed on Fedora; git clone against `file://` URLs works. Pacman package names in error messages (e.g., `sudo pacman -S git`) are Arch/Artix-correct. Install/remove/update use no distro-specific paths beyond what `ahr-theme-lib.sh` already provides — ready for Artix laptop validation.
+
+### Session 2026-06-08 (ninth pass): First-run Omarchy theme seed
+
+**What was done:**
+
+- **First-run Omarchy theme seed (`first-run.d/57-theme-omarchy-seed.sh`):** Synchronous best-effort first-run task that downloads a curated subset of 5 popular Omarchy themes (nord, catppuccin, tokyo-night, gruvbox, rose-pine) on first login. Uses the existing `ahr-theme-install-omarchy` sparse-checkout path.
+- **Zero install.sh changes:** The script is placed in `first-run.d/` and is automatically picked up by the existing `first-run.sh` framework (triggered by `hyprland.conf` `exec-once`).
+- **One-shot semantic:** Runs exactly once, always marks attempted (`SEED_DONE`), never retries. The first-run framework's own task-stamp mechanism (`first-run.tasks/57-theme-omarchy-seed.sh.done`) also prevents re-entry. Any missing themes remain installable via **Style → Install Omarchy Theme…** in the menu.
+- **Synchronous:** Downloads run inline (no background subshell). The first-run framework itself is an `exec-once`, so the desktop is already visible before the seed starts. Each sparse checkout takes seconds; the total delay is acceptable.
+- **Offline-safe:** A `curl`/`wget` network check against `https://github.com` silently marks done and exits if offline.
+- **Opt-out and pinning:** `AHR_THEME_OMARCHY_SEED=false` skips entirely. `OMARCHY_SEED_COMMIT` exports as `OMARCHY_BRANCH` to pin `ahr-theme-install-omarchy` to a specific commit (requires the `OMARCHY_BRANCH="${OMARCHY_BRANCH:-dev}"` change in the underlying tool).
+- **Env sourcing:** Sources `${XDG_CONFIG_HOME:-$HOME/.config}/artix-hypr-remix/env` at the top so user config vars are available (Hyprland `exec-once` does not inherit shell rc files).
+- **User-facing notifications:** A Mako notification says *"Installing popular Omarchy themes…"* at start. On completion, a second notification lists the ready themes (or reports partial failure with a menu hint).
+- **Parity audit and `ahr-theme-install-omarchy` updated:** Added seed row to section 4; made `OMARCHY_BRANCH` overridable via env var.
+
+**Files changed:** `config/artix-hypr-remix/first-run.d/57-theme-omarchy-seed.sh` (new), `config/artix-hypr-remix/bin/ahr-theme-install-omarchy`, `docs/BETA_POLISH_CHECKLIST.md`
+
+**Review iterations (same session):**
+1. Removed background `(...)& disown` subshell → synchronous (race with `first-run.sh` task stamp).
+2. Changed from conditional `SEED_DONE` + throttle → always-mark-attempted one-shot (throttle defeated by `first-run.sh` framework).
+3. Added env-file sourcing before config reads (Hyprland `exec-once` lacks shell rc).
+4. Made `OMARCHY_BRANCH` overridable in `ahr-theme-install-omarchy` to support seed pinning.
+
+**Validation:**
+- `bash -n` passes on both `57-theme-omarchy-seed.sh` and `ahr-theme-install-omarchy`
+- Quality gate passes (syntax, OpenRC portability, first-run idempotency, dependency checks)
+- `AHR_THEME_OMARCHY_SEED=false` → exits early, no network touched
+- `OMARCHY_SEED_COMMIT` set → exports `OMARCHY_BRANCH` before calling install tool
+- `OMARCHY_BRANCH` env var override: `${OMARCHY_BRANCH:-dev}` resolves to custom value when set, `dev` when unset
+- Lexicographic ordering: `57-theme-omarchy-seed.sh` runs after `55-theme-default.sh` and `56-default-apps.sh`

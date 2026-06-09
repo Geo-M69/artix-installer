@@ -4,7 +4,7 @@ set -euo pipefail
 source "${AHR_THEME_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-theme-lib.sh}"
 
 OMARCHY_REPO_URL="https://github.com/basecamp/omarchy.git"
-OMARCHY_BRANCH="dev"
+OMARCHY_BRANCH="${OMARCHY_BRANCH:-dev}"
 
 usage() {
   cat <<'EOF'
