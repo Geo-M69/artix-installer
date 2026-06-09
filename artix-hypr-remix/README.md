@@ -354,7 +354,7 @@ Command namespace:
 Theme workflow:
 
     ahr theme list
-    ahr theme set artix-dark
+    ahr theme set nord
     ahr theme current
     ahr theme bg-next
     ahr theme refresh

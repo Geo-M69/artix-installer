@@ -45,7 +45,7 @@ Current theme state is stored under:
 If a post-install check reports missing theme state, run:
 
 ```bash
-ahr theme set artix-dark
+ahr theme set nord
 ```
 
 ## Useful Commands

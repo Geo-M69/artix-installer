@@ -75,6 +75,10 @@ themes=(nord catppuccin tokyo-night gruvbox rose-pine)
 failed=0
 
 for theme in "${themes[@]}"; do
+  # Skip themes already present (e.g., nord was seeded by 55-theme-default.sh).
+  if [[ -d "$HOME/.config/artix-hypr-remix/themes/$theme" ]]; then
+    continue
+  fi
   if ! "$install_cmd" "$theme" >/dev/null 2>&1; then
     printf 'Failed to install theme: %s\n' "$theme" >&2
     failed=$((failed + 1))
@@ -84,6 +88,26 @@ done
 # Always mark attempted so the seed doesn't retry — the menu handles
 # any missing themes.
 touch "$SEED_DONE"
+
+# ── Apply the preferred default theme ─────────────────────────────
+# If the preferred theme was successfully installed (and is not already
+# active), apply it now. This also handles the case where
+# 55-theme-default.sh ran before us and fell back to the fallback theme.
+if [[ $failed -lt ${#themes[@]} ]]; then
+  preferred="${AHR_DEFAULT_THEME:-nord}"
+  theme_setter="$HOME/.config/artix-hypr-remix/bin/ahr-theme-set"
+  theme_current="$HOME/.config/artix-hypr-remix/bin/ahr-theme-current"
+  if [[ -x "$theme_setter" && -x "$theme_current" ]]; then
+    current="$("$theme_current" --raw 2>/dev/null || true)"
+    if [[ "$current" != "$preferred" ]]; then
+      # Only apply if the preferred theme is actually available now.
+      list_cmd="$HOME/.config/artix-hypr-remix/bin/ahr-theme-list"
+      if "$list_cmd" --raw 2>/dev/null | grep -qxF "$preferred"; then
+        "$theme_setter" --quiet "$preferred" 2>/dev/null && echo "Applied $preferred after seeding" || true
+      fi
+    fi
+  fi
+fi
 
 if [[ $failed -eq 0 ]]; then
   if command -v notify-send >/dev/null 2>&1; then

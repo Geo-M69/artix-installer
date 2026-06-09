@@ -502,7 +502,7 @@ Validation steps:
 
 - [ ] `ahr theme list`
 - [ ] `ahr theme current`
-- [ ] `ahr theme set artix-dark`
+- [ ] `ahr theme set nord`
 - [ ] `ahr theme refresh`
 - [ ] `ahr theme bg-next`
 - [ ] Restart Hyprland session and confirm theme/background persists.
@@ -854,7 +854,7 @@ OpenRC/Artix notes:
 | Re-run installer | `./install.sh --phase 4 --user <username> -y` or documented phase retry | Existing configs backed up, phase reruns safely | Missing backups, overwritten user config, stale state | `lib/dotfiles.sh`, `lib/state.sh`, install log |
 | Login to Hyprland | Reboot and log in through TTY or `greetd` | Hyprland starts with Waybar/Mako/wallpaper | Black screen, no session, missing env | `start-hyprland-session.sh`, `lib/tty.sh`, `hyprland.conf` |
 | Launch menu | Press `Super+Space`; run `ahr-menu` | Main menu opens and top-level actions are visible | No picker, command not found, blank menu | `ahr-menu`, `ahr-launch-apps`, `config/walker/config.toml` |
-| Switch theme | `ahr theme set artix-dark`; menu Style > Theme Set | Theme state updates and UI reloads | Missing theme, stale Waybar/Mako, broken background | `ahr-theme-lib.sh`, `default/themes/*`, `default/themed/*` |
+| Switch theme | `ahr theme set nord`; menu Style > Theme Set | Theme state updates and UI reloads | Missing theme, stale Waybar/Mako, broken background | `ahr-theme-lib.sh`, `default/themes/*`, `default/themed/*` |
 | Switch wallpaper | `ahr theme bg-next`; menu background action | Background changes and persists | Symlink missing, unreadable image, wallpaper backend absent | `ahr-theme-bg-next`, `ahr-launch-wallpaper-session` |
 | Take screenshot | Press Print for mode picker (area/fullscreen/window) or run `ahr-capture-screenshot` with `--area`/`--fullscreen`/`--window` | PNG saved in Pictures and notification appears | Selection fails, no file, missing `grim`/`slurp`/`jq` | `ahr-capture-picker`, `ahr-capture-screenshot`, `packages/10-hyprland.txt` |
 | Use clipboard history | Copy text/image, run `ahr-clipboard-picker` | Recent clipboard item can be selected | Empty picker, missing watchers | `hyprland.conf`, `ahr-clipboard-picker`, `cliphist` package |
@@ -1164,3 +1164,85 @@ TODO markers for future inspection/testing:
 - `OMARCHY_SEED_COMMIT` set → exports `OMARCHY_BRANCH` before calling install tool
 - `OMARCHY_BRANCH` env var override: `${OMARCHY_BRANCH:-dev}` resolves to custom value when set, `dev` when unset
 - Lexicographic ordering: `57-theme-omarchy-seed.sh` runs after `55-theme-default.sh` and `56-default-apps.sh`
+
+### Session 2026-06-09 (tenth pass): Remove built-in AHR themes (Phase 2.2)
+
+**What was done:**
+
+- **Removed the 4 built-in themes** (`artix-dark`, `artix-dawn`, `artix-ember`, `artix-forest`) from `config/artix-hypr-remix/default/themes/`. This is safe now because fresh installs get 5 Omarchy themes seeded on first run (nord, catppuccin, tokyo-night, gruvbox, rose-pine) via `57-theme-omarchy-seed.sh`, so no user is left without themes.
+- **Changed default theme to `nord`** across the active codebase — the first seeded Omarchy theme. The `AHR_DEFAULT_THEME` env var still overrides this for custom deployments.
+  - `first-run.d/55-theme-default.sh`: default `nord`
+  - `migrations/20260530-theme-engine-v1.sh`: default `nord`
+  - `bin/ahr-repair`: repair fallback uses `nord` instead of `artix-dark`
+  - `docs/quick-reference.md`, `docs/theme-assets.md`, `README.md`, `BETA_SUPPORT_MATRIX.md`, `docs/screenshots/README.md`: updated examples
+- **Historical milestone/release docs** (`MILESTONE4_EXPECTED_RESULTS.md`, `MILESTONE5_HANDOFF.md`, `RELEASE_NOTES.md`) left untouched — they are archival records.
+
+**Impact:**
+- `default/themes/` directory now contains one bundled `fallback` theme instead of the 4 built-in themes. The fallback is always available (even offline) and is used when the Omarchy seed cannot reach GitHub. The theme engine continues to search this directory for layers.
+- The Omarchy ecosystem (21 themes via `ahr-theme-install-omarchy` or git install) is now the primary out-of-box theme source, with the bundled `fallback` as a safety net. See the eleventh-pass session entry below for details.
+
+**Files changed:**
+- `config/artix-hypr-remix/default/themes/artix-dark/` (deleted)
+- `config/artix-hypr-remix/default/themes/artix-dawn/` (deleted)
+- `config/artix-hypr-remix/default/themes/artix-ember/` (deleted)
+- `config/artix-hypr-remix/default/themes/artix-forest/` (deleted)
+- `config/artix-hypr-remix/first-run.d/55-theme-default.sh`
+- `config/artix-hypr-remix/migrations/20260530-theme-engine-v1.sh`
+- `config/artix-hypr-remix/bin/ahr-repair`
+- `config/artix-hypr-remix/docs/quick-reference.md`
+- `config/artix-hypr-remix/docs/theme-assets.md`
+- `artix-hypr-remix/README.md`
+- `artix-hypr-remix/BETA_SUPPORT_MATRIX.md`
+- `artix-hypr-remix/docs/BETA_POLISH_CHECKLIST.md`
+- `artix-hypr-remix/docs/screenshots/README.md`
+
+### Session 2026-06-09 (eleventh pass): Fix first-run ordering, add fallback theme
+
+**What was done (findings from post-2.2 audit):**
+
+- **Created a bundled `fallback` theme** at `default/themes/fallback/` (minimal `colors.toml` + `icons.theme`). This is always available even offline, solving the "zero local themes" problem when the Omarchy seed cannot reach GitHub.
+
+- **Fixed `55-theme-default.sh`** to handle the case where the seed runs after it: first tries `nord`, then attempts to seed it via `ahr-theme-install-omarchy`, then falls back to `fallback`. No more silent failure.
+
+- **Fixed `57-theme-omarchy-seed.sh`** to apply `nord` after a successful install. This handles the upgrade path when `55-theme-default.sh` had to use the fallback theme earlier.
+
+- **Fixed `20260530-theme-engine-v1.sh`** to check theme availability before applying, falling back to `fallback` if `nord` isn't available.
+
+- **Fixed `ahr-repair`** error message: instead of "rerun config deployment" (which no longer provides `nord`), suggests `ahr theme install-omarchy nord --set` as the recovery path, and falls back to `fallback` if `nord` is missing.
+
+**Key constraint preserved:** First-run task filenames were **not** renamed — the framework tracks done markers by filename, so renaming would break existing installed systems. The fix is purely in the script logic.
+
+**Validation:**
+- `bash -n` passes on all changed scripts
+- Fresh install path (offline): `55-theme-default.sh` → `fallback` applied; seed skipped; user has functional desktop
+- Fresh install path (online): `55-theme-default.sh` → seeds `nord` → applies `nord`; `57-theme-omarchy-seed.sh` → installs remaining themes, sees nord already active, no-op
+- Fresh install path (online, partial failure): same as above but some seed themes fail; `nord` still applied
+- Migration path (no seed run): migration falls back to `fallback` if `nord` unavailable
+- Repair path: tries `nord`, then `fallback`, then suggests `install-omarchy`
+
+**Files changed:**
+- `config/artix-hypr-remix/default/themes/fallback/colors.toml` (new)
+- `config/artix-hypr-remix/default/themes/fallback/icons.theme` (new)
+- `config/artix-hypr-remix/first-run.d/55-theme-default.sh`
+- `config/artix-hypr-remix/first-run.d/57-theme-omarchy-seed.sh`
+- `config/artix-hypr-remix/migrations/20260530-theme-engine-v1.sh`
+- `config/artix-hypr-remix/bin/ahr-repair`
+
+### Session 2026-06-09 (twelfth pass): Fix env sourcing, AHR_DEFAULT_THEME respect, install idempotency, dry-run warn
+
+**What was fixed:**
+
+1. **`55-theme-default.sh` now sources the env file** and honors `AHR_THEME_OMARCHY_SEED=false`. Previously it would attempt to seed `nord` even when the user had opted out via that env var, breaking the documented "no network touched" contract. The env file is sourced at the top (matching `57`'s pattern), and the seed block is guarded by `[[ "$AHR_THEME_OMARCHY_SEED" == "true" ]]`.
+
+2. **`57-theme-omarchy-seed.sh` now respects `AHR_DEFAULT_THEME`** instead of hardcoding `nord`. The post-seed apply block reads `preferred="${AHR_DEFAULT_THEME:-nord}"` and only applies that theme if it's available. This prevents overriding a custom `AHR_DEFAULT_THEME` that `55-theme-default.sh` may have already applied.
+
+3. **`57-theme-omarchy-seed.sh` skips already-installed themes** before calling `install_cmd`. Checks for `~/.config/artix-hypr-remix/themes/$theme` existence (the install destination of `ahr-theme-install-omarchy`). This prevents the false "Failed to install theme: nord" error when `55-theme-default.sh` already seeded it.
+
+4. **`ahr-repair` fallback warning is conditional on `$apply == "true"`.** In dry-run mode the `warn` is suppressed — `run_or_preview` already handles preview logging. In apply mode the warning still tells the user to run `install-omarchy` to get nord.
+
+**Validation:** `bash -n` passes on all three changed scripts.
+
+**Files changed:**
+- `config/artix-hypr-remix/first-run.d/55-theme-default.sh`
+- `config/artix-hypr-remix/first-run.d/57-theme-omarchy-seed.sh`
+- `config/artix-hypr-remix/bin/ahr-repair`

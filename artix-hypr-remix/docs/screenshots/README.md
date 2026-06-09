@@ -9,7 +9,7 @@ This directory should contain screenshots or expected-result descriptions for th
 | 1 | First-login desktop | Clean Hyprland session after first boot: Waybar visible, Mako notification area, empty desktop with wallpaper/theme | ❌ Not yet captured |
 | 2 | Application menu | `Super+Space` or `ahr-menu` showing the launcher with visible categories or search | ❌ Not yet captured |
 | 3 | Waybar detail | Waybar showing workspaces, clock, system tray, audio/network indicators, battery (if laptop) | ❌ Not yet captured |
-| 4 | Theme showcase | Desktop with `artix-dark` theme applied; terminal open showing themed colors | ❌ Not yet captured |
+| 4 | Theme showcase | Desktop with `nord` theme applied; terminal open showing themed colors | ❌ Not yet captured |
 | 5 | Update workflow | Terminal output of `ahr update --dry-run` showing update checks | ❌ Not yet captured |
 | 6 | greetd login screen | `greetd` tuigreet greeter prompt on VT7 (if `greetd` mode is documented as tested) | ❌ Not yet captured |
 
@@ -44,7 +44,7 @@ If screenshots are not yet available, the following text descriptions document w
 1. Boot completes to TTY login prompt.
 2. User logs in with their desktop user credentials.
 3. `~/.bash_profile` (or `~/.zprofile`) detects VT1 and launches Hyprland via `start-hyprland-session.sh`.
-4. Hyprland starts: `artix-dark` theme is active, Waybar appears at the top with workspaces, clock, and system tray.
+4. Hyprland starts: `nord` theme is active, Waybar appears at the top with workspaces, clock, and system tray.
 5. Mako notification daemon displays a first-run welcome notification (if first-run tasks are pending).
 6. Wallpaper (solid color fallback if no background image is symlinked) is visible.
 7. `Super+Space` opens the application launcher (Walker if available, else wofi/rofi fallback).

@@ -264,10 +264,15 @@ check_theme_state() {
       return
     fi
 
-    if "$theme_cmd" list --raw 2>/dev/null | grep -qx 'artix-dark'; then
-      run_or_preview "apply default theme artix-dark" "$theme_cmd" set --quiet artix-dark
+    if "$theme_cmd" list --raw 2>/dev/null | grep -qx 'nord'; then
+      run_or_preview "apply default theme nord" "$theme_cmd" set --quiet nord
+    elif "$theme_cmd" list --raw 2>/dev/null | grep -qx 'fallback'; then
+      run_or_preview "apply fallback theme" "$theme_cmd" set --quiet fallback
+      if [[ "$apply" == "true" ]]; then
+        warn "nord not available; applied fallback. Run 'ahr theme install-omarchy nord --set' to install nord."
+      fi
     else
-      fail_check "default theme artix-dark not available; rerun config deployment"
+      fail_check "no theme available — run 'ahr theme install-omarchy nord --set' to install one"
     fi
   fi
 

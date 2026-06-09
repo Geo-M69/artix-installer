@@ -82,7 +82,7 @@ Stack validated through the quality gate, smoke framework, and milestone-2 valid
 - `hyprlock` / `hypridle` (lock and idle)
 - `wl-clipboard` (clipboard)
 - `xdg-desktop-portal-hyprland` (portals)
-- Theme engine (`ahr-theme-*` commands, artix-dark default)
+- Theme engine (`ahr-theme-*` commands, nord default)
 - Command namespace (`ahr`, `ahr-menu`, `ahr-repair`, `ahr-migrate`, `ahr-update`, etc.)
 - First-run framework (idempotent, session-aware)
 - Migration framework (stateful, retry-skipped)

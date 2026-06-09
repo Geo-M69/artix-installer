@@ -28,7 +28,7 @@ This page is installed with the desktop framework and is meant as a first-login 
 
 - List themes: `ahr theme list`
 - Show current theme: `ahr theme current`
-- Apply a theme: `ahr theme set artix-dark`
+- Apply a theme: `ahr theme set nord`
 - Cycle wallpaper/background: `ahr theme bg-next`
 - Set a specific wallpaper/background: `ahr theme bg-set /path/to/image`
 - Reapply current theme: `ahr theme refresh`
