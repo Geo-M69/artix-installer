@@ -1,6 +1,6 @@
-font-family = "JetBrainsMono Nerd Font"
-font-style = Regular
-font-size = 10
+font-family = "{{ font_family }}"
+font-style = {{ font_style }}
+font-size = {{ font_size }}
 
 window-theme = ghostty
 window-padding-x = 14

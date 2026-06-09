@@ -482,6 +482,56 @@ show_omarchy_theme_menu() {
   run_terminal_script "set -e; $(quote_command "$install_cmd") --set \"$theme_raw\"; echo; read -r -p 'Press Enter to close...' _"
 }
 
+show_font_set_menu() {
+  local font_cmd
+  local -a fonts=()
+  local -a menu_entries=()
+  local current_family current_size choice choice_raw
+
+  font_cmd="$(resolve_command_path ahr-font)" || ahr_fail "Command not found: ahr-font"
+
+  # Get current font setting
+  current_family="$("$font_cmd" current --raw 2>/dev/null | grep '^font_family' | sed 's/.*"\(.*\)"/\1/' || echo 'JetBrainsMono Nerd Font')"
+  current_size="$("$font_cmd" current --raw 2>/dev/null | grep '^font_size' | sed 's/.*"\(.*\)"/\1/' || echo '10')"
+
+  # Collect available fonts (limit to first 30 to keep menu manageable)
+  mapfile -t fonts < <("$font_cmd" list --raw 2>/dev/null | head -30 | sed '/^[[:space:]]*$/d')
+
+  if (( ${#fonts[@]} == 0 )); then
+    ahr_fail "No fonts found via fc-list"
+  fi
+
+  # Build menu entries
+  for line in "${fonts[@]}"; do
+    if [[ "$line" == "$current_family" ]]; then
+      menu_entries+=("✓ $line")
+    else
+      menu_entries+=("  $line")
+    fi
+  done
+
+  menu_entries+=("")
+  menu_entries+=("Change Font Size (current: $current_size)...")
+  menu_entries+=("Back")
+
+  choice="$(menu_select "Style: Font (${current_family})" "${menu_entries[@]}")"
+
+  if [[ -z "$choice" || "$choice" == "Back" ]]; then
+    return 0
+  fi
+
+  if [[ "$choice" == "Change Font Size (current: $current_size)..." ]]; then
+    run_terminal_script "set -e; read -r -p 'Font size in points (current ${current_size}): ' size; [[ -n \"\$size\" ]] || exit 0; $(quote_command "$font_cmd") set --size \"\$size\"; echo; read -r -p 'Press Enter to close...' _"
+    return 0
+  fi
+
+  # Strip marker prefix to get raw font name
+  choice_raw="${choice#✓ }"
+  choice_raw="${choice_raw#  }"
+
+  exec "$font_cmd" set --family "$choice_raw"
+}
+
 run_command_capture() {
   local command_name="$1"
   shift || true
@@ -608,6 +658,8 @@ show_style_menu() {
       "Install Background..." \
       "Background Next" \
       "Theme Refresh" \
+      "Font Status" \
+      "Font Set" \
       "Toggle Waybar" \
       "Waybar Position" \
       "Restart Waybar" \
@@ -622,6 +674,8 @@ show_style_menu() {
       "Install Background...") show_theme_background_install ;;
       "Background Next") run_command_now ahr-theme bg-next ;;
       "Theme Refresh") run_command_now ahr-theme refresh ;;
+      "Font Status") run_command_now ahr-font status ;;
+      "Font Set") show_font_set_menu ;;
       "Toggle Waybar") run_command_now ahr-toggle-waybar ;;
       "Waybar Position") run_command_now ahr-toggle-waybar-position ;;
       "Restart Waybar") run_command_now ahr-restart-waybar ;;

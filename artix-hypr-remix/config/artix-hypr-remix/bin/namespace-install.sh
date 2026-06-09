@@ -64,6 +64,9 @@ declare -a commands=(
   ahr-system-suspend
   ahr-system-hibernate
   ahr-doctor
+  ahr-font
+  ahr-font-list
+  ahr-font-set
 )
 
 declare -a aliases=(
@@ -110,6 +113,9 @@ declare -a aliases=(
   "omarchy-edit-config:ahr-edit-config"
   "omarchy-system-suspend:ahr-system-suspend"
   "omarchy-system-hibernate:ahr-system-hibernate"
+  "omarchy-font:ahr-font"
+  "omarchy-font-list:ahr-font-list"
+  "omarchy-font-set:ahr-font-set"
 )
 
 log() {

@@ -1,4 +1,4 @@
-font=JetBrainsMono Nerd Font 10
+font={{ font_family }} {{ font_size }}
 background-color={{ background }}
 text-color={{ foreground }}
 border-color={{ accent }}

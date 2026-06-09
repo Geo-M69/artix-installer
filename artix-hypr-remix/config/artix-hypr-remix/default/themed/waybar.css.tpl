@@ -5,8 +5,8 @@
 	border: none;
 	border-radius: 0;
 	min-height: 0;
-	font-family: "JetBrainsMono Nerd Font", "Font Awesome 6 Free", "Noto Color Emoji", monospace;
-	font-size: 12px;
+	font-family: "{{ font_family }}", "Font Awesome 6 Free", "Noto Color Emoji", {{ monospace_fallback }};
+	font-size: {{ ui_font_size }}px;
 }
 
 .modules-left {

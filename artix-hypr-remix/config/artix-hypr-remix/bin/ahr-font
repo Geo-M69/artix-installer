@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${AHR_FONT_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-font-lib.sh}"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr-font <command> [args]
+
+Commands:
+  list [--raw]              List available system fonts
+  current [--raw]           Show current font settings
+  status                    Show detailed font state report
+  set [--family <name>]     Set font family
+      [--size <pts>]        Set font size
+      [--ui-family <name>]  Set UI/sans font family
+      [--ui-size <pts>]     Set UI font size
+                            (at least one option required)
+  help                      Show this help
+EOF
+}
+
+cmd_list() {
+  local raw=false
+  while (( $# > 0 )); do
+    case "$1" in
+      --raw) raw=true ;;
+      -h|--help) usage; exit 0 ;;
+      *) ahr_fail "Unknown option for list: $1" ;;
+    esac
+    shift
+  done
+
+  if [[ "$raw" == "true" ]]; then
+    ahr_font_list_raw
+  else
+    ahr_font_list_pretty
+  fi
+}
+
+cmd_current() {
+  local raw=false
+  while (( $# > 0 )); do
+    case "$1" in
+      --raw) raw=true ;;
+      -h|--help) usage; exit 0 ;;
+      *) ahr_fail "Unknown option for current: $1" ;;
+    esac
+    shift
+  done
+
+  if [[ "$raw" == "true" ]]; then
+    ahr_font_list_config
+  else
+    ahr_font_status
+  fi
+}
+
+cmd_set() {
+  local font_family=""
+  local font_size=""
+  local font_style=""
+  local ui_font_family=""
+  local ui_font_size=""
+  local -a overrides=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --family)
+        (( $# >= 2 )) || ahr_fail "Missing value for --family"
+        shift; font_family="$1" ;;
+      --size)
+        (( $# >= 2 )) || ahr_fail "Missing value for --size"
+        shift; font_size="$1" ;;
+      --style)
+        (( $# >= 2 )) || ahr_fail "Missing value for --style"
+        shift; font_style="$1" ;;
+      --ui-family)
+        (( $# >= 2 )) || ahr_fail "Missing value for --ui-family"
+        shift; ui_font_family="$1" ;;
+      --ui-size)
+        (( $# >= 2 )) || ahr_fail "Missing value for --ui-size"
+        shift; ui_font_size="$1" ;;
+      -h|--help) usage; exit 0 ;;
+      *)
+        # Positional arg: treat as font family for convenience
+        if [[ -z "$font_family" ]]; then
+          font_family="$1"
+        else
+          ahr_fail "Unknown argument: $1"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$font_family" && -z "$font_size" && -z "$font_style" && -z "$ui_font_family" && -z "$ui_font_size" ]]; then
+    ahr_fail "Usage: ahr-font set [--family <name>] [--size <pts>] [--style <style>] [--ui-family <name>] [--ui-size <pts>]"
+  fi
+
+  # Validate values before passing to ahr_font_set (which writes them to TOML).
+  # Validation is done here in the main shell so ahr_fail exits the process.
+  [[ -z "$font_family" ]]    || ahr_font_validate_value "$font_family"    "Font family"
+  [[ -z "$font_size" ]]      || ahr_font_validate_size  "$font_size"      "Font size"
+  [[ -z "$font_style" ]]     || ahr_font_validate_style "$font_style"     "Font style"
+  [[ -z "$ui_font_family" ]] || ahr_font_validate_value "$ui_font_family" "UI font family"
+  [[ -z "$ui_font_size" ]]   || ahr_font_validate_size  "$ui_font_size"   "UI font size"
+
+  [[ -n "$font_family" ]]    && overrides+=("font_family=$font_family")
+  [[ -n "$font_size" ]]      && overrides+=("font_size=$font_size")
+  [[ -n "$font_style" ]]     && overrides+=("font_style=$font_style")
+  [[ -n "$ui_font_family" ]] && overrides+=("ui_font_family=$ui_font_family")
+  [[ -n "$ui_font_size" ]]   && overrides+=("ui_font_size=$ui_font_size")
+
+  ahr_font_set "${overrides[@]}"
+  ahr_font_apply
+
+  local msg=""
+  if [[ -n "$font_family" ]]; then
+    msg="Font: $font_family"
+  fi
+  if [[ -n "$font_size" ]]; then
+    msg="$msg${msg:+, }size: $font_size"
+  fi
+  if [[ -n "$font_style" ]]; then
+    msg="$msg${msg:+, }style: $font_style"
+  fi
+  if [[ -n "$ui_font_family" ]]; then
+    msg="$msg${msg:+, }UI: $ui_font_family"
+  fi
+  if [[ -n "$ui_font_size" ]]; then
+    msg="$msg${msg:+, }UI size: $ui_font_size"
+  fi
+  ahr_theme_log "Font updated: $msg"
+  ahr_notify "Font" "Updated: $msg"
+}
+
+cmd_status() {
+  (( $# == 0 )) || ahr_fail "Usage: ahr-font status"
+  ahr_font_status
+}
+
+dispatch() {
+  local subcommand="${1:-help}"
+  shift || true
+
+  case "$subcommand" in
+    list) cmd_list "$@" ;;
+    current) cmd_current "$@" ;;
+    status) cmd_status "$@" ;;
+    set) cmd_set "$@" ;;
+    help|-h|--help) usage ;;
+    *)
+      printf 'Unknown font command: %s\n\n' "$subcommand" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+dispatch "$@"

@@ -65,6 +65,9 @@ Categories:
 - `ahr-edit-config` - open a config file in user's preferred editor
 - `ahr-system-suspend` - suspend to RAM
 - `ahr-system-hibernate` - hibernate to disk
+- `ahr-font` - top-level font management dispatcher (`list`, `current`, `set`, `status`)
+- `ahr-font-list` - list available system fonts from fontconfig
+- `ahr-font-set` - set active font family, size, and UI font with template re-render
 
 ## Compatibility Aliases (Optional)
 
@@ -114,6 +117,9 @@ When namespace installation runs, selected Omarchy-style aliases are created in
 - `omarchy-edit-config` -> `ahr-edit-config`
 - `omarchy-system-suspend` -> `ahr-system-suspend`
 - `omarchy-system-hibernate` -> `ahr-system-hibernate`
+- `omarchy-font` -> `ahr-font`
+- `omarchy-font-list` -> `ahr-font-list`
+- `omarchy-font-set` -> `ahr-font-set`
 
 The alias set is intentionally small. The canonical interface remains `ahr-*`.
 Omarchy commands without safe Artix/OpenRC equivalents are intentionally omitted

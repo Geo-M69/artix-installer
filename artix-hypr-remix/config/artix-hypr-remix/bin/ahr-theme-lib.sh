@@ -278,9 +278,39 @@ color15 = "$color15"
 EOF
 }
 
+# Escape a value for use in sed replacement (s|...|...|) so that
+# characters \, &, and the | delimiter are treated literally.
+ahr_theme_sed_escape() {
+  local value="$1"
+  local escaped
+  escaped="$value"
+  escaped="${escaped//\\/\\\\}"
+  escaped="${escaped//&/\\&}"
+  escaped="${escaped//|/\\|}"
+  printf '%s' "$escaped"
+}
+
+# XML-escape a value for insertion into fontconfig XML.
+# Disables patsub_replacement so & in the replacement string is literal.
+ahr_theme_xml_escape() {
+  local value="$1"
+  local escaped
+  # bash 5.2+ patsub_replacement would expand & in replacements;
+  # disable it so &, amp, lt, gt, quot, apos are all literal.
+  shopt -u patsub_replacement 2>/dev/null || true
+  escaped="$value"
+  escaped="${escaped//&/&amp;}"
+  escaped="${escaped//</&lt;}"
+  escaped="${escaped//>/&gt;}"
+  escaped="${escaped//\"/&quot;}"
+  escaped="${escaped//\'/&apos;}"
+  printf '%s' "$escaped"
+}
+
 ahr_theme_render_templates_for_dir() {
   local output_dir="$1"
   local colors_file="$output_dir/colors.toml"
+  local font_file="${AHR_THEME_STATE_DIR:-$HOME/.config/artix-hypr-remix/current}/font.toml"
   local sed_script template_dir template output_file
   local raw key value stripped rgb
 
@@ -288,6 +318,7 @@ ahr_theme_render_templates_for_dir() {
 
   sed_script="$(mktemp)"
 
+  # Read color variables from theme colors.toml
   while IFS= read -r raw || [[ -n "$raw" ]]; do
     raw="$(ahr_theme_trim "$raw")"
     [[ -n "$raw" ]] || continue
@@ -308,13 +339,51 @@ ahr_theme_render_templates_for_dir() {
     [[ -n "$key" ]] || continue
 
     stripped="${value#\#}"
-    printf 's|{{ %s }}|%s|g\n' "$key" "$value" >> "$sed_script"
-    printf 's|{{ %s_strip }}|%s|g\n' "$key" "$stripped" >> "$sed_script"
+    printf 's|{{ %s }}|%s|g\n' "$key" "$(ahr_theme_sed_escape "$value")" >> "$sed_script"
+    printf 's|{{ %s_strip }}|%s|g\n' "$key" "$(ahr_theme_sed_escape "$stripped")" >> "$sed_script"
 
     if rgb="$(ahr_theme_hex_to_rgb "$value" 2>/dev/null)"; then
       printf 's|{{ %s_rgb }}|%s|g\n' "$key" "$rgb" >> "$sed_script"
     fi
   done < "$colors_file"
+
+  # Overlay font variables from global font.toml.
+  # Create default font.toml on first use if it doesn't exist yet.
+  if [[ ! -f "$font_file" ]]; then
+    local font_dir
+    font_dir="$(dirname "$font_file")"
+    install -d -m 0755 "$font_dir"
+    cat > "$font_file" <<'FONTDEFAULTS'
+font_family = "JetBrainsMono Nerd Font"
+font_size = "10"
+font_style = "Regular"
+ui_font_family = "Liberation Sans"
+ui_font_size = "12"
+monospace_fallback = "monospace"
+FONTDEFAULTS
+  fi
+
+  while IFS= read -r raw || [[ -n "$raw" ]]; do
+    raw="$(ahr_theme_trim "$raw")"
+    [[ -n "$raw" ]] || continue
+    [[ "$raw" == \#* ]] && continue
+    [[ "$raw" == *=* ]] || continue
+
+    key="$(ahr_theme_trim "${raw%%=*}")"
+    value="$(ahr_theme_trim "${raw#*=}")"
+
+    if [[ "$value" == \"*\" ]]; then
+      value="${value#\"}"
+      value="${value%\"}"
+    elif [[ "$value" == "'"*"'" ]]; then
+      value="${value#"'"}"
+      value="${value%"'"}"
+    fi
+
+    [[ -n "$key" ]] || continue
+
+    printf 's|{{ %s }}|%s|g\n' "$key" "$(ahr_theme_sed_escape "$value")" >> "$sed_script"
+  done < "$font_file"
 
   while IFS= read -r template_dir; do
     [[ -d "$template_dir" ]] || continue
@@ -339,6 +408,126 @@ ahr_theme_set_templates() {
   local target_dir="${1:-$AHR_THEME_NEXT_THEME_DIR}"
   [[ -d "$target_dir" ]] || ahr_fail "Theme directory not found: $target_dir"
   ahr_theme_render_templates_for_dir "$target_dir"
+}
+
+# Generate fontconfig XML from the current font settings (or use defaults).
+# This reads the same font.toml that template rendering uses.
+ahr_theme_generate_fontconfig() {
+  local font_config_file="$AHR_THEME_STATE_DIR/font.toml"
+  local font_family="JetBrainsMono Nerd Font"
+  local ui_font_family="Liberation Sans"
+
+  if [[ -f "$font_config_file" ]]; then
+    local raw k v
+    while IFS= read -r raw || [[ -n "$raw" ]]; do
+      raw="$(ahr_theme_trim "$raw")"
+      [[ -n "$raw" ]] || continue
+      [[ "$raw" == \#* ]] && continue
+      [[ "$raw" == *=* ]] || continue
+      k="$(ahr_theme_trim "${raw%%=*}")"
+      v="$(ahr_theme_trim "${raw#*=}")"
+      v="${v#\"}"; v="${v%\"}"
+      case "$k" in
+        font_family) font_family="$v" ;;
+        ui_font_family) ui_font_family="$v" ;;
+      esac
+    done < "$font_config_file"
+  fi
+
+  local font_family_xml ui_font_family_xml
+  font_family_xml="$(ahr_theme_xml_escape "$font_family")"
+  ui_font_family_xml="$(ahr_theme_xml_escape "$ui_font_family")"
+
+  cat <<XML
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <match target="pattern">
+    <test name="family" qual="any">
+      <string>sans-serif</string>
+    </test>
+    <edit name="family" mode="assign" binding="strong">
+      <string>${ui_font_family_xml}</string>
+    </edit>
+  </match>
+
+  <match target="pattern">
+    <test name="family" qual="any">
+      <string>serif</string>
+    </test>
+    <edit name="family" mode="assign" binding="strong">
+      <string>Liberation Serif</string>
+    </edit>
+  </match>
+
+  <match target="pattern">
+    <test name="family" qual="any">
+      <string>monospace</string>
+    </test>
+    <edit name="family" mode="append" binding="same">
+      <string>${font_family_xml}</string>
+    </edit>
+  </match>
+
+  <alias>
+    <family>system-ui</family>
+    <prefer>
+      <family>${ui_font_family_xml}</family>
+    </prefer>
+  </alias>
+
+  <alias>
+    <family>ui-monospace</family>
+    <default>
+      <family>monospace</family>
+    </default>
+  </alias>
+
+  <alias>
+    <family>-apple-system</family>
+    <prefer>
+      <family>${ui_font_family_xml}</family>
+    </prefer>
+  </alias>
+
+  <alias>
+    <family>BlinkMacSystemFont</family>
+    <prefer>
+      <family>${ui_font_family_xml}</family>
+    </prefer>
+  </alias>
+
+  <alias>
+    <family>sans-serif</family>
+    <accept>
+      <family>Noto Color Emoji</family>
+    </accept>
+  </alias>
+
+  <alias>
+    <family>serif</family>
+    <accept>
+      <family>Noto Color Emoji</family>
+    </accept>
+  </alias>
+
+  <alias>
+    <family>monospace</family>
+    <accept>
+      <family>Noto Color Emoji</family>
+    </accept>
+  </alias>
+</fontconfig>
+XML
+}
+
+# Deploy generated fontconfig to ~/.config/fontconfig/fonts.conf
+ahr_theme_deploy_fontconfig() {
+  local target="$HOME/.config/fontconfig/fonts.conf"
+
+  install -d -m 0755 "$(dirname "$target")"
+  ahr_theme_generate_fontconfig > "$target"
+  ahr_theme_log "Fontconfig deployed: $target"
 }
 
 ahr_theme_apply_targets() {
@@ -669,6 +858,10 @@ ahr_theme_apply_current() {
 
   ahr_theme_apply_targets "$AHR_THEME_CURRENT_THEME_DIR"
   ahr_theme_apply_gnome "$AHR_THEME_CURRENT_THEME_DIR"
+
+  # Deploy fontconfig to match current font settings
+  ahr_theme_deploy_fontconfig
+
   ahr_theme_reload_services
 
   # Post-switch validation — warn but do not fail
@@ -813,6 +1006,31 @@ ahr_theme_status() {
     fi
   fi
 
+  # --- Font ---
+  local font_config_file="$AHR_THEME_STATE_DIR/font.toml"
+  local font_family="JetBrainsMono Nerd Font"
+  local font_size="10"
+  local ui_font_family="Liberation Sans"
+  if [[ -f "$font_config_file" ]]; then
+    local raw k v
+    while IFS= read -r raw || [[ -n "$raw" ]]; do
+      raw="$(ahr_theme_trim "$raw")"
+      [[ -n "$raw" ]] || continue
+      [[ "$raw" == \#* ]] && continue
+      [[ "$raw" == *=* ]] || continue
+      k="$(ahr_theme_trim "${raw%%=*}")"
+      v="$(ahr_theme_trim "${raw#*=}")"
+      v="${v#\"}"; v="${v%\"}"
+      case "$k" in
+        font_family) font_family="$v" ;;
+        font_size) font_size="$v" ;;
+        ui_font_family) ui_font_family="$v" ;;
+      esac
+    done < "$font_config_file"
+  fi
+  status_lines+=("Font: $font_family (size $font_size)")
+  status_lines+=("UI font: $ui_font_family")
+
   # --- Deployed configs ---
   local waybar_css="$HOME/.config/waybar/style.css"
   local mako_config="$HOME/.config/mako/config"
@@ -848,6 +1066,16 @@ ahr_theme_status() {
       status_lines+=("WARN: Ghostty config missing (ghostty installed): $ghostty_config")
       has_issues=true
     fi
+  fi
+
+  local fontconfig_target="$HOME/.config/fontconfig/fonts.conf"
+  if [[ -f "$fontconfig_target" && -s "$fontconfig_target" ]]; then
+    status_lines+=("Fontconfig: deployed ($(wc -l < "$fontconfig_target" | tr -d ' ') lines)")
+  elif [[ -f "$fontconfig_target" ]]; then
+    status_lines+=("WARN: Fontconfig empty: $fontconfig_target")
+    has_issues=true
+  else
+    status_lines+=("Fontconfig: (not deployed)")
   fi
 
   # --- Template rendering ---
