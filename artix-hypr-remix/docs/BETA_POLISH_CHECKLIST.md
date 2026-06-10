@@ -1246,3 +1246,43 @@ TODO markers for future inspection/testing:
 - `config/artix-hypr-remix/first-run.d/55-theme-default.sh`
 - `config/artix-hypr-remix/first-run.d/57-theme-omarchy-seed.sh`
 - `config/artix-hypr-remix/bin/ahr-repair`
+
+### Session 2026-06-10 (thirteenth pass): Fix theme seed not re-running on re-install
+
+**Root cause:** When `install.sh` runs on an already-configured Artix system, Phase 7
+re-creates the `first-run.mode` marker — but the first-run task-done markers in
+`~/.local/state/artix-hypr-remix/first-run.tasks/*.done` persist from the previous
+install. The first-run framework (`first-run.sh`) skips tasks that already have a
+`.done` stamp, so the theme seed scripts (`55-theme-default.sh`,
+`57-theme-omarchy-seed.sh`) never re-run. Additionally, `57-theme-omarchy-seed.sh`
+has its own `$SEED_DONE` guard (`theme-omarchy-seed.done`) that also blocks re-entry.
+
+**User impact:** After re-running `install.sh` on an existing AHR system, none of
+the five Omarchy themes (nord, catppuccin, tokyo-night, gruvbox, rose-pine) are
+seeded. The user has to download them manually from **Style → Install Omarchy
+Theme…** in the menu.
+
+**Fix:** In `lib/post_install.sh`, `create_first_run_mode_marker()` now clears the
+three done markers that gate the theme seed before creating the `first-run.mode`
+marker:
+- `first-run.tasks/55-theme-default.sh.done` — allows default-theme logic to re-run
+- `first-run.tasks/57-theme-omarchy-seed.sh.done` — allows the seed to re-run
+- `theme-omarchy-seed.done` — removes the seed script's own re-entry guard
+
+**Why this is safe:**
+- `55-theme-default.sh` is idempotent: checks if the preferred theme is available
+  and applies it; if not, seeds it or falls back to `fallback`
+- `57-theme-omarchy-seed.sh` skips themes already present in
+  `~/.config/artix-hypr-remix/themes/`, so re-running doesn't re-download them
+- `rm -f` is a no-op when the target files don't exist (fresh install)
+- The dry-run path reports what would be cleared without touching anything
+
+**Post-review fix (race window closed):** The initial implementation created
+`first-run.mode` *before* removing the stale `.done` files. If `first-run.sh`
+ran between the `touch` and the `rm -f`, it would see the old `.done` stamps,
+skip the seed tasks, and delete `first-run.mode` — defeating the fix. Corrected
+in the same session: `touch "$first_run_mode"` moved to *after* the `rm -f` so
+the stale markers are always gone before the mode flag appears.
+
+**Files changed:**
+- `lib/post_install.sh`

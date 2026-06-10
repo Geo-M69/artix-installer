@@ -52,16 +52,33 @@ create_first_run_mode_marker() {
   local target_home="$2"
   local dry_run="${3:-false}"
   local state_dir first_run_mode
+  local task_dir
 
   state_dir="$target_home/.local/state/artix-hypr-remix"
+  task_dir="$state_dir/first-run.tasks"
   first_run_mode="$state_dir/first-run.mode"
 
   if [[ "$dry_run" == "true" ]]; then
     info "Dry-run: would create first-run marker at $first_run_mode"
+    info "Dry-run: would clear theme seed first-run done markers"
     return 0
   fi
 
-  post_install_run_as_user "$target_user" install -d -m 0755 "$state_dir"
+  # Ensure the task dir exists — rm -f on a file inside a non-existent
+  # directory returns non-zero even with -f, which would abort the install
+  # under set -e.
+  post_install_run_as_user "$target_user" install -d -m 0755 "$state_dir" "$task_dir"
+
+  # Clear theme seed done markers before creating first-run.mode so the
+  # seed re-runs on re-install.  First-run task stamps persist across
+  # installs; without this, the first-run framework skips already-completed
+  # tasks and the five Omarchy themes never get seeded on subsequent
+  # installs.  The marker is created *after* cleanup so first-run.sh
+  # cannot race in and see stale .done files.
+  post_install_run_as_user "$target_user" rm -f "$task_dir/55-theme-default.sh.done" \
+    "$task_dir/57-theme-omarchy-seed.sh.done" \
+    "$state_dir/theme-omarchy-seed.done"
+
   post_install_run_as_user "$target_user" touch "$first_run_mode"
   info "Enabled first-run mode marker: $first_run_mode"
 }
