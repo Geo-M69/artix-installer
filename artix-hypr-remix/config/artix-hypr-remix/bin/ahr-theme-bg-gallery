@@ -76,7 +76,9 @@ _gallery_detect_backend() {
 # The caller must feed fzf tab-delimited lines where field 2 is the path.
 _gallery_fzf_preview() {
   if ahr_has_cmd chafa; then
-    printf 'chafa --symbols all --color-space din99d --dither none --size 80x40 {2} 2>/dev/null\n'
+    # fzf sets FZF_PREVIEW_COLUMNS and FZF_PREVIEW_LINES to the preview pane
+    # dimensions. Use them to size chafa precisely to the available area.
+    printf 'chafa --symbols all --color-space din99d --dither none --size "${FZF_PREVIEW_COLUMNS:-80}x${FZF_PREVIEW_LINES:-40}" {2} 2>/dev/null\n'
   elif ahr_has_cmd catimg; then
     printf 'catimg -w 40 {2} 2>/dev/null\n'
   elif ahr_has_cmd viu; then
@@ -355,6 +357,14 @@ main() {
 
   # --- Detect and run backend ---
   backend="$(_gallery_detect_backend)"
+
+  # Validate forced backends are actually available
+  if [[ "$backend" == "imv" ]] && ! ahr_has_cmd imv; then
+    ahr_fail "'imv' backend selected but imv is not installed (install with: sudo pacman -S imv)"
+  fi
+  if [[ "$backend" == "fzf" ]] && ! ahr_has_cmd fzf; then
+    ahr_fail "'fzf' backend selected but fzf is not installed (install with: sudo pacman -S fzf)"
+  fi
 
   # When called from a GUI menu (wofi/rofi/Walker) there is no TTY.
   # Re-exec in a terminal so the user can interact.
