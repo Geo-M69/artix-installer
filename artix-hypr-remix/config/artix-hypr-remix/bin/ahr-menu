@@ -671,7 +671,11 @@ show_style_menu() {
       "Theme Status") show_theme_status ;;
       "Theme Set") show_theme_set_menu ;;
       "Download Omarchy Theme...") show_omarchy_theme_menu ;;
-      "Background Gallery") run_command_now ahr-theme-bg-gallery ;;
+      "Background Gallery")
+        local bg_gallery_cmd
+        bg_gallery_cmd="$(resolve_command_path ahr-theme-bg-gallery)" || ahr_fail "Command not found: ahr-theme-bg-gallery"
+        run_terminal_command "$bg_gallery_cmd"
+        ;;
       "Background Picker") run_command_now ahr-theme-bg-switcher ;;
       "Install Background...") show_theme_background_install ;;
       "Background Next") run_command_now ahr-theme bg-next ;;

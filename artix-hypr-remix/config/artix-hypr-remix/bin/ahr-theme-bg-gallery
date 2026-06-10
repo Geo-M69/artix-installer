@@ -356,29 +356,25 @@ main() {
   # --- Detect and run backend ---
   backend="$(_gallery_detect_backend)"
 
-  # When called from a GUI menu (no TTY), terminal-backed modes need a terminal
-  # for the confirmation prompt or fallback list. Without this, the keybinding
-  # path looks like a no-op on systems without imv/chafa.
-  # The sentinel env var prevents infinite recursion.
-  if [[ -z "${AHR_BG_GALLERY_IN_TERM:-}" ]] && [[ "$backend" =~ ^(imv|tty)$ ]] && [[ ! -t 0 ]]; then
-    export AHR_BG_GALLERY_IN_TERM=1
-    local self="$SCRIPT_DIR/ahr-theme-bg-gallery"
-    if ahr_has_cmd foot; then
-      exec foot bash "$self" --backend "$backend"
-    elif ahr_has_cmd ghostty; then
-      exec ghostty -e bash "$self" --backend "$backend"
-    elif ahr_has_cmd kitty; then
-      exec kitty bash "$self" --backend "$backend"
-    elif ahr_has_cmd alacritty; then
-      exec alacritty -e bash "$self" --backend "$backend"
-    elif ahr_has_cmd xdg-terminal-exec; then
-      exec xdg-terminal-exec bash "$self" --backend "$backend"
+  # When called from a GUI menu (wofi/rofi/Walker) there is no TTY.
+  # Re-exec in a terminal so the user can interact.
+  # ahr_exec_terminal_app uses the user's terminal preference with a
+  # fallback chain (ghostty → foot → kitty → alacritty → xterm).
+  if [[ ! -t 0 ]]; then
+    if [[ "$backend" == "fzf" || "$backend" == "tty" ]]; then
+      # These backends absolutely require a TTY.
+      ahr_exec_terminal_app bash "$0" --backend "$backend"
+      ahr_fail "Background gallery needs a terminal for $backend mode"
+    elif [[ "$backend" == "imv" ]]; then
+      # imv opens a GUI window; the TTY is only needed for the confirmation
+      # prompt afterwards. Try to get a terminal but skip confirmation if
+      # none is available.
+      if ahr_has_cmd ghostty || ahr_has_cmd foot || ahr_has_cmd kitty \
+         || ahr_has_cmd alacritty || ahr_has_cmd xterm; then
+        ahr_exec_terminal_app bash "$0" --backend imv
+      fi
+      # Fall through: no TTY, imv will skip confirmation.
     fi
-    if [[ "$backend" == "tty" ]]; then
-      ahr_notify "Artix Hypr Remix" "Background gallery needs a terminal for the fallback list"
-      ahr_fail "No terminal found for background gallery fallback"
-    fi
-    # No terminal found for imv — fall through; _gallery_imv will skip the read prompt.
   fi
 
   case "$backend" in
