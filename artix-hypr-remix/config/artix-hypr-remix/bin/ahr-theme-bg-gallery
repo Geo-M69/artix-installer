@@ -1,0 +1,395 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ahr-theme-bg-gallery — visual thumbnail gallery for the current theme's backgrounds.
+#
+# Opens a browse-able visual gallery of all backgrounds available for the
+# currently active theme.  Supports three backends, tried in order:
+#
+#   1. fzf+chafa (TTY with image-capable terminal) — searchable list with
+#      live image preview in a split pane.
+#   2. imv library mode (GUI) — thumbnail grid window, enter = fullscreen,
+#      q to exit and select.
+#   3. fzf+catimg (TTY fallback) — ANSI-art preview for terminals without
+#      native image support.
+#
+# After the user picks a background it is applied immediately via ahr-theme bg-set.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AHR_THEME_LIB_PATH="${AHR_THEME_LIB_PATH:-$SCRIPT_DIR/ahr-theme-lib.sh}"
+AHR_LIB_PATH="${AHR_LIB_PATH:-$SCRIPT_DIR/ahr-lib.sh}"
+
+source "$AHR_THEME_LIB_PATH"
+source "$AHR_LIB_PATH"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr-theme-bg-gallery [--backend auto|fzf|imv|tty]
+
+Open a visual gallery browser for the current theme's backgrounds.
+
+Backends:
+  auto    Auto-detect the best available backend (default)
+  fzf     Terminal picker with live image preview (via chafa/catimg)
+  imv     GUI thumbnail grid via imv library mode
+  tty     Simple numbered list with optional ANSI preview
+
+Options:
+  -h, --help  Show this help
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Backend detection
+# ---------------------------------------------------------------------------
+
+_gallery_detect_backend() {
+  local backend="${AHR_BG_GALLERY_BACKEND:-auto}"
+
+  if [[ "$backend" != "auto" ]]; then
+    case "$backend" in
+      fzf|imv|tty) printf '%s\n' "$backend"; return 0 ;;
+      *) ahr_fail "Unknown gallery backend: $backend (try fzf, imv, or tty)" ;;
+    esac
+  fi
+
+  # fzf only works from a real TTY; never auto-select it when called from a
+  # GUI menu (wofi/rofi/Walker) where stdin/stdout are not terminals.
+  if [[ -t 0 && -t 1 ]] && ahr_has_cmd fzf && ( ahr_has_cmd chafa || ahr_has_cmd catimg || ahr_has_cmd viu ); then
+    printf 'fzf\n'; return 0
+  fi
+
+  # Prefer imv for a GUI gallery
+  if ahr_has_cmd imv; then
+    printf 'imv\n'; return 0
+  fi
+
+  # Fall back to plain TTY
+  printf 'tty\n'; return 0
+}
+
+# ---------------------------------------------------------------------------
+# Image preview helpers
+# ---------------------------------------------------------------------------
+
+# Print an fzf --preview command using the {2} placeholder for the file path.
+# The caller must feed fzf tab-delimited lines where field 2 is the path.
+_gallery_fzf_preview() {
+  if ahr_has_cmd chafa; then
+    printf 'chafa --symbols all --color-space din99d --dither none --size 80x40 {2} 2>/dev/null\n'
+  elif ahr_has_cmd catimg; then
+    printf 'catimg -w 40 {2} 2>/dev/null\n'
+  elif ahr_has_cmd viu; then
+    printf 'viu -w 40 -h 20 {2} 2>/dev/null\n'
+  else
+    printf 'printf "%%s: %%s\\n" "No preview" "$(basename {2})"\n'
+  fi
+}
+
+# Render an image in the terminal (used by the TTY backend).
+# Takes a single file path as argument, dispatches to the first available tool.
+_gallery_render_preview() {
+  local img="$1"
+  if ahr_has_cmd chafa; then
+    chafa --symbols all --color-space din99d --dither none "$img" 2>/dev/null
+  elif ahr_has_cmd catimg; then
+    catimg -w "$(($(tput cols 2>/dev/null || echo 80) / 3))" "$img" 2>/dev/null
+  elif ahr_has_cmd viu; then
+    viu -w 40 -h 20 "$img" 2>/dev/null
+  else
+    printf 'No image preview available (install chafa, catimg, or viu)\n'
+    printf '\n  Name: %s\n  Size: %s\n' "$(basename "$img")" "$(du -h "$img" | cut -f1)"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Display-name formatting (mirrors bg-switcher)
+# ---------------------------------------------------------------------------
+
+_bg_display_name() {
+  local name
+  name="$(basename "$1")"
+  name="$(printf '%s' "$name" | sed -E 's/^[0-9]{1,2}[-_ ]?//; s/^-+//')"
+  name="${name%.jpg}";   name="${name%.jpeg}";  name="${name%.png}"
+  name="${name%.gif}";   name="${name%.bmp}";   name="${name%.webp}"
+  name="${name%.JPG}";   name="${name%.JPEG}";  name="${name%.PNG}"
+  name="${name%.GIF}";   name="${name%.BMP}";   name="${name%.WEBP}"
+  printf '%s' "$name" | sed -E 's/[-_]/ /g; s/(^| )([a-z])/\1\u\2/g'
+}
+
+# ---------------------------------------------------------------------------
+# fzf backend — searchable list with live image preview
+# ---------------------------------------------------------------------------
+
+_gallery_fzf() {
+  local -n _bgs="$1"
+  local current_bg="$2"
+  local theme_display="$3"
+  local preview_cmd
+  local choice
+  local path
+  local -a fzf_args=()
+
+  preview_cmd="$(_gallery_fzf_preview)"
+
+  fzf_args=(
+    --prompt="Backgrounds: $theme_display > "
+    --preview="$preview_cmd"
+    --preview-window="right:40%:wrap"
+    --layout=reverse
+    --height=80%
+    --border
+    --cycle
+    --inline-info
+  )
+
+  # Tab-delimited list: display name, then file path.
+  # fzf --with-nth=1 shows only the display name; {2} in --preview is the path.
+  # A temp file avoids NUL-stripping from $() and handles special chars.
+  local tmpfile
+  tmpfile="$(mktemp)"
+
+  for bg in "${_bgs[@]}"; do
+    display="$(_bg_display_name "$bg")"
+    if [[ "$bg" == "$current_bg" ]]; then
+      printf '✓ %s\t%s\n' "$display" "$bg" >> "$tmpfile"
+    else
+      printf '  %s\t%s\n' "$display" "$bg" >> "$tmpfile"
+    fi
+  done
+
+  # Run fzf with the temp file as input
+  choice="$(fzf "${fzf_args[@]}" --delimiter='\t' --with-nth=1 < "$tmpfile" 2>/dev/null || true)"
+
+  if [[ -z "$choice" ]]; then
+    rm -f "$tmpfile"
+    return 1
+  fi
+
+  # Extract path (second tab-delimited field).  This is safe: fzf outputs
+  # the raw line it read; bash can split on $'\t' because wallpaper display
+  # names never contain tab characters.
+  path="${choice#*$'\t'}"
+
+  if [[ -f "$path" ]]; then
+    rm -f "$tmpfile"
+    ahr_theme_log "Selected: $(_bg_display_name "$path")"
+    ahr_theme_bg_set "$path"
+    return 0
+  fi
+
+  rm -f "$tmpfile"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# imv backend — GUI thumbnail grid
+# ---------------------------------------------------------------------------
+
+_gallery_imv() {
+  local -n _bgs="$1"
+  local current_bg="$2"
+  local theme_display="$3"
+  local start_at=""
+  local choice
+  local i
+
+  # If we know the current background, start imv there
+  if [[ -n "$current_bg" ]]; then
+    start_at="$current_bg"
+  fi
+
+  # Build a temp file list for imv (handles filenames with spaces)
+  local tmpfile
+  tmpfile="$(mktemp)"
+
+  for bg in "${_bgs[@]}"; do
+    printf '%s\n' "$bg" >> "$tmpfile"
+  done
+
+  ahr_theme_log "Opening gallery for $theme_display in imv…"
+  ahr_theme_log "  Browse with arrow keys / click"
+  ahr_theme_log "  Press q to quit and pick"
+
+  if [[ -n "$start_at" ]]; then
+    imv -l -s "$start_at" -f "$tmpfile" 2>/dev/null || true
+  else
+    imv -l -f "$tmpfile" 2>/dev/null || true
+  fi
+  rm -f "$tmpfile"
+
+  # When launched from a GUI menu (wofi/rofi/Walker) there is no terminal,
+  # so the read prompt below would be invisible.  Skip confirmation and just
+  # return; the user can use bg-switcher for precise selection.
+  if [[ ! -t 0 ]]; then
+    ahr_theme_log "(no terminal — run 'ahr theme bg-switcher' for precise selection)"
+    return 1
+  fi
+
+  # After imv closes, present the numbered list for confirmation
+  printf '\n'
+  ahr_theme_log "--- Gallery closed ---"
+  ahr_theme_log "Select a background to apply (or 0 to cancel):"
+  printf '\n'
+
+  for i in "${!_bgs[@]}"; do
+    display="$(_bg_display_name "${_bgs[$i]}")"
+    marker=" "
+    [[ "${_bgs[$i]}" == "$current_bg" ]] && marker="✓"
+    printf '  %2d) %s %s\n' "$((i + 1))" "$marker" "$display"
+  done
+
+  printf '\n  0) Cancel\n> '
+  read -r choice || true
+
+  if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#_bgs[@]} )); then
+    ahr_theme_bg_set "${_bgs[$((choice - 1))]}"
+    return 0
+  fi
+
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# TTY backend — enhanced numbered list with optional ANSI preview
+# ---------------------------------------------------------------------------
+
+_gallery_tty() {
+  local -n _bgs="$1"
+  local current_bg="$2"
+  local theme_display="$3"
+  local i choice preview_num confirm
+
+  printf '\nBackgrounds for %s:\n' "$theme_display"
+
+  # If a terminal image tool is available, offer to show a quick preview
+  if ahr_has_cmd chafa || ahr_has_cmd catimg || ahr_has_cmd viu; then
+    for i in "${!_bgs[@]}"; do
+      display="$(_bg_display_name "${_bgs[$i]}")"
+      marker=" "
+      [[ "${_bgs[$i]}" == "$current_bg" ]] && marker="✓"
+      printf '  %2d) %s %s\n' "$((i + 1))" "$marker" "$display"
+    done
+
+    printf '\n  p) Preview an image\n'
+    printf '  0) Cancel\n> '
+    read -r choice || true
+
+    if [[ "$choice" == "p" || "$choice" == "P" ]]; then
+      printf '\nPreview which number? '
+      read -r preview_num || true
+      if [[ "$preview_num" =~ ^[0-9]+$ ]] && (( preview_num >= 1 && preview_num <= ${#_bgs[@]} )); then
+        printf '\n'
+        _gallery_render_preview "${_bgs[$((preview_num - 1))]}"
+        printf '\nApply this background? [y/N] '
+        read -r confirm || true
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+          ahr_theme_bg_set "${_bgs[$((preview_num - 1))]}"
+          return 0
+        fi
+      fi
+      return 1
+    elif [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#_bgs[@]} )); then
+      ahr_theme_bg_set "${_bgs[$((choice - 1))]}"
+      return 0
+    fi
+  else
+    # Plain numbered list when no image tool is available
+    for i in "${!_bgs[@]}"; do
+      display="$(_bg_display_name "${_bgs[$i]}")"
+      marker=" "
+      [[ "${_bgs[$i]}" == "$current_bg" ]] && marker="✓"
+      printf '  %2d) %s %s\n' "$((i + 1))" "$marker" "$display"
+    done
+
+    printf '\n  0) Cancel\n> '
+    read -r choice || true
+
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#_bgs[@]} )); then
+      ahr_theme_bg_set "${_bgs[$((choice - 1))]}"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+main() {
+  local backend=""
+  local theme_name theme_display current_bg
+  local -a backgrounds=()
+
+  # Parse arguments
+  while (( $# > 0 )); do
+    case "$1" in
+      -h|--help) usage; exit 0 ;;
+      --backend)
+        shift; backend="${1:-}"; [[ -n "$backend" ]] || ahr_fail "--backend requires a value"
+        ;;
+      -*) ahr_fail "Unknown option: $1" ;;
+      *) ahr_fail "Unexpected argument: $1 (usage: ahr-theme-bg-gallery [--backend fzf|imv|tty])" ;;
+    esac
+    shift
+  done
+
+  # Export backend override for detection
+  if [[ -n "$backend" ]]; then
+    export AHR_BG_GALLERY_BACKEND="$backend"
+  fi
+
+  # --- Resolve current theme ---
+  theme_name="$(ahr_theme_current_raw 2>/dev/null || true)"
+  [[ -n "$theme_name" ]] || ahr_fail "No current theme set — cannot browse backgrounds"
+  theme_display="$(ahr_theme_titleize "$theme_name")"
+
+  # --- Collect backgrounds ---
+  if ! ahr_theme_collect_backgrounds "$theme_name" backgrounds; then
+    ahr_fail "No backgrounds found for theme: $theme_display"
+  fi
+
+  current_bg="$(ahr_theme_current_background 2>/dev/null || true)"
+
+  # --- Detect and run backend ---
+  backend="$(_gallery_detect_backend)"
+
+  # When called from a GUI menu (no TTY) with imv as the best backend,
+  # re-exec in a terminal so the user sees the confirmation prompt.
+  # The sentinel env var prevents infinite recursion.
+  if [[ -z "${AHR_BG_GALLERY_IN_TERM:-}" ]] && [[ "$backend" == "imv" ]] && [[ ! -t 0 ]]; then
+    export AHR_BG_GALLERY_IN_TERM=1
+    local self="$SCRIPT_DIR/ahr-theme-bg-gallery"
+    if ahr_has_cmd foot; then
+      exec foot bash "$self" --backend imv
+    elif ahr_has_cmd ghostty; then
+      exec ghostty -e bash "$self" --backend imv
+    elif ahr_has_cmd kitty; then
+      exec kitty bash "$self" --backend imv
+    elif ahr_has_cmd alacritty; then
+      exec alacritty -e bash "$self" --backend imv
+    elif ahr_has_cmd xdg-terminal-exec; then
+      exec xdg-terminal-exec bash "$self" --backend imv
+    fi
+    # No terminal found — fall through; _gallery_imv will skip the read prompt.
+  fi
+
+  case "$backend" in
+    fzf)
+      _gallery_fzf backgrounds "$current_bg" "$theme_display" && exit 0
+      ahr_theme_log "No selection made."
+      ;;
+    imv)
+      _gallery_imv backgrounds "$current_bg" "$theme_display" && exit 0
+      ahr_theme_log "No selection made."
+      ;;
+    tty)
+      _gallery_tty backgrounds "$current_bg" "$theme_display" && exit 0
+      ahr_theme_log "No selection made."
+      ;;
+  esac
+}
+
+main "$@"

@@ -28,6 +28,9 @@ declare -a commands=(
   ahr-theme-refresh
   ahr-theme-bg-next
   ahr-theme-bg-set
+  ahr-theme-bg-switcher
+  ahr-theme-bg-install
+  ahr-theme-bg-gallery
   ahr-theme-set-templates
   ahr-theme-colors-from-alacritty
   ahr-launch-terminal

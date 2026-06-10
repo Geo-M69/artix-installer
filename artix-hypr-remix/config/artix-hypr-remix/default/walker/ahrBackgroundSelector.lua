@@ -6,9 +6,11 @@
 -- Or by prefixing with "/" in walker and selecting "AHR Backgrounds".
 --
 Name = "ahrBackgroundSelector"
-NamePretty = "AHR Backgrounds"
-HideFromProviderlist = true
+NamePretty = "AHR Backgrounds  🖼"
+HideFromProviderlist = false
 SearchName = true
+SearchContent = true
+SearchContentFields = {"Text"}
 
 local function shell_escape(s)
   return "'" .. s:gsub("'", "'\\''") .. "'"

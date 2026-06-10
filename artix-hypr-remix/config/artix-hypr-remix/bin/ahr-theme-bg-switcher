@@ -159,22 +159,107 @@ main() {
   menu_lines+=("")
   menu_lines+=("Back")
 
-  # --- Present menu ---
+  # --- Detect backend ---
   backend="$(_bg_menu_backend 2>/dev/null || printf 'tty')"
 
+  # --- Walker backend: open the AHR Backgrounds provider directly ---
+  if [[ "$backend" == "walker" ]]; then
+    # Check if the AHR Backgrounds plugin is deployed
+    local plugin_path="$AHR_THEME_FRAMEWORK_ROOT/default/walker/ahrBackgroundSelector.lua"
+    if [[ -f "$plugin_path" ]]; then
+      # Offer the visual gallery path first via the menu, with rich preview
+      # Build a two-section menu: gallery option + individual backgrounds
+      local -a walker_entries=()
+      walker_entries+=("🖼  Open Visual Gallery  (browse with previews)")
+      walker_entries+=("")
+      walker_entries+=("${menu_lines[@]}")
+
+      choice="$(_bg_dmenu "$backend" "Background: $theme_display" "${walker_entries[@]}")"
+
+      if [[ "$choice" == "🖼  Open Visual Gallery  (browse with previews)" ]]; then
+        # Launch the gallery script
+        exec "$SCRIPT_DIR/ahr-theme-bg-gallery"
+      fi
+    else
+      choice="$(_bg_dmenu "$backend" "Background: $theme_display" "${menu_lines[@]}")"
+    fi
+
+    [[ -z "$choice" || "$choice" == "Back" ]] && return 0
+
+    # --- Resolve display name → file path ---
+    local raw_choice="${choice#✓ }"
+    raw_choice="${raw_choice#  }"
+    target="${path_by_display[$raw_choice]:-}"
+
+    if [[ -n "$target" && -f "$target" ]]; then
+      exec "$SCRIPT_DIR/ahr-theme" bg-set "$target"
+    fi
+
+    # Fallback: user typed or pasted a raw file path
+    if [[ -f "$raw_choice" ]]; then
+      exec "$SCRIPT_DIR/ahr-theme" bg-set "$raw_choice"
+    fi
+
+    ahr_theme_warn "Could not match background selection: $choice"
+    return 1
+  fi
+
+  # --- TTY backend: offer gallery if available, or plain list ---
   if [[ "$backend" == "tty" ]]; then
-    printf '\nBackgrounds for %s:\n' "$theme_display"
-    choice="$(_bg_tty_menu backgrounds "$current_bg" || true)"
-    # _bg_tty_menu returns a raw file path on success, empty on cancel
-    if [[ -n "$choice" && -f "$choice" ]]; then
-      exec "$SCRIPT_DIR/ahr-theme" bg-set "$choice"
+    # Check if the gallery script would work (fzf+chafa or imv available)
+    if ahr_has_cmd fzf && ( ahr_has_cmd chafa || ahr_has_cmd catimg || ahr_has_cmd viu ); then
+      printf '\nBackgrounds for %s:\n' "$theme_display"
+      printf '  g) 🖼  Open Visual Gallery (fzf preview)\n'
+      printf '  l) 📋  Show list\n'
+      printf '  0) Back\n'
+      printf '> '
+      read -r choice || true
+      if [[ "$choice" == "g" || "$choice" == "G" ]]; then
+        exec "$SCRIPT_DIR/ahr-theme-bg-gallery"
+      elif [[ "$choice" == "l" || "$choice" == "L" ]]; then
+        choice="$(_bg_tty_menu backgrounds "$current_bg" || true)"
+        if [[ -n "$choice" && -f "$choice" ]]; then
+          exec "$SCRIPT_DIR/ahr-theme" bg-set "$choice"
+        fi
+      fi
+    elif ahr_has_cmd imv; then
+      printf '\nBackgrounds for %s:\n' "$theme_display"
+      printf '  g) 🖼  Open Visual Gallery (imv)\n'
+      printf '  l) 📋  Show list\n'
+      printf '  0) Back\n'
+      printf '> '
+      read -r choice || true
+      if [[ "$choice" == "g" || "$choice" == "G" ]]; then
+        exec "$SCRIPT_DIR/ahr-theme-bg-gallery"
+      elif [[ "$choice" == "l" || "$choice" == "L" ]]; then
+        choice="$(_bg_tty_menu backgrounds "$current_bg" || true)"
+        if [[ -n "$choice" && -f "$choice" ]]; then
+          exec "$SCRIPT_DIR/ahr-theme" bg-set "$choice"
+        fi
+      fi
+    else
+      printf '\nBackgrounds for %s:\n' "$theme_display"
+      choice="$(_bg_tty_menu backgrounds "$current_bg" || true)"
+      if [[ -n "$choice" && -f "$choice" ]]; then
+        exec "$SCRIPT_DIR/ahr-theme" bg-set "$choice"
+      fi
     fi
     return 0
   fi
 
-  choice="$(_bg_dmenu "$backend" "Background: $theme_display" "${menu_lines[@]}")"
+  # --- wofi/rofi backend: offer gallery as first option ---
+  local -a rofi_entries=()
+  rofi_entries+=("🖼  Open Visual Gallery")
+  rofi_entries+=("")
+  rofi_entries+=("${menu_lines[@]}")
+
+  choice="$(_bg_dmenu "$backend" "Background: $theme_display" "${rofi_entries[@]}")"
 
   [[ -z "$choice" || "$choice" == "Back" ]] && return 0
+
+  if [[ "$choice" == "🖼  Open Visual Gallery" ]]; then
+    exec "$SCRIPT_DIR/ahr-theme-bg-gallery"
+  fi
 
   # --- Resolve display name → file path ---
   local raw_choice="${choice#✓ }"
@@ -185,7 +270,7 @@ main() {
     exec "$SCRIPT_DIR/ahr-theme" bg-set "$target"
   fi
 
-  # Fallback: user typed or pasted a raw file path (walker/wofi/rofi allow this)
+  # Fallback: user typed or pasted a raw file path
   if [[ -f "$raw_choice" ]]; then
     exec "$SCRIPT_DIR/ahr-theme" bg-set "$raw_choice"
   fi
