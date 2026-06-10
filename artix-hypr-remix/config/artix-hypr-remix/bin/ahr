@@ -64,6 +64,7 @@ Commands:
   edit-config         Open editor for a config file
   system-suspend      Suspend to RAM
   system-hibernate    Hibernate to disk
+  font                Font engine command group
   list                Show command list
   help                Show this help
 EOF
@@ -114,6 +115,7 @@ dispatch() {
     edit-config) exec_ahr_command ahr-edit-config "$@" ;;    
     system-suspend) exec_ahr_command ahr-system-suspend "$@" ;;
     system-hibernate) exec_ahr_command ahr-system-hibernate "$@" ;;
+    font) exec_ahr_command ahr-font "$@" ;;
     list)
       printf '%s\n' \
         "ahr-menu" \
@@ -155,12 +157,17 @@ dispatch() {
         "ahr-edit-config" \
         "ahr-system-suspend" \
         "ahr-system-hibernate" \
-        "ahr-doctor"
+        "ahr-doctor" \
+        "ahr-font"
       ;;
     help|-h|--help|"")
       usage
       ;;
     *)
+      # Try as a generic ahr-<command> before giving up
+      if [[ -x "$SCRIPT_DIR/ahr-$subcommand" ]] || command -v "ahr-$subcommand" >/dev/null 2>&1; then
+        exec_ahr_command "ahr-$subcommand" "$@"
+      fi
       printf 'Unknown command: %s\n\n' "$subcommand" >&2
       usage >&2
       exit 1
