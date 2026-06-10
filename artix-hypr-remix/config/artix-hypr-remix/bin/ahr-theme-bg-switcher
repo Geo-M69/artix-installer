@@ -206,25 +206,10 @@ main() {
 
   # --- TTY backend: offer gallery if available, or plain list ---
   if [[ "$backend" == "tty" ]]; then
-    # Check if the gallery script would work (fzf+chafa or imv available)
-    if ahr_has_cmd fzf && ( ahr_has_cmd chafa || ahr_has_cmd catimg || ahr_has_cmd viu ); then
+    # Check if the gallery script would work (fzf+chafa)
+    if ahr_has_cmd fzf && ahr_has_cmd chafa; then
       printf '\nBackgrounds for %s:\n' "$theme_display"
       printf '  g) 🖼  Open Visual Gallery (fzf preview)\n'
-      printf '  l) 📋  Show list\n'
-      printf '  0) Back\n'
-      printf '> '
-      read -r choice || true
-      if [[ "$choice" == "g" || "$choice" == "G" ]]; then
-        exec "$SCRIPT_DIR/ahr-theme-bg-gallery"
-      elif [[ "$choice" == "l" || "$choice" == "L" ]]; then
-        choice="$(_bg_tty_menu backgrounds "$current_bg" || true)"
-        if [[ -n "$choice" && -f "$choice" ]]; then
-          exec "$SCRIPT_DIR/ahr-theme" bg-set "$choice"
-        fi
-      fi
-    elif ahr_has_cmd imv; then
-      printf '\nBackgrounds for %s:\n' "$theme_display"
-      printf '  g) 🖼  Open Visual Gallery (imv)\n'
       printf '  l) 📋  Show list\n'
       printf '  0) Back\n'
       printf '> '

@@ -10,6 +10,7 @@ bat
 eza
 fd
 fzf
+chafa
 ripgrep
 zoxide
 plocate
