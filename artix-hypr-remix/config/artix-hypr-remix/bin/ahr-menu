@@ -674,7 +674,7 @@ show_style_menu() {
       "Background Gallery")
         local bg_gallery_cmd
         bg_gallery_cmd="$(resolve_command_path ahr-theme-bg-gallery)" || ahr_fail "Command not found: ahr-theme-bg-gallery"
-        run_terminal_command "$bg_gallery_cmd"
+        run_terminal_command "$bg_gallery_cmd" --backend fzf
         ;;
       "Background Picker") run_command_now ahr-theme-bg-switcher ;;
       "Install Background...") show_theme_background_install ;;

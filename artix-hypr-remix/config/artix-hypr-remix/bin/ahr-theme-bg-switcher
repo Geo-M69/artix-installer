@@ -177,8 +177,7 @@ main() {
       choice="$(_bg_dmenu "$backend" "Background: $theme_display" "${walker_entries[@]}")"
 
       if [[ "$choice" == "🖼  Open Visual Gallery  (browse with previews)" ]]; then
-        # Launch the gallery script
-        exec "$SCRIPT_DIR/ahr-theme-bg-gallery"
+        exec "$SCRIPT_DIR/ahr-theme-bg-gallery" --backend fzf
       fi
     else
       choice="$(_bg_dmenu "$backend" "Background: $theme_display" "${menu_lines[@]}")"
