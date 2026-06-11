@@ -1291,18 +1291,18 @@ the stale markers are always gone before the mode flag appears.
 
 **What was done:**
 
-AHR's Hyprland config had zero `windowrulev2` directives. This caused tiles to
+AHR's Hyprland config had zero `windowrule` directives. This caused tiles to
 allocate the correct frame size, but app content (especially Electron apps like
 Discord) didn't adapt to fill the space.
 
 Added a comprehensive window rules section to `config/hypr/hyprland.conf`:
 
-- **`nomaxsize` for Electron apps** (Discord, Vesktop, Slack, Telegram, Zoom)
+- **`no_max_size` for Electron apps** (Discord, Vesktop, Slack, Telegram, Zoom)
   — removes the self-imposed maximum size constraint that prevents these apps
   from filling their allocated tile in split layouts.
-- **`nomaxsize` for browsers** (Firefox, Zen, Chrome, Chromium) — same fix
+- **`no_max_size` for browsers** (Firefox, Zen, Chrome, Chromium) — same fix
   for browser content when tiled.
-- **`nomaxsize` for terminals** (Wezterm, Alacritty, Kitty) — removes max-size
+- **`no_max_size` for terminals** (Wezterm, Alacritty, Kitty) — removes max-size
   limits for third-party terminals that don't use Ghostty.
 - **`float` + `center` for dialogs** (portal file picker, pavucontrol,
   blueman-manager, nm-connection-editor, GNOME Calculator) — settings
