@@ -215,7 +215,7 @@ main() {
       printf '> '
       read -r choice || true
       if [[ "$choice" == "g" || "$choice" == "G" ]]; then
-        exec "$SCRIPT_DIR/ahr-theme-bg-gallery"
+        exec "$SCRIPT_DIR/ahr-theme-bg-gallery" --backend fzf
       elif [[ "$choice" == "l" || "$choice" == "L" ]]; then
         choice="$(_bg_tty_menu backgrounds "$current_bg" || true)"
         if [[ -n "$choice" && -f "$choice" ]]; then
@@ -232,10 +232,12 @@ main() {
     return 0
   fi
 
-  # --- wofi/rofi backend: offer gallery as first option ---
+  # --- wofi/rofi backend: offer gallery only when fzf is available ---
   local -a rofi_entries=()
-  rofi_entries+=("🖼  Open Visual Gallery")
-  rofi_entries+=("")
+  if ahr_has_cmd fzf; then
+    rofi_entries+=("🖼  Open Visual Gallery")
+    rofi_entries+=("")
+  fi
   rofi_entries+=("${menu_lines[@]}")
 
   choice="$(_bg_dmenu "$backend" "Background: $theme_display" "${rofi_entries[@]}")"
@@ -243,7 +245,7 @@ main() {
   [[ -z "$choice" || "$choice" == "Back" ]] && return 0
 
   if [[ "$choice" == "🖼  Open Visual Gallery" ]]; then
-    exec "$SCRIPT_DIR/ahr-theme-bg-gallery"
+    exec "$SCRIPT_DIR/ahr-theme-bg-gallery" --backend fzf
   fi
 
   # --- Resolve display name → file path ---

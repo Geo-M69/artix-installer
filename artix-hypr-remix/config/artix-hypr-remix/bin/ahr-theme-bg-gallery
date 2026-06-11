@@ -291,11 +291,20 @@ main() {
   fi
 
   # When called from a GUI menu (wofi/rofi/Walker) there is no TTY.
-  # Re-exec in a terminal so the user can interact.  Do NOT force a
-  # backend — the new session has a real TTY and its auto-detection will
-  # pick fzf if available.
+  # Re-exec in a terminal so the user can interact.  Check for fzf now
+  # (command -v works without a TTY) and pass --backend explicitly so
+  # the new terminal instance doesn't have to re-detect — some terminal
+  # launch methods (e.g. bash -lc) may have a different PATH or env.
+  # Preserve an explicit --backend tty request; only force fzf when
+  # the user didn't already choose tty and fzf is available.
   if [[ ! -t 0 ]]; then
-    ahr_exec_terminal_app bash "$0"
+    if [[ "${AHR_BG_GALLERY_BACKEND:-auto}" == "tty" ]]; then
+      ahr_exec_terminal_app bash "$0" --backend tty
+    elif ahr_has_cmd fzf; then
+      ahr_exec_terminal_app bash "$0" --backend fzf
+    else
+      ahr_exec_terminal_app bash "$0"
+    fi
     ahr_fail "Background gallery needs a terminal — install ghostty, foot, kitty, or alacritty"
   fi
 
