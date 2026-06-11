@@ -6,8 +6,9 @@ set -euo pipefail
 # Opens a browse-able visual gallery of all backgrounds available for the
 # currently active theme.  Supports two backends:
 #
-#   1. fzf+chafa (TTY with image-capable terminal) — searchable list with
-#      live image preview in a split pane.
+#   1. fzf — searchable fuzzy-finder list with optional live image preview
+#      (via chafa/catimg/viu) in a split pane.  Preview degrades gracefully
+#      to a "No preview" fallback when no image tool is installed.
 #   2. tty — simple numbered list with optional ANSI-art preview (via chafa).
 #
 # After the user picks a background it is applied immediately via ahr-theme bg-set.
@@ -27,7 +28,7 @@ Open a visual gallery browser for the current theme's backgrounds.
 
 Backends:
   auto    Auto-detect the best available backend (default)
-  fzf     Terminal picker with live image preview (via chafa)
+  fzf     Terminal fuzzy-finder with optional image preview
   tty     Simple numbered list with optional ANSI preview
 
 Options:
@@ -49,9 +50,10 @@ _gallery_detect_backend() {
     esac
   fi
 
-  # fzf only works from a real TTY; never auto-select it when called from a
-  # GUI menu (wofi/rofi/Walker) where stdin/stdout are not terminals.
-  if [[ -t 0 && -t 1 ]] && ahr_has_cmd fzf && ahr_has_cmd chafa; then
+  # Prefer fzf whenever it's available (the preview gracefully degrades if
+  # chafa/catimg/viu are missing).  Only fall back to the TTY list when fzf
+  # is not installed at all.
+  if [[ -t 0 && -t 1 ]] && ahr_has_cmd fzf; then
     printf 'fzf\n'; return 0
   fi
 
@@ -289,15 +291,11 @@ main() {
   fi
 
   # When called from a GUI menu (wofi/rofi/Walker) there is no TTY.
-  # Re-exec in a terminal so the user can interact.
-  # ahr_exec_terminal_app uses the user's terminal preference with a
-  # fallback chain (ghostty → foot → kitty → alacritty → xterm).
-  # When called from a GUI menu (wofi/rofi/Walker) there is no TTY.
-  # Re-exec in a terminal so the user can interact.
-  # ahr_exec_terminal_app uses the user's terminal preference with a
-  # fallback chain (ghostty → foot → kitty → alacritty → xterm).
+  # Re-exec in a terminal so the user can interact.  Do NOT force a
+  # backend — the new session has a real TTY and its auto-detection will
+  # pick fzf if available.
   if [[ ! -t 0 ]]; then
-    ahr_exec_terminal_app bash "$0" --backend "$backend"
+    ahr_exec_terminal_app bash "$0"
     ahr_fail "Background gallery needs a terminal — install ghostty, foot, kitty, or alacritty"
   fi
 

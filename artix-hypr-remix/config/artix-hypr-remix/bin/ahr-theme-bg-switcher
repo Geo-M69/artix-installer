@@ -206,10 +206,10 @@ main() {
 
   # --- TTY backend: offer gallery if available, or plain list ---
   if [[ "$backend" == "tty" ]]; then
-    # Check if the gallery script would work (fzf+chafa)
-    if ahr_has_cmd fzf && ahr_has_cmd chafa; then
+    # Check if the gallery script is available (fzf only — preview is optional)
+    if ahr_has_cmd fzf; then
       printf '\nBackgrounds for %s:\n' "$theme_display"
-      printf '  g) 🖼  Open Visual Gallery (fzf preview)\n'
+      printf '  g) 🖼  Open Visual Gallery (fzf)\n'
       printf '  l) 📋  Show list\n'
       printf '  0) Back\n'
       printf '> '
