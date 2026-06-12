@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Report nightlight state for the Waybar indicator.
+# Prefers live process+temperature when available.
+# Falls back to the state file when hyprsunset isn't running
+# (e.g. during early startup before ahr-restore-nightlight completes,
+# or after a crash) so the indicator still reflects the desired state.
 set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
@@ -6,17 +11,26 @@ source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 state_file="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles/nightlight"
 
 nightlight=false
-# Prefer live state: if hyprsunset isn't running, nightlight is off.
+
 if pgrep -x hyprsunset >/dev/null 2>&1; then
+  # Process is running — query actual temperature
   if ahr_has_cmd hyprctl; then
     current_temp="$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' || true)"
     if [[ -n "$current_temp" && "$current_temp" -lt 6000 ]]; then
+      nightlight=true
+    elif [[ -z "$current_temp" && -f "$state_file" ]]; then
+      # hyprctl returned no temperature yet (early startup/IPC not ready)
+      # but state file says ON — trust desired state
       nightlight=true
     fi
   elif [[ -f "$state_file" ]]; then
     # hyprctl unavailable (e.g. early startup) — trust state file as best-effort
     nightlight=true
   fi
+elif [[ -f "$state_file" ]]; then
+  # Process not running but state file says ON — treat as active.
+  # ahr-restore-nightlight will start it shortly, or the next click will restore it.
+  nightlight=true
 fi
 
 if [[ "$nightlight" == "true" ]]; then

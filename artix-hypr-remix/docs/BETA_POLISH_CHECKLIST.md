@@ -105,7 +105,7 @@ Use these classifications for differences:
 | Capture: OCR/text extraction | Missing | Optional polish | — | `omarchy-capture-text-extraction` | Requires `tesseract` and language data; add after screenshot pipeline is stable. Make dependency optional. |
 | Power management | Present but rough | Artix/OpenRC adaptation | laptop profile, `ahr-system-suspend`, `ahr-system-hibernate`, `power-profiles-daemon` package | Omarchy Power Profile/System Sleep | `loginctl` portability policy resolved; power profile UI testing remains. |
 | Keybindings | Present | Required parity | `config/hypr/hyprland.conf`, `keybinds.lua`, `ahr-menu-keybindings` | Omarchy bindings and keybinding viewer | Keep viewer labels synced with runtime `.conf`. |
-| Nightlight toggle | Present | Optional polish | `ahr-toggle-nightlight`, `ahr-waybar-nightlight-status`, `ahr-menu` Toggle menu, `config/waybar/config.jsonc` nightlight-indicator, `config/hypr/hyprland.conf` binding | `omarchy-toggle-nightlight` (hyprsunset 4000K/6500K) | Implemented: toggles hyprsunset 4000K/6500K, Toggle menu entry, Waybar indicator with signal 12, Super+Ctrl+N binding. |
+| Nightlight toggle | Present | Optional polish | `ahr-toggle-nightlight`, `ahr-waybar-nightlight-status`, `ahr-restore-nightlight`, `ahr-menu` Toggle menu, `config/waybar/config.jsonc` nightlight-indicator, `config/hypr/hyprland.conf` binding | `omarchy-toggle-nightlight` (hyprsunset 4000K/6500K) | ✅ Reboot-persistence fixed 2026-06-11: toggle uses state file (not live temperature) as decision source; `ahr-restore-nightlight` auto-starts on login via `exec-once` before Waybar; status indicator falls back to state file when process absent. |
 | Notices (date/time/battery/weather) | Missing | Optional polish | — | Omarchy hotkey-triggered notification notices | Lightweight notification commands; add after notification toggle pipeline is reliable. |
 | Reminders | Missing | Optional polish | — | Omarchy reminder CLI/menu (`omarchy reminder`) | Notification-based countdown timer; requires only `notify-send` and state file. |
 | Help/welcome/discoverability | Present but rough | Required parity | `first-run.d/110-welcome.sh`, `docs/quick-reference.md`, Learn menu | Omarchy welcome/manual links | Add clearer "next action" affordance if tester confusion appears. |
@@ -162,7 +162,7 @@ Use these decision labels:
 | Broad remove/preinstall cleanup | Probably out of scope | Removal can destroy user choices and is harder to validate than install. | Keep conservative; prefer docs and explicit package remove previews. |
 | Troubleshooting/manual depth | Required for stable | Omarchy manual is broad and user-facing. AHR docs are strong but more project/release oriented. | Add user manual pages as features stabilize; avoid documenting unsupported workflows as promised. |
 | Unified clipboard hotkeys (Super+C/V/X) | Optional polish | Omarchy unifies clipboard hotkeys via keyd/wtype so Super+C/V/X work everywhere. AHR uses default Ctrl+Shift+C/V in terminals. | Keep as intentional difference unless AHR adopts a similar keyd remapping layer. |
-| Nightlight toggle (hyprsunset) | Optional polish | Omarchy toggles screen temperature (4000K/6500K) with Super+Ctrl+N. | ✅ Implemented in session 2026-06-07: `ahr-toggle-nightlight`, Waybar indicator, Toggle menu entry, Super+Ctrl+N binding. |
+| Nightlight toggle (hyprsunset) | Optional polish | Omarchy toggles screen temperature (4000K/6500K) with Super+Ctrl+N. | ✅ Implemented in session 2026-06-07: `ahr-toggle-nightlight`, Waybar indicator, Toggle menu entry, Super+Ctrl+N binding. Reboot-persistence fixed 2026-06-11: toggle now uses state file as decision source, `ahr-restore-nightlight` auto-restores on login. |
 | Screensaver/suspend availability toggles | Optional polish | Omarchy can hide Suspend/Screensaver from menus via state flags. AHR always shows all power options. | Add if menu structure supports conditional item visibility. |
 | Theme: browser/editor/foot sync | Optional polish | Omarchy syncs themes to Chromium, VS Code, Cursor, Foot terminal, Obsidian, and GNOME. AHR only applies theme to desktop shell/config templates. | Safe to add incrementally per app; start with one (e.g. Foot terminal). |
 | Theme: install/remove/update via git | Required for stable or high-value polish | Omarchy supports `omarchy theme install <git-url>`, remove, and update. AHR now has full parity. | ✅ Implemented 2026-06-08 alongside light-theme auto-detection. |
@@ -1313,3 +1313,52 @@ Added a comprehensive window rules section to `config/hypr/hyprland.conf`:
 
 **Files changed:**
 - `config/hypr/hyprland.conf`
+
+### Session 2026-06-11 (fifteenth pass): Fix nightlight toggle persistence across reboots
+
+**Root cause:**
+
+`ahr-toggle-nightlight` used `hyprctl hyprsunset temperature` (the live process
+temperature) to decide whether to enable or disable nightlight. After a reboot,
+`hyprsunset` is killed. When the user clicked the Waybar indicator for the first
+time post-reboot, the script started a fresh `hyprsunset` and queried its default
+temperature. If hyprsunset's default is not 6500K (daylight), the script
+incorrectly classified the state as "currently night" and **disabled** nightlight
+instead of enabling it. The state file persisted across reboots but was not used
+for the toggle decision — only for the Waybar indicator status.
+
+Additionally, there was no mechanism to automatically restore nightlight on
+Hyprland startup, so even a correctly working toggle required a manual click
+after every reboot.
+
+**Fix:**
+
+Three changes to make nightlight state persistent across reboots:
+
+1. **`ahr-toggle-nightlight` rewritten** — uses the **state file as the
+   authoritative source of truth** instead of the live `hyprsunset` temperature.
+   The logic is now:
+   - State file says ON + screen is actually warm → toggle OFF
+   - State file says ON + screen NOT warm (reboot/crash) → **restore** nightlight
+     (start `hyprsunset` at 4000K)
+   - State file absent → toggle ON (start `hyprsunset` at 4000K, create state file)
+   This handles the default-temperature ambiguity and makes the toggle resilient
+   to crashes and session restarts.
+
+2. **`ahr-restore-nightlight` created** — runs via `exec-once` on Hyprland
+   startup, checks if the state file exists, and starts `hyprsunset` at 4000K
+   if so. Placed in the `exec-once` chain **before** `waybar` so `hyprsunset`
+   is already running when the Waybar indicator first polls.
+
+3. **`ahr-waybar-nightlight-status` updated** — now falls back to the state
+   file when `hyprsunset` isn't running (e.g. during early startup before the
+   restore script completes, or after a crash). Previously it only showed ON
+   when `hyprsunset` was running AND at night temperature; now it also shows ON
+   when the state file exists even if the process is temporarily absent, so the
+   indicator reflects the desired state.
+
+**Files changed:**
+- `config/artix-hypr-remix/bin/ahr-toggle-nightlight` (rewritten)
+- `config/artix-hypr-remix/bin/ahr-restore-nightlight` (new)
+- `config/artix-hypr-remix/bin/ahr-waybar-nightlight-status` (updated)
+- `config/hypr/hyprland.conf` (added `exec-once` for restore script)
