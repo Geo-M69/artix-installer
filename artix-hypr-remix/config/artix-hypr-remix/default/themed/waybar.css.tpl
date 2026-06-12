@@ -32,16 +32,38 @@
 #battery,
 #pulseaudio,
 #custom-remix,
-#custom-update,
-#custom-weather,
-#custom-voxtype,
+#custom-update {
+	min-width: 12px;
+	margin: 0 7.5px;
+}
+
+#custom-weather {
+	margin-left: 7.5px;
+	margin-right: 7.5px;
+	min-width: 14px;
+}
+
+#custom-weather.unavailable {
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+}
+
+#custom-voxtype {
+	min-width: 12px;
+	margin: 0 0 0 7.5px;
+}
+
 #custom-screenrecording-indicator,
 #custom-idle-indicator,
 #custom-nightlight-indicator,
 #custom-waybar-position-indicator,
 #custom-notification-silencing-indicator {
 	min-width: 12px;
-	margin: 0 7.5px;
+	margin-left: 5px;
+	margin-right: 0;
+	font-size: 10px;
+	padding-bottom: 1px;
 }
 
 #tray {
@@ -58,6 +80,14 @@
 
 #custom-expand-icon {
 	margin-right: 18px;
+}
+
+#custom-update {
+	font-size: 10px;
+}
+
+.hidden {
+	opacity: 0;
 }
 
 tooltip {
@@ -114,11 +144,29 @@ tooltip {
 .left #custom-remix,
 .right #custom-remix,
 .left #custom-update,
-.right #custom-update,
+.right #custom-update {
+	margin: 1.5px 0;
+	padding: 6px 0;
+	min-width: 0;
+	min-height: 12px;
+}
+
 .left #custom-weather,
-.right #custom-weather,
+.right #custom-weather {
+	margin: 1.5px 0;
+	padding: 6px 0;
+	min-width: 0;
+	min-height: 12px;
+	margin-right: 4px;
+}
+
 .left #custom-voxtype,
-.right #custom-voxtype,
+.right #custom-voxtype {
+	margin: 7.5px 0 0 0;
+	min-width: 0;
+	min-height: 12px;
+}
+
 .left #custom-screenrecording-indicator,
 .right #custom-screenrecording-indicator,
 .left #custom-idle-indicator,
@@ -129,8 +177,7 @@ tooltip {
 .right #custom-waybar-position-indicator,
 .left #custom-notification-silencing-indicator,
 .right #custom-notification-silencing-indicator {
-	margin: 1.5px 0;
-	padding: 6px 0;
+	margin: 5px 0 0 0;
 	min-width: 0;
 	min-height: 12px;
 }

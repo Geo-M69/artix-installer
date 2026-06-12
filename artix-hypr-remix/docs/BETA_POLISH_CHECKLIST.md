@@ -41,7 +41,7 @@ Future sessions should update this table after direct inspection or validation.
 | Package coverage | rough | `packages/*.txt`, `flatpaks/*.txt`, `docs/package-substitutions.md` | `../omarchy/install/packages.sh`, Omarchy package helpers | High-impact polish | Core Hyprland/audio/network/files/editor packages present; optional AUR and richer app categories remain narrow by design. |
 | OpenRC services | present | `services/openrc-default.txt`, `lib/openrc.sh`, `scripts/post-install-smoke.sh` | Omarchy systemd service usage | Public beta blocker | `dbus`, `elogind`, `NetworkManager`, `bluetoothd` are handled through OpenRC. |
 | Hyprland launch/session | present | `config/artix-hypr-remix/bin/start-hyprland-session.sh`, `lib/tty.sh`, `STARTUP_ARCHITECTURE.md` | `../omarchy/default/wayland-sessions/omarchy.desktop` | Public beta blocker | TTY default and optional `greetd`; no UWSM/SDDM. |
-| Waybar/status bar | present but rough | `config/waybar/config.jsonc`, `config/waybar/style.css`, Waybar helper scripts | `../omarchy/default/waybar/`, `../omarchy/themes/*/waybar.css` | High-impact polish | Indicators for updates, recording, idle, notifications, weather, voxtype exist; position/theme richness is thinner than Omarchy. |
+| Waybar/status bar | present | `config/waybar/config.jsonc`, `config/waybar/style.css`, Waybar helper scripts | `../omarchy/default/waybar/`, `../omarchy/themes/*/waybar.css` | High-impact polish | Indicators for updates, recording, idle, notifications, weather, voxtype, nightlight, position exist. CSS refined with Omarchy-style per-module spacing, weather unavailable state, generic hidden class, and format-icons for voxtype. |
 | App launcher | present | `config/artix-hypr-remix/bin/ahr-launch-apps`, `ahr-menu`, `config/walker/config.toml` | `../omarchy/bin/omarchy-menu`, Walker defaults | Public beta blocker | Supports `wofi`/`walker`/`rofi`/TTY backend fallback. |
 | Power/logout menu | present but rough | `ahr-menu`, `ahr-system-lock`, `ahr-system-suspend`, `ahr-system-hibernate`, `ahr-system-reboot` | `../omarchy/bin/omarchy-menu` System menu | Public beta blocker | Lock/logout/suspend/hibernate/reboot/power off exposed; validate suspend/hibernate and portability policy. |
 | Screenshot/capture tools | present | `ahr-capture-screenshot`, `ahr-capture-picker`, `ahr-capture-screenrecording`, `config/hypr/hyprland.conf` | Omarchy Capture menu and `omarchy-capture-*` commands | High-impact polish | Fullscreen/window/area screenshot modes, screenshot picker (PrtSc), and screen recording toggle implemented; still missing OCR, color picker, audio/webcam recording menu paths. |
@@ -1362,3 +1362,48 @@ Three changes to make nightlight state persistent across reboots:
 - `config/artix-hypr-remix/bin/ahr-restore-nightlight` (new)
 - `config/artix-hypr-remix/bin/ahr-waybar-nightlight-status` (updated)
 - `config/hypr/hyprland.conf` (added `exec-once` for restore script)
+
+### Session 2026-06-11 (sixteenth pass): Waybar theme richness — CSS refinements and config polish
+
+**What was done:**
+
+Audited the full Omarchy Waybar setup (config, style.css, indicator scripts) against AHR and ported the most impactful refinements.
+
+**CSS refinements (`style.css` and `waybar.css.tpl`):**
+
+1. **Split the monolithic margin block** into per-module sections matching Omarchy's granular spacing:
+   - Core modules (`cpu`, `battery`, `pulseaudio`, `custom-remix`, `custom-update`) keep `margin: 0 7.5px`
+   - `#custom-weather` gets its own block with `margin-left: 7.5px; margin-right: 7.5px; min-width: 14px`
+   - `#custom-weather.unavailable` — collapses to zero width/height when weather is unavailable (Omarchy pattern)
+   - `#custom-voxtype` gets its own block with `margin: 0 0 0 7.5px` (left-only margin, Omarchy pattern)
+   - **Indicators** (screenrecording, idle, nightlight, waybar-position, notification-silencing) get their own block with tighter horizontal margins (`margin-left: 5px; margin-right: 0`), smaller font (`10px`), and `padding-bottom: 1px` — matching Omarchy's less-cluttered center-module look
+
+2. **`#custom-update { font-size: 10px; }`** — smaller update indicator icon, matching Omarchy
+
+3. **Generic `.hidden { opacity: 0; }`** class — shared visibility toggle for any module that outputs `"class": "hidden"`
+
+4. **Vertical layout sections** also split accordingly: weather, voxtype, and indicators each have their own vertical margin block replicating Omarchy's spacing granularity
+
+**Config refinements (`config.jsonc`):**
+
+1. **Voxtype `format-icons`** — added 3-state icon support matching the status script's output classes (`idle` → empty, `recording` → `󰍬`, `transcribing` → `󰔟`). Previously AHR just showed the raw text from the script, now it uses Waybar's native `format-icons` for cleaner rendering.
+
+2. **Weather `on-click`** — clicking the weather indicator shows a notification with the full weather tooltip text. Interval reduced from 900s to 300s for more responsive updates.
+
+3. **Clock right-click** — placeholder timezone-selector action on the horizontal clock (Omarchy pattern). Can be wired to an actual timezone picker later.
+
+4. **Battery tooltip symbols** — `W↓`/`W↑` instead of `W down`/`W up` for more compact tooltips (Omarchy pattern).
+
+**Dependency mapping fix:**
+- Added `notify-send` → `libnotify` to `scripts/check-config-deps.sh`'s `cmd_package_map` so the weather `on-click` dependency is recognized. (`libnotify` was already in `packages/00-core.txt` — the mapping was missing.)
+
+**Files changed:**
+- `config/waybar/style.css` — CSS refinements
+- `config/waybar/config.jsonc` — config refinements
+- `config/artix-hypr-remix/default/themed/waybar.css.tpl` — template CSS refinements (mirrors style.css)
+- `scripts/check-config-deps.sh` — added `notify-send` → `libnotify` mapping
+- `docs/BETA_POLISH_CHECKLIST.md` — this session entry
+
+**Validation:**
+- `./scripts/quality-gate.sh --no-aur` passes all 6 checks
+- `notify-send` now correctly resolved to `libnotify (00-core.txt)` in dependency check

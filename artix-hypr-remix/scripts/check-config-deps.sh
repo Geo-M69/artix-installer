@@ -77,6 +77,7 @@ declare -A cmd_package_map=(
   [wl-paste]=wl-clipboard
   [wl-copy]=wl-clipboard
   [walker]=walker-bin
+  [notify-send]=libnotify
 )
 
 declare -A commands_seen=()
