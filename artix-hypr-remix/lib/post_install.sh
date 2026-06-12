@@ -222,6 +222,108 @@ finish_post_install() {
   esac
 }
 
+seed_omarchy_themes() {
+  local target_user="$1"
+  local target_home="$2"
+  local dry_run="${3:-false}"
+  local install_script theme_dir env_file failed=0
+  local -a themes=()
+
+  themes=(nord catppuccin tokyo-night gruvbox rose-pine)
+
+  # Dry-run before any capability guards so --dry-run --phase 7 shows
+  # intent even when the framework isn't fully deployed yet.
+  if [[ "$dry_run" == "true" ]]; then
+    info "Dry-run: would seed ${#themes[@]} Omarchy themes via ahr-theme-install-omarchy"
+    printf '  - %s\n' "${themes[@]}"
+    return 0
+  fi
+
+  # Read seed-control variables from user env without sourcing the file.
+  # The env is user-writable and could contain arbitrary shell, so we
+  # never source it as root.  Instead, sed extracts only the value
+  # portion of lines matching ^export VAR= or ^VAR= — the file is
+  # never executed.
+  env_file="$target_home/.config/artix-hypr-remix/env"
+  if [[ -f "$env_file" ]]; then
+    local opt_out commit_pin
+    opt_out=$(sed -n '/^export AHR_THEME_OMARCHY_SEED=/{s/^export AHR_THEME_OMARCHY_SEED=//;p;q}' "$env_file" 2>/dev/null || true)
+    if [[ -z "$opt_out" ]]; then
+      opt_out=$(sed -n '/^AHR_THEME_OMARCHY_SEED=/{s/^AHR_THEME_OMARCHY_SEED=//;p;q}' "$env_file" 2>/dev/null || true)
+    fi
+    opt_out="${opt_out#\"}"; opt_out="${opt_out%\"}"
+    opt_out="${opt_out#\'}"; opt_out="${opt_out%\'}"
+    case "$opt_out" in
+      false|no|off|0)
+        info "Omarchy theme seed disabled by AHR_THEME_OMARCHY_SEED in $env_file"
+        return 0
+        ;;
+    esac
+
+    commit_pin=$(sed -n '/^export OMARCHY_SEED_COMMIT=/{s/^export OMARCHY_SEED_COMMIT=//;p;q}' "$env_file" 2>/dev/null || true)
+    if [[ -z "$commit_pin" ]]; then
+      commit_pin=$(sed -n '/^OMARCHY_SEED_COMMIT=/{s/^OMARCHY_SEED_COMMIT=//;p;q}' "$env_file" 2>/dev/null || true)
+    fi
+    commit_pin="${commit_pin#\"}"; commit_pin="${commit_pin%\"}"
+    commit_pin="${commit_pin#\'}"; commit_pin="${commit_pin%\'}"
+    # commit_pin is used below — it is NOT exported here because
+    # post_install_run_as_user uses sudo -H -u which resets the
+    # environment.  Instead it is passed via env(1) in the command.
+  fi
+
+  install_script="$target_home/.config/artix-hypr-remix/bin/ahr-theme-install-omarchy"
+
+  if [[ ! -f "$install_script" ]]; then
+    info "Omarchy theme seed: ahr-theme-install-omarchy not found (skip)"
+    return 0
+  fi
+
+  if ! command -v git >/dev/null 2>&1; then
+    info "Omarchy theme seed: git not available (skip)"
+    return 0
+  fi
+
+  info "Seeding ${#themes[@]} Omarchy themes during install (eliminates first-boot download)…"
+
+  # Build command prefix for target-user execution.
+  # When commit_pin is set, use env(1) to pass OMARCHY_BRANCH through
+  # sudo -H -u which would otherwise strip it from the environment.
+  local -a target_cmd_prefix=()
+  if [[ -n "${commit_pin:-}" ]]; then
+    target_cmd_prefix=(env "OMARCHY_BRANCH=$commit_pin")
+  fi
+
+  for theme in "${themes[@]}"; do
+    theme_dir="$target_home/.config/artix-hypr-remix/themes/$theme"
+    local -a extra_args=()
+
+    # If the directory exists but is incomplete (missing colors.toml),
+    # pass --force so ahr-theme-install-omarchy overwrites it rather
+    # than refusing with "already exists".
+    if [[ -d "$theme_dir" ]]; then
+      if [[ -f "$theme_dir/colors.toml" ]]; then
+        info "  ✓ Omarchy theme already present: $theme (skip)"
+        continue
+      fi
+      warn "  ! Omarchy theme dir exists but is incomplete: $theme (will re-download)"
+      extra_args=(--force)
+    fi
+
+    if post_install_run_as_user "$target_user" "${target_cmd_prefix[@]}" bash "$install_script" "${extra_args[@]}" "$theme" >/dev/null 2>&1; then
+      info "  ✓ Omarchy theme seeded: $theme"
+    else
+      warn "  ✗ Omarchy theme failed: $theme (will retry on first login)"
+      failed=$((failed + 1))
+    fi
+  done
+
+  if [[ $failed -eq 0 ]]; then
+    info "All ${#themes[@]} Omarchy themes seeded successfully."
+  else
+    warn "$failed/${#themes[@]} Omarchy themes failed to seed. First-run will retry."
+  fi
+}
+
 prepare_post_install_framework() {
   local target_user="$1"
   local target_home="$2"
@@ -233,4 +335,5 @@ prepare_post_install_framework() {
   write_reboot_sudoers "$target_user" "$dry_run"
   initialize_migration_state "$target_user" "$target_home" "$dry_run"
   install_command_namespace "$target_user" "$target_home" "$dry_run"
+  seed_omarchy_themes "$target_user" "$target_home" "$dry_run"
 }

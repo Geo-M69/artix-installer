@@ -31,6 +31,28 @@ if [[ -f "$SEED_DONE" ]]; then
   exit 0
 fi
 
+# ── Quick exit if install.sh already seeded all themes ────────────
+# During phase 7, install.sh runs ahr-theme-install-omarchy for each
+# of the five core themes.  When all are present on disk, skip
+# network access entirely — the first-boot seed is only a safety net
+# for offline installs or partial failures.
+# Validity is determined by the presence of colors.toml, matching
+# ahr-theme-install-omarchy's own validation.
+themes=(nord catppuccin tokyo-night gruvbox rose-pine)
+all_present=true
+for theme in "${themes[@]}"; do
+  if [[ ! -f "$HOME/.config/artix-hypr-remix/themes/$theme/colors.toml" ]]; then
+    all_present=false
+    break
+  fi
+done
+if [[ "$all_present" == "true" ]]; then
+  mkdir -p "$STATE_DIR"
+  touch "$SEED_DONE"
+  echo "All Omarchy themes already present (seeded during install)."
+  exit 0
+fi
+
 install_cmd="$HOME/.config/artix-hypr-remix/bin/ahr-theme-install-omarchy"
 
 if [[ ! -x "$install_cmd" ]]; then
@@ -75,11 +97,19 @@ themes=(nord catppuccin tokyo-night gruvbox rose-pine)
 failed=0
 
 for theme in "${themes[@]}"; do
-  # Skip themes already present (e.g., nord was seeded by 55-theme-default.sh).
-  if [[ -d "$HOME/.config/artix-hypr-remix/themes/$theme" ]]; then
-    continue
+  extra_args=()
+  theme_dir="$HOME/.config/artix-hypr-remix/themes/$theme"
+  # Skip themes that are already valid on disk.  If the directory
+  # exists but is incomplete (missing colors.toml), pass --force so
+  # ahr-theme-install-omarchy overwrites the stale dir rather than
+  # refusing with "already exists".
+  if [[ -d "$theme_dir" ]]; then
+    if [[ -f "$theme_dir/colors.toml" ]]; then
+      continue
+    fi
+    extra_args=(--force)
   fi
-  if ! "$install_cmd" "$theme" >/dev/null 2>&1; then
+  if ! "$install_cmd" "${extra_args[@]}" "$theme" >/dev/null 2>&1; then
     printf 'Failed to install theme: %s\n' "$theme" >&2
     failed=$((failed + 1))
   fi
