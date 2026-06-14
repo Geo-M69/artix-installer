@@ -233,12 +233,14 @@ menu_select_tty() {
   local selection
   local index
 
-  printf '\n%s\n' "$prompt"
+  # Print UI to stderr so callers capturing stdout (choice="$(menu_select …)")
+  # get only the selected value, not the menu rendering.
+  printf '\n%s\n' "$prompt" >&2
   for index in "${!options[@]}"; do
-    printf '  %d) %s\n' "$((index + 1))" "${options[$index]}"
+    printf '  %d) %s\n' "$((index + 1))" "${options[$index]}" >&2
   done
 
-  printf '> '
+  printf '> ' >&2
   read -r selection || true
 
   if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#options[@]} )); then

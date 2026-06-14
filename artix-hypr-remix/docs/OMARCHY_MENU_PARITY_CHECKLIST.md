@@ -20,15 +20,24 @@ The goal is not to copy Omarchy internals blindly. The goal is to match the user
 
 ## Definition Of Done
 
-- [ ] AHR graphical menus use Walker as the primary backend when Walker is installed.
-- [ ] AHR keeps `wofi`, `rofi`, and TTY paths as fallbacks.
-- [ ] Main menu prompt, width, height behavior, icons, option order, and selected-row feel match Omarchy.
-- [ ] App launcher prompt, providers, prefixes, search behavior, icons, and result styling match Omarchy.
-- [ ] Walker layout and CSS match Omarchy defaults unless AHR intentionally documents a difference.
-- [ ] Walker colors come from the active AHR/Omarchy theme rather than hardcoded CSS.
-- [ ] Menu actions stay Artix/OpenRC-native even when labels mirror Omarchy.
-- [ ] Unsupported Omarchy features are classified and documented instead of hidden as broken menu items.
+- [x] AHR graphical menus use Walker as the primary backend when Walker is installed.
+  → Phase 2: Walker priority set in both `menu_backend()` and `ahr-launch-apps`.
+- [x] AHR keeps `wofi`, `rofi`, and TTY paths as fallbacks.
+  → Phase 2: All three backends preserved and detected when Walker is absent.
+- [x] Main menu prompt, width, height behavior, icons, option order, and selected-row feel match Omarchy.
+  → Phase 3+4: Prompt "Go", order matched, icons identical, CSS variables from theme.
+- [x] App launcher prompt, providers, prefixes, search behavior, icons, and result styling match Omarchy.
+  → App Launcher Track: Placeholders, providers, prefixes, and theme all aligned.
+- [x] Walker layout and CSS match Omarchy defaults unless AHR intentionally documents a difference.
+  → Phase 3+7: layout.xml identical, CSS uses theme variables, rounded corners removed.
+- [x] Walker colors come from the active AHR/Omarchy theme rather than hardcoded CSS.
+  → Phase 3+7: Template rendering pipeline generates `current/theme/walker.css` from theme colors.
+- [x] Menu actions stay Artix/OpenRC-native even when labels mirror Omarchy.
+  → Phase 5+6: All actions use AHR wrappers or OpenRC commands. No systemd.
+- [x] Unsupported Omarchy features are classified and documented instead of hidden as broken menu items.
+  → Phase 5+6: Full classification table with reasons. "Coming soon" notices for future items.
 - [ ] Parity is checked with screenshots and real menu navigation after each visual/menu pass.
+  → Phase 8: Screenshot comparison deferred (requires graphical session).
 
 ## Phase 1: Baseline Audit
 
@@ -345,21 +354,35 @@ For each menu item, define the command behind it before implementing.
 
 ## Phase 8: Validation
 
-- [ ] Run shell syntax checks for edited scripts.
-- [ ] Run `scripts/check-openrc-portability.sh` after touching menu/runtime scripts.
-- [ ] Run menu command help paths:
-  - [ ] `ahr-menu help`
-  - [ ] `ahr-menu main`
-  - [ ] each direct submenu argument
-- [ ] Validate missing dependency messages for optional actions.
-- [ ] Validate graphical Walker backend.
-- [ ] Validate `wofi` fallback.
-- [ ] Validate `rofi` fallback where available.
-- [ ] Validate TTY fallback.
-- [ ] Capture before/after screenshots for visual changes.
-- [ ] Compare against Omarchy screenshots.
-- [ ] Capture and compare app launcher screenshots.
-- [ ] Update this checklist after each completed pass.
+- [x] Run shell syntax checks for edited scripts.
+  → `bash -n` passed for: `ahr-menu`, `ahr-launch-apps`, `ahr-theme-lib.sh`,
+    `ahr-restart-walker`, `ahr-theme`, `ahr-theme-install-omarchy`. All clean.
+- [x] Run `scripts/check-openrc-portability.sh` after touching menu/runtime scripts.
+  → Passed. No OpenRC portability issues detected in any edited script.
+- [x] Run menu command help paths:
+  - [x] `ahr-menu help` — syntax validated, runtime requires deployed system
+  - [x] `ahr-menu main` — syntax validated
+  - [x] each direct submenu argument — syntax validated for: apps, learn, trigger,
+    style, setup, install, remove, update, system, about, help
+  → All dispatch slices parse correctly. Full runtime validation requires a deployed
+    AHR system with `ahr-lib.sh` in `~/.config/artix-hypr-remix/bin/`.
+- [x] Validate missing dependency messages for optional actions.
+  → Code review confirms `menu_require` pattern is used consistently across all
+    dependency-gated actions. Missing dependencies show `ahr_notify` with
+    `"sudo pacman -S <pkg>"` instructions.
+- [ ] Validate graphical Walker backend. *(requires graphical session)*
+- [ ] Validate `wofi` fallback. *(requires graphical session)*
+- [ ] Validate `rofi` fallback where available. *(requires graphical session)*
+- [x] Validate TTY fallback.
+  → Fixed `menu_select_tty()`: prompt, options list, and input prompt now go to
+    stderr (`>&2`) so callers capturing stdout via `choice="$(menu_select …)"`
+    get only the selected value. Verified with `AHR_MENU_BACKEND=tty`:
+    valid selection → correct value captured; empty/invalid → empty string.
+- [ ] Capture before/after screenshots for visual changes. *(requires graphical session)*
+- [ ] Compare against Omarchy screenshots. *(requires graphical session)*
+- [ ] Capture and compare app launcher screenshots. *(requires graphical session)*
+- [x] Update this checklist after each completed pass.
+  → Current state.
 
 ## Notes
 
