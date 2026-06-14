@@ -18,6 +18,8 @@ target_dir="$HOME/.local/bin"
 
 declare -a commands=(
   ahr
+  ahr-toggle
+  ahr-toggle-lib.sh
   ahr-menu
   ahr-menu-keybindings
   ahr-theme
@@ -50,9 +52,12 @@ declare -a commands=(
   ahr-voxtype-model
   ahr-voxtype-config
   ahr-toggle-idle
+  ahr-toggle-nightlight
   ahr-toggle-notification-silencing
   ahr-toggle-waybar
   ahr-toggle-waybar-position
+  ahr-restore-nightlight
+  ahr-restore-idle
   ahr-notification-dismiss
   ahr-restart-mako
   ahr-restart-waybar
@@ -106,8 +111,10 @@ declare -a aliases=(
   "omarchy-voxtype-model:ahr-voxtype-model"
   "omarchy-voxtype-config:ahr-voxtype-config"
   "omarchy-toggle-idle:ahr-toggle-idle"
+  "omarchy-toggle-nightlight:ahr-toggle-nightlight"
   "omarchy-toggle-notification-silencing:ahr-toggle-notification-silencing"
   "omarchy-toggle-waybar:ahr-toggle-waybar"
+  "omarchy-restore-nightlight:ahr-restore-nightlight"
   "omarchy-notification-dismiss:ahr-notification-dismiss"
   "omarchy-restart-mako:ahr-restart-mako"
   "omarchy-restart-waybar:ahr-restart-waybar"

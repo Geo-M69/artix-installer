@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Restore nightlight state on Hyprland startup.
 # Called from hyprland.conf exec-once so nightlight survives reboots.
+# Uses the shared toggle framework.
 set -euo pipefail
 
-state_file="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles/nightlight"
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "${AHR_TOGGLE_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-toggle-lib.sh}"
 
-# Nothing to restore if the state file is absent (nightlight was off)
-[[ -f "$state_file" ]] || exit 0
+# Nothing to restore if the toggle is off
+ahr_toggle_enabled "nightlight" || exit 0
 
 # hyprsunset must be installed
 command -v hyprsunset >/dev/null 2>&1 || exit 0
@@ -17,7 +19,7 @@ if ! pgrep -x hyprsunset >/dev/null 2>&1; then
   sleep 0.5
 fi
 
-# Always set temperature when state file says ON: the process may be running
+# Always set temperature when toggle says ON: the process may be running
 # at its default temperature (e.g. after a restart of hyprsunset).
 if command -v hyprctl >/dev/null 2>&1; then
   hyprctl hyprsunset temperature 4000 >/dev/null 2>&1 || true

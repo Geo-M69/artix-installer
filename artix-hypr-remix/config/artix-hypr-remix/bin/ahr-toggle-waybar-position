@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
+# Toggle Waybar position between top and bottom.
+# Uses the shared toggle framework for the state file path.
+# The waybar-position flag file stores the actual position value.
 set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "${AHR_TOGGLE_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-toggle-lib.sh}"
 
 waybar_config="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/config.jsonc"
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles"
-state_file="$state_dir/waybar-position"
+state_file="$AHR_TOGGLE_STATE_DIR/waybar-position"
 
-mkdir -p "$state_dir"
+mkdir -p "$AHR_TOGGLE_STATE_DIR"
 
-# Ensure waybar config exists
 if [[ ! -f "$waybar_config" ]]; then
   ahr_notify "artix-hypr-remix" "Waybar config not found: $waybar_config"
   exit 1
@@ -26,16 +28,14 @@ fi
 sed -i 's/"position"[[:space:]]*:[[:space:]]*"top"/"position": "'"$new_position"'"/' "$waybar_config"
 sed -i 's/"position"[[:space:]]*:[[:space:]]*"bottom"/"position": "'"$new_position"'"/' "$waybar_config"
 
-# Write state file for the Waybar indicator
+# Write state file for the Waybar indicator (stores the value, not just presence)
 printf '%s\n' "$new_position" > "$state_file"
 
-# Verify the config was actually changed
 if ! grep -q '"position"[[:space:]]*:[[:space:]]*"'"$new_position"'"' "$waybar_config" 2>/dev/null; then
   ahr_notify "artix-hypr-remix" "Failed to update Waybar position in config"
   exit 1
 fi
 
-# Notify before restart so the user sees the position message
 if [[ "$new_position" == "bottom" ]]; then
   ahr_notify "Waybar" "Waybar moved to bottom"
 else
@@ -43,7 +43,6 @@ else
 fi
 
 # ---- Restart Waybar with a robust kill/wait/start cycle ----
-# Kill all Waybar processes and wait until fully dead (up to 3 s).
 if pgrep -x waybar >/dev/null 2>&1; then
   pkill -x waybar 2>/dev/null || true
   for _ in 1 2 3 4 5 6; do
@@ -54,18 +53,14 @@ if pgrep -x waybar >/dev/null 2>&1; then
   done
 fi
 
-# If Waybar is still alive after the wait loop, something is wrong
-# (e.g., it's ignoring SIGTERM).  Do NOT start a duplicate instance.
 if pgrep -x waybar >/dev/null 2>&1; then
   ahr_notify "artix-hypr-remix" "Waybar did not exit — position will apply on next manual restart"
   exit 1
 fi
 
-# Start Waybar and give it time to initialise
 if ahr_has_cmd waybar; then
   setsid waybar >/dev/null 2>&1 &
   sleep 0.5
 fi
 
-# Signal Waybar indicator to refresh the position icon immediately
 pkill -RTMIN+13 -x waybar 2>/dev/null || true

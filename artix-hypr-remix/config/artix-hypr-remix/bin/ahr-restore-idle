@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Restore idle lock state on Hyprland startup.
+# Called from hyprland.conf exec-once so idle lock survives reboots.
+# Uses the shared toggle framework.
+#
+# If the user has explicitly disabled idle (via the "idle-off" flag), do
+# nothing.  Otherwise, seed the "idle" flag (default-on for clean installs)
+# and start hypridle.  This makes the toggle state persistent across reboots.
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "${AHR_TOGGLE_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-toggle-lib.sh}"
+
+idle_off_flag="$AHR_TOGGLE_STATE_DIR/idle-off"
+
+# If the user explicitly disabled idle, do not restore.
+if [[ -f "$idle_off_flag" ]]; then
+  exit 0
+fi
+
+# Seed the idle flag if absent (default-on for clean installs / first run).
+if ! ahr_toggle_enabled "idle"; then
+  mkdir -p "$AHR_TOGGLE_STATE_DIR"
+  : > "$AHR_TOGGLE_STATE_DIR/idle"
+fi
+
+# Start hypridle if installed and not already running.
+if command -v hypridle >/dev/null 2>&1 && ! pgrep -x hypridle >/dev/null 2>&1; then
+  setsid hypridle >/dev/null 2>&1 &
+fi

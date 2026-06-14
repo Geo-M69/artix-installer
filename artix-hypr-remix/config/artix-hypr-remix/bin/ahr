@@ -49,6 +49,7 @@ Commands:
   toggle-idle         Toggle hypridle daemon state
   toggle-notifications Toggle notification silencing mode
   toggle-waybar       Toggle Waybar visibility
+  toggle               Inspect and manage toggle state flags
   toggle-nightlight    Toggle nightlight screen temperature
   toggle-waybar-position Toggle Waybar position (top/bottom)
   notification-dismiss Dismiss a mako notification
@@ -102,6 +103,7 @@ dispatch() {
     toggle-waybar) exec_ahr_command ahr-toggle-waybar "$@" ;;
     toggle-waybar-position) exec_ahr_command ahr-toggle-waybar-position "$@" ;;
     toggle-nightlight) exec_ahr_command ahr-toggle-nightlight "$@" ;;
+    toggle) exec_ahr_command ahr-toggle "$@" ;;
     notification-dismiss) exec_ahr_command ahr-notification-dismiss "$@" ;;
     restart-mako) exec_ahr_command ahr-restart-mako "$@" ;;
     restart-waybar) exec_ahr_command ahr-restart-waybar "$@" ;;
@@ -143,6 +145,7 @@ dispatch() {
         "ahr-toggle-notification-silencing" \
         "ahr-toggle-waybar" \
         "ahr-toggle-waybar-position" \
+        "ahr-toggle" \
         "ahr-toggle-nightlight" \
         "ahr-notification-dismiss" \
         "ahr-restart-mako" \

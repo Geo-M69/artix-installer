@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
+# Report notification silencing state for the Waybar indicator.
+# Uses the shared toggle framework.
 set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
-
-state_file="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles/notification-silencing"
+source "${AHR_TOGGLE_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-toggle-lib.sh}"
 
 silenced=false
-if [[ -f "$state_file" ]]; then
+if ahr_toggle_enabled "notification-silencing"; then
   silenced=true
 elif ahr_has_cmd makoctl; then
   if makoctl mode 2>/dev/null | grep -q 'do-not-disturb'; then

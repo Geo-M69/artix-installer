@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
+# Toggle notification silencing (do-not-disturb mode).
+# Uses the shared toggle framework for state management.
 set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
-
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles"
-state_file="$state_dir/notification-silencing"
-
-mkdir -p "$state_dir"
+source "${AHR_TOGGLE_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-toggle-lib.sh}"
 
 is_silenced=false
-if [[ -f "$state_file" ]]; then
+if ahr_toggle_enabled "notification-silencing"; then
   is_silenced=true
 elif ahr_has_cmd makoctl; then
   if makoctl mode 2>/dev/null | grep -q 'do-not-disturb'; then
@@ -18,13 +16,13 @@ elif ahr_has_cmd makoctl; then
 fi
 
 if [[ "$is_silenced" == "true" ]]; then
-  rm -f "$state_file"
+  ahr_toggle_unset "notification-silencing"
   if ahr_has_cmd makoctl; then
     makoctl mode -r do-not-disturb >/dev/null 2>&1 || true
   fi
   ahr_notify "Notifications" "Notifications enabled"
 else
-  : > "$state_file"
+  ahr_toggle_set "notification-silencing"
   if ahr_has_cmd makoctl; then
     makoctl mode -a do-not-disturb >/dev/null 2>&1 || true
     makoctl dismiss --all >/dev/null 2>&1 || true

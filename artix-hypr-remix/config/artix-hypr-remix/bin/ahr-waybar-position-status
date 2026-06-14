@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
+# Report Waybar position state for the Waybar indicator.
+# Uses the shared toggle framework for the state file path.
 set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "${AHR_TOGGLE_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-toggle-lib.sh}"
 
 waybar_config="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/config.jsonc"
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles"
-state_file="$state_dir/waybar-position"
+state_file="$AHR_TOGGLE_STATE_DIR/waybar-position"
 
 position="top"
 
@@ -16,14 +18,12 @@ if [[ -f "$waybar_config" ]]; then
   elif grep -q '"position"[[:space:]]*:[[:space:]]*"top"' "$waybar_config" 2>/dev/null; then
     position="top"
   elif [[ -f "$state_file" ]]; then
-    # Config exists but has no recognizable position — trust state file
     content="$(cat "$state_file" 2>/dev/null || true)"
     if [[ "$content" == "bottom" ]]; then
       position="bottom"
     fi
   fi
 elif [[ -f "$state_file" ]]; then
-  # No config at all — trust state file
   content="$(cat "$state_file" 2>/dev/null || true)"
   if [[ "$content" == "bottom" ]]; then
     position="bottom"

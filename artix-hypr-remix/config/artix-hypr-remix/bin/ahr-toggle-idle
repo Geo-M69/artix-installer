@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
+# Toggle idle lock on/off.
+# Uses the shared toggle framework for state management.
+# Persists state across reboots via "idle" (enabled) and "idle-off" (disabled) flags.
 set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "${AHR_TOGGLE_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-toggle-lib.sh}"
 
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles"
-state_file="$state_dir/idle"
-
-mkdir -p "$state_dir"
+idle_off_flag="$AHR_TOGGLE_STATE_DIR/idle-off"
 
 if pgrep -x hypridle >/dev/null 2>&1; then
+  # Currently ON → turn OFF and remember the choice
   pkill -x hypridle >/dev/null 2>&1 || true
-  rm -f "$state_file"
+  mkdir -p "$AHR_TOGGLE_STATE_DIR"
+  ahr_toggle_unset "idle"
+  : > "$idle_off_flag"
   ahr_notify "Idle" "Idle lock disabled"
 else
   if ! ahr_require hypridle hypridle; then
@@ -18,23 +22,17 @@ else
     exit 1
   fi
 
-  # Start hypridle and capture its PID for reliable liveness check.
-  # Using PID-based verification (kill -0) instead of pgrep avoids
-  # false matches from zombie entries or unrelated hypridle processes.
   setsid hypridle >/dev/null 2>&1 &
   hypridle_pid=$!
 
-  # Wait briefly for hypridle to start, then verify it stayed up.
-  # Only write the state file on confirmed success so the Waybar
-  # indicator never shows "active" from a stale file.
   sleep 0.3
   if kill -0 "$hypridle_pid" 2>/dev/null; then
-    : > "$state_file"
+    rm -f "$idle_off_flag"
+    ahr_toggle_set "idle"
     ahr_notify "Idle" "Idle lock enabled"
   else
-    # Wait for the zombie to be reaped so we don't leave clutter
     wait "$hypridle_pid" 2>/dev/null || true
-    rm -f "$state_file"
+    ahr_toggle_unset "idle"
     ahr_notify "artix-hypr-remix" "Failed to start hypridle — check your hypridle.conf"
     exit 1
   fi

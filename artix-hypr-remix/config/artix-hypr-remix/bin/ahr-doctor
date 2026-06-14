@@ -215,6 +215,28 @@ mime_check 'Default archive (application/zip)'        application/zip
 printf '\n=== Theme State ===\n'
 theme_check
 
+printf '\n=== Toggle State ===\n'
+toggle_state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles"
+toggle_check() {
+  local name="$1"
+  local label="$2"
+  if [[ -f "$toggle_state_dir/$name" ]]; then
+    printf '  OK: %s — enabled\n' "$label"
+  else
+    printf '  OK: %s — disabled\n' "$label"
+  fi
+}
+toggle_check nightlight "Nightlight"
+toggle_check idle "Idle lock"
+toggle_check notification-silencing "Notification silencing"
+# waybar-position stores a value, not a flag — just report its state
+if [[ -f "$toggle_state_dir/waybar-position" ]]; then
+  pos="$(cat "$toggle_state_dir/waybar-position" 2>/dev/null || echo "unknown")"
+  printf '  OK: Waybar position — %s\n' "$pos"
+else
+  printf '  OK: Waybar position — default (top)\n'
+fi
+
 printf '\n=== Framework Commands ===\n'
 framework_cmd_check ahr-menu
 framework_cmd_check ahr-menu-keybindings
@@ -227,7 +249,10 @@ framework_cmd_check ahr-default-terminal
 framework_cmd_check ahr-default-editor
 framework_cmd_check ahr-repair
 framework_cmd_check ahr-system-lock
+framework_cmd_check ahr-toggle
 framework_cmd_check ahr-toggle-idle
+framework_cmd_check ahr-restore-idle
+framework_cmd_check ahr-restore-nightlight
 framework_cmd_check ahr-launch-wallpaper-session
 framework_cmd_check ahr-capture-screenshot
 framework_cmd_check ahr-capture-picker

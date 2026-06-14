@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# ahr toggle — Inspect and manage toggle state flags.
+# Uses the shared toggle framework.
+#
+# Usage:
+#   ahr toggle list                          List all toggle flags with state
+#   ahr toggle status [<name>]               Show toggle state (human-readable)
+#   ahr toggle waybar-status <name>          JSON output for Waybar
+#   ahr toggle enable <name> [--notification <text>]   Enable a toggle
+#   ahr toggle disable <name> [--notification <text>]  Disable a toggle
+set -euo pipefail
+
+source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "${AHR_TOGGLE_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-toggle-lib.sh}"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr toggle <subcommand> [args]
+
+Subcommands:
+  list                               List all toggle flags with state
+  status [<name>]                    Show human-readable toggle state
+  waybar-status <name>               Output Waybar JSON for a toggle
+  enable <name> [--notification <t>] Enable (create) a toggle flag
+  disable <name> [--notification <t>] Disable (remove) a toggle flag
+  --help, -h                         Show this help
+
+All subcommands accept --help / -h to show subcommand help.
+EOF
+}
+
+cmd_list() {
+  local count=0
+  local name
+
+  echo "Toggle flags in: $AHR_TOGGLE_STATE_DIR"
+  echo
+
+  ahr_toggle_list
+
+  # Also list known toggles that may not have their flag file yet
+  # (they start disabled, so no file = disabled)
+  if [[ -d "$AHR_TOGGLE_STATE_DIR" ]]; then
+    count="$(find "$AHR_TOGGLE_STATE_DIR" -type f ! -name 'waybar-position' 2>/dev/null | wc -l)"
+  fi
+
+  echo
+  echo "Known toggle names:"
+  for name in nightlight idle notification-silencing waybar-position; do
+    if ahr_toggle_enabled "$name"; then
+      printf '  %-30s enabled\n' "$name"
+    else
+      printf '  %-30s disabled\n' "$name"
+    fi
+  done
+}
+
+cmd_status() {
+  local name="${1:-}"
+
+  if [[ -z "$name" ]]; then
+    cmd_list
+    return 0
+  fi
+
+  _ahr_toggle_validate_name "$name" || exit 1
+
+  if ahr_toggle_enabled "$name"; then
+    printf '%s: enabled\n' "$name"
+    return 0
+  else
+    printf '%s: disabled\n' "$name"
+    return 1
+  fi
+}
+
+cmd_waybar_status() {
+  local name="$1"
+  if [[ -z "$name" ]]; then
+    printf 'Usage: ahr toggle waybar-status <name>\n' >&2
+    exit 1
+  fi
+
+  _ahr_toggle_validate_name "$name" || exit 1
+
+
+
+  # Delegate to the individual status scripts for rich output (they know
+  # process-level details).  Fall back to generic flag-file status.
+  if [[ -x "${BASH_SOURCE[0]%/*}/ahr-waybar-$name-status" ]]; then
+    exec "${BASH_SOURCE[0]%/*}/ahr-waybar-$name-status"
+  fi
+
+  # Generic JSON output
+  ahr_toggle_waybar_status "$name" "ON" "OFF"
+}
+
+cmd_enable() {
+  local name="" notification=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --notification) notification="$2"; shift 2 ;;
+      -h|--help) printf 'Usage: ahr toggle enable <name> [--notification <text>]\n'; exit 0 ;;
+      *) name="$1"; shift ;;
+    esac
+  done
+
+  if [[ -z "$name" ]]; then
+    printf 'Usage: ahr toggle enable <name> [--notification <text>]\n' >&2
+    exit 1
+  fi
+
+  _ahr_toggle_validate_name "$name" || exit 1
+
+  # Special-case: enabling idle must also remove idle-off flag.
+  # Do this before the early-return so both paths are covered.
+  if [[ "$name" == "idle" ]]; then
+    rm -f "$AHR_TOGGLE_STATE_DIR/idle-off"
+  fi
+
+  if ahr_toggle_enabled "$name"; then
+    printf 'Toggle "%s" is already enabled.\n' "$name"
+    return 0
+  fi
+
+  ahr_toggle_set "$name" --notification "$notification"
+  printf 'Toggle "%s" enabled.\n' "$name"
+}
+
+cmd_disable() {
+  local name="" notification=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --notification) notification="$2"; shift 2 ;;
+      -h|--help) printf 'Usage: ahr toggle disable <name> [--notification <text>]\n'; exit 0 ;;
+      *) name="$1"; shift ;;
+    esac
+  done
+
+  if [[ -z "$name" ]]; then
+    printf 'Usage: ahr toggle disable <name> [--notification <text>]\n' >&2
+    exit 1
+  fi
+
+  _ahr_toggle_validate_name "$name" || exit 1
+
+  # Special-case: disabling idle must also create idle-off flag.
+  # Do this before the early-return so both paths are covered.
+  if [[ "$name" == "idle" ]]; then
+    mkdir -p "$AHR_TOGGLE_STATE_DIR"
+    : > "$AHR_TOGGLE_STATE_DIR/idle-off"
+  fi
+
+  if ! ahr_toggle_enabled "$name"; then
+    printf 'Toggle "%s" is already disabled.\n' "$name"
+    return 0
+  fi
+
+  ahr_toggle_unset "$name" --notification "$notification"
+  printf 'Toggle "%s" disabled.\n' "$name"
+}
+
+# ── Dispatch ──────────────────────────────────────────────────
+
+case "${1:-help}" in
+  list|status|enable|disable)
+    subcommand="$1"
+    shift
+    "cmd_$subcommand" "$@"
+    ;;
+  waybar-status)
+    shift
+    cmd_waybar_status "$@"
+    ;;
+  -h|--help|help|"")
+    usage
+    ;;
+  *)
+    printf 'Unknown toggle subcommand: %s\n\n' "$1" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

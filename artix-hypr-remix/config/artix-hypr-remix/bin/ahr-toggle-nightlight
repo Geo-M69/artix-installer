@@ -1,20 +1,13 @@
 #!/usr/bin/env bash
 # Toggle nightlight on/off.
-# The state file is the authoritative source of truth for the desired state.
-# If the state file says ON but hyprsunset is not actually warming the screen
-# (e.g. after reboot, or after a crash), we restore nightlight instead of
-# toggling it off — this makes the feature resilient to session restarts.
+# Uses the shared toggle framework for state management.
 set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "${AHR_TOGGLE_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-toggle-lib.sh}"
 
 ON_TEMP=4000
 OFF_TEMP=6500
-
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/toggles"
-state_file="$state_dir/nightlight"
-
-mkdir -p "$state_dir"
 
 # Ensure hyprsunset is installed
 if ! ahr_require hyprsunset hyprsunset; then
@@ -25,7 +18,6 @@ fi
 _ensure_hyprsunset_running() {
   if ! pgrep -x hyprsunset >/dev/null 2>&1; then
     setsid hyprsunset >/dev/null 2>&1 &
-    # Give hyprsunset time to initialize before we try to configure it
     sleep 0.5
   fi
 }
@@ -36,26 +28,26 @@ _is_at_night_temp() {
   [[ -n "$temp" && "$temp" -lt 6000 ]]
 }
 
-if [[ -f "$state_file" ]]; then
+if ahr_toggle_enabled "nightlight"; then
   # ── State says ON ─────────────────────────────────────────────
   _ensure_hyprsunset_running
 
   if _is_at_night_temp; then
     # Nightlight is actually working → toggle OFF
     hyprctl hyprsunset temperature "$OFF_TEMP" >/dev/null 2>&1 || true
-    rm -f "$state_file"
+    ahr_toggle_unset "nightlight"
     ahr_notify "Nightlight" "Nightlight disabled (6500K)"
   else
     # State says ON but screen is not warm (e.g. after reboot or crash) → restore
     hyprctl hyprsunset temperature "$ON_TEMP" >/dev/null 2>&1 || true
-    # State file already exists, no need to recreate
+    ahr_toggle_set "nightlight"
     ahr_notify "Nightlight" "Nightlight restored (4000K)"
   fi
 else
   # ── State says OFF → toggle ON ────────────────────────────────
   _ensure_hyprsunset_running
   hyprctl hyprsunset temperature "$ON_TEMP" >/dev/null 2>&1 || true
-  : > "$state_file"
+  ahr_toggle_set "nightlight"
   ahr_notify "Nightlight" "Nightlight enabled (4000K)"
 fi
 
