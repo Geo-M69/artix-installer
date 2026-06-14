@@ -294,13 +294,27 @@ This track was added after Phase 5 was completed, so it intentionally does not r
 
 For each menu item, define the command behind it before implementing.
 
-- [ ] Build `Omarchy label -> AHR command` mapping for supported items.
-- [ ] Build `Omarchy label -> unsupported reason` mapping for deferred items.
-- [ ] Keep systemd-only actions out of AHR unless an OpenRC/elogind-safe adapter exists.
-- [ ] Keep package actions guarded by command/package availability checks.
-- [ ] Keep dangerous actions behind confirmation menus.
-- [ ] Keep terminal handoff behavior consistent for long-running commands.
-- [ ] Keep notifications concise and actionable when dependencies are missing.
+- [x] Build `Omarchy label -> AHR command` mapping for supported items.
+  → Complete. See `docs/action-mapping.md` for full table covering: Learn, Trigger, Capture,
+    Toggle, Style, Setup, Install, Remove, Update, System menus.
+- [x] Build `Omarchy label -> unsupported reason` mapping for deferred items.
+  → Complete. 45+ items classified with specific reasons: needs new command, no equivalent,
+    intentionally omitted (systemd), or deferred.
+- [x] Keep systemd-only actions out of AHR unless an OpenRC/elogind-safe adapter exists.
+  → Verified. All power/session commands use AHR wrappers (ahr-system-suspend etc.) or
+    elogind-compatible paths. No raw `systemctl` calls in menu code.
+- [x] Keep package actions guarded by command/package availability checks.
+  → Verified. `menu_require` pattern used for all dependency-gated actions. Missing
+    dependencies show notification with install instructions.
+- [x] Keep dangerous actions behind confirmation menus.
+  → Verified. `confirm_yes` used for: Docker install/remove, Printing install/remove,
+    reboot, poweroff, suspend, hibernate.
+- [x] Keep terminal handoff behavior consistent for long-running commands.
+  → Verified. `run_terminal_script()` / `run_terminal_command()` used for: package
+    operations, theme gallery, poweroff, update runs.
+- [x] Keep notifications concise and actionable when dependencies are missing.
+  → Verified. `ahr_notify` shows action name + install command. Consistent format across
+    all `menu_require` calls.
 
 ## Phase 7: Theme Integration
 
