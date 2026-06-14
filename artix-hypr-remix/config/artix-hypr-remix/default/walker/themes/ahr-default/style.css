@@ -10,34 +10,41 @@ scrollbar {
 }
 
 .normal-icons {
-  -gtk-icon-size: 16px;
+  -gtk-icon-size: 18px;
 }
 
 .large-icons {
   -gtk-icon-size: 32px;
 }
 
+/* ── Main window / backdrop ───────────────────────────────── */
 .box-wrapper {
   background: rgba(17, 19, 24, 0.96);
-  padding: 16px;
-  border: 2px solid #5ec4ff;
+  padding: 12px;
+  border: 2px solid rgba(94, 196, 255, 0.4);
   border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 0 0 1px rgba(94, 196, 255, 0.08),
+    0 8px 40px rgba(0, 0, 0, 0.5);
+  min-width: 520px;
 }
 
+/* ── Search bar ────────────────────────────────────────────── */
 .search-container {
-  background: #1e1e2e;
+  background: rgba(30, 30, 46, 0.85);
   border-radius: 10px;
-  padding: 10px 14px;
-  border: 1px solid rgba(94, 196, 255, 0.15);
+  padding: 8px 14px;
+  margin: 0 4px 4px 4px;
+  border: 1px solid rgba(94, 196, 255, 0.12);
 }
 
 .input {
   caret-color: #5ec4ff;
+  font-size: 20px;
 }
 
 .input placeholder {
-  opacity: 0.5;
+  opacity: 0.4;
   color: #6c7086;
 }
 
@@ -47,39 +54,41 @@ scrollbar {
   outline: none;
 }
 
+/* ── Content area ──────────────────────────────────────────── */
 .content-container {
-  margin-top: 6px;
+  margin: 4px 0 0 0;
 }
 
+/* ── List / items ──────────────────────────────────────────── */
 .list {
-  margin-top: 2px;
+  margin: 0;
 }
 
 child {
-  border-radius: 8px;
-  margin: 0 2px;
+  border-radius: 10px;
+  margin: 1px 4px;
+  transition: background 80ms ease;
 }
 
-child:hover .item-box {
-  background: rgba(94, 196, 255, 0.06);
-}
-
-child:selected .item-box * {
-  color: #11111b;
-}
-
-child:selected .item-box {
-  background: rgba(94, 196, 255, 0.85);
-  border-radius: 8px;
+child:hover {
+  background: rgba(94, 196, 255, 0.05);
 }
 
 child:selected {
-  background: transparent;
+  background: linear-gradient(
+    135deg,
+    rgba(94, 196, 255, 0.18) 0%,
+    rgba(94, 196, 255, 0.08) 100%
+  );
+  border: 1px solid rgba(94, 196, 255, 0.2);
+}
+
+child:selected .item-box * {
+  color: #ffffff;
 }
 
 .item-box {
-  padding: 4px 10px;
-  border-radius: 8px;
+  padding: 4px 14px;
 }
 
 .item-text-box {
@@ -92,47 +101,58 @@ child:selected {
 }
 
 .item-subtext {
-  font-size: 0;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
+  font-size: 0px;
+  min-height: 0px;
+  margin: 0px;
+  padding: 0px;
 }
 
 .item-image {
-  margin-right: 12px;
-  -gtk-icon-transform: scale(0.85);
+  margin-right: 14px;
+  -gtk-icon-transform: scale(0.9);
+  opacity: 0.85;
+}
+
+child:selected .item-image {
+  opacity: 1;
+}
+
+/* ── Placeholder / empty state ─────────────────────────────── */
+.placeholder {
+  color: #585b70;
+  padding: 28px 14px;
+  font-size: 15px;
+}
+
+/* ── Keybind hint bar ──────────────────────────────────────── */
+.keybind-hints {
+  background: rgba(24, 26, 34, 0.9);
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin: 4px 4px 0 4px;
+  border: 1px solid rgba(94, 196, 255, 0.06);
+}
+
+.global-keybinds label,
+.item-keybinds label {
+  background: rgba(94, 196, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #89b4fa;
+}
+
+/* ── Error state ───────────────────────────────────────────── */
+.error {
+  color: #f38ba8;
+  padding: 8px 14px;
+  font-size: 14px;
+  background: rgba(243, 139, 168, 0.08);
+  border-radius: 8px;
+  margin: 4px;
 }
 
 .current {
   font-style: italic;
   color: #5ec4ff;
-}
-
-.error {
-  color: #f38ba8;
-  padding: 8px;
-  font-size: 14px;
-}
-
-.keybind-hints {
-  background: #1e1e2e;
-  padding: 8px 12px;
-  margin-top: 8px;
-  border-radius: 8px;
-  font-size: 14px;
-}
-
-.global-keybinds label,
-.item-keybinds label {
-  background: #313244;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 13px;
-  color: #bac2de;
-}
-
-.placeholder {
-  color: #6c7086;
-  font-size: 16px;
-  padding: 20px;
 }

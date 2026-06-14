@@ -52,17 +52,20 @@ describe_dispatcher() {
 
 print_static_help() {
   cat <<'EOF'
-SUPER + SPACE          AHR menu / application launcher
-SUPER + ALT + SPACE    AHR menu
-SUPER + K              Show this keybinding help
-SUPER + RETURN         Terminal
-SUPER + SHIFT + RETURN Browser
-SUPER + SHIFT + F      Files
-SUPER + CTRL + L       Lock screen
-SUPER + P              Clipboard picker
-PRINT                  Screenshot picker (area/fullscreen/window)
-ALT + RETURN           Emergency terminal fallback
-ALT + F4               Close focused window
+SUPER + SPACE                App launcher
+SUPER + ALT + SPACE          AHR Command Center
+SUPER + ESCAPE               System / Power menu
+SUPER + K                    Show this keybinding help
+SUPER + RETURN               Terminal
+SUPER + SHIFT + RETURN       Browser
+SUPER + SHIFT + F            Files
+SUPER + CTRL + L             Lock screen
+SUPER + CTRL + SPACE         Switch wallpaper
+SUPER + CTRL + SHIFT + SPACE Style / Theme menu
+SUPER + P                    Clipboard picker
+PRINT                        Screenshot picker (area/fullscreen/window)
+ALT + RETURN                 Emergency terminal fallback
+ALT + F4                     Close focused window
 EOF
 }
 
