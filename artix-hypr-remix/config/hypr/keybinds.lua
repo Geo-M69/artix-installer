@@ -2,8 +2,9 @@
 return {
   -- Launchers and core apps.
   { mods = { "SUPER" }, key = "RETURN", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-launch-terminal" },
-  { mods = { "SUPER" }, key = "SPACE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu" },
+  { mods = { "SUPER" }, key = "SPACE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-launch-apps" },
   { mods = { "SUPER", "ALT" }, key = "SPACE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu" },
+  { mods = { "SUPER" }, key = "ESCAPE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu system" },
   { mods = { "SUPER" }, key = "K", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu-keybindings" },
   { mods = { "SUPER", "SHIFT" }, key = "RETURN", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-launch-browser" },
   { mods = { "SUPER", "SHIFT" }, key = "F", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-launch-files" },
@@ -58,6 +59,10 @@ return {
   { mods = { "SUPER", "SHIFT" }, key = "COMMA", action = "exec", command = "makoctl dismiss --all" },
   { mods = { "SUPER", "ALT" }, key = "COMMA", action = "exec", command = "makoctl invoke" },
   { mods = { "SUPER", "SHIFT", "ALT" }, key = "COMMA", action = "exec", command = "makoctl restore" },
+
+  -- Direct menu jumps (style, theme, background).
+  { mods = { "SUPER", "CTRL", "SHIFT" }, key = "SPACE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-menu style" },
+  { mods = { "SUPER", "CTRL" }, key = "SPACE", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-theme-bg-switcher" },
 
   -- Screenshot picker (Area, Fullscreen, Window).
   { mods = {}, key = "PRINT", action = "exec", command = "bash ~/.config/artix-hypr-remix/bin/ahr-capture-picker" },

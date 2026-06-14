@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "${AHR_TOGGLE_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-toggle-lib.sh}"
 
 MENU_BACKEND=""
 
@@ -21,6 +22,7 @@ Slices:
   remove    Remove actions
   update    Update and migration actions
   system    Session and power actions
+  about     Version, diagnostics, and documentation info
   help      Show this help
 EOF
 }
@@ -78,6 +80,82 @@ ERROR: '$cmd' is required but not installed.
 EOF
   ahr_notify "artix-hypr-remix" "'$cmd' is not installed — install with: sudo pacman -S $pkg"
   return 1
+}
+
+# ── State-aware toggle helpers ──────────────────────────────────
+# These return a display string for toggle menu items showing live state.
+
+toggle_state_text() {
+  local name="$1"
+  local label_on="$2"
+  local label_off="$3"
+
+  if ahr_toggle_enabled "$name"; then
+    printf '✓ %s' "$label_on"
+  else
+    printf '✗ %s' "$label_off"
+  fi
+}
+
+idle_lock_state() {
+  if pgrep -x hypridle >/dev/null 2>&1; then
+    printf '✓ Idle Lock: On'
+  else
+    printf '✗ Idle Lock: Off'
+  fi
+}
+
+notification_state() {
+  local silenced=false
+  if ahr_toggle_enabled "notification-silencing"; then
+    silenced=true
+  elif ahr_has_cmd makoctl; then
+    if makoctl mode 2>/dev/null | grep -q 'do-not-disturb'; then
+      silenced=true
+    fi
+  fi
+  if [[ "$silenced" == "true" ]]; then
+    printf '✗ Notifications: Silenced'
+  else
+    printf '✓ Notifications: Enabled'
+  fi
+}
+
+nightlight_state() {
+  local nightlight=false
+  if pgrep -x hyprsunset >/dev/null 2>&1; then
+    if ahr_has_cmd hyprctl; then
+      local temp
+      temp="$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' || true)"
+      if [[ -n "$temp" && "$temp" -lt 6000 ]]; then
+        nightlight=true
+      fi
+    fi
+  fi
+  if [[ "$nightlight" == "true" ]] || ahr_toggle_enabled "nightlight"; then
+    printf '✓ Nightlight: On'
+  else
+    printf '✗ Nightlight: Off'
+  fi
+}
+
+waybar_state() {
+  if pgrep -x waybar >/dev/null 2>&1; then
+    printf '✓ Waybar: Visible'
+  else
+    printf '✗ Waybar: Hidden'
+  fi
+}
+
+waybar_position_state() {
+  local waybar_config="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/config.jsonc"
+  local state_file="$AHR_TOGGLE_STATE_DIR/waybar-position"
+
+  if [[ -f "$waybar_config" ]] && grep -q '"position"[[:space:]]*:[[:space:]]*"bottom"' "$waybar_config" 2>/dev/null; then
+    printf '↓ Waybar: Bottom'
+  else
+    printf '↑ Waybar: Top'
+  fi
 }
 
 quote_command() {
@@ -233,12 +311,16 @@ cat <<'GUIDE'
 ╚══════════════════════════════════════════════════╝
 
 ESSENTIAL KEYBINDINGS
-  Super + Space      Main menu (this menu system)
-  Super + K          Keybinding reference
-  Super + Return     Terminal
-  Super + Shift + F  File manager
-  Super + P          Clipboard history picker
-  Print              Screenshot picker (area/fullscreen/window)
+  Super + Space          App launcher
+  Super + Alt + Space    AHR Menu (command center)
+  Super + Escape         System / Power menu
+  Super + K              Keybinding reference
+  Super + Return         Terminal
+  Super + Shift + F      File manager
+  Super + P              Clipboard history picker
+  Print                  Screenshot picker (area/fullscreen/window)
+  Super + Ctrl + Space   Switch wallpaper
+  Super + Ctrl + Shift + Space   Style / Theme menu
 
 MENU STRUCTURE
   Applications  App launcher
@@ -246,10 +328,11 @@ MENU STRUCTURE
   Trigger       Screenshots, screen recording, toggles
   Style         Themes, wallpaper, Waybar/Mako controls
   Setup         Audio, network, Bluetooth, defaults
-  Install       Packages, Flatpak, Docker, Printing
-  Remove        Package, Flatpak, Docker, Printing
+  Install       Packages, Flatpak, Docker, Printing (OpenRC)
+  Remove        Package, Flatpak, Docker, Printing (OpenRC)
   Update        System & framework updates, migrations
   System        Lock, logout, suspend, reboot, power off
+  About         Version, diagnostics, documentation links
 
 KEY COMMANDS
   ahr status              Show install state, logs, backups
@@ -264,7 +347,7 @@ GETTING HELP
   Learn > AHR Command Help    All ahr-* commands
   Learn > Theme Help          Theme engine usage
   ahr help                    CLI help for the ahr dispatcher
-  ahr doctor                Full health report
+  ahr doctor                  Full health report
 GUIDE
 read -r -p 'Press Enter to close...' _
 "
@@ -291,10 +374,10 @@ show_learn_menu() {
       "Getting Started" \
       "Keybindings" \
       "Quick Reference" \
-      "Theme Asset Guide" \
       "AHR Command Help" \
       "Theme Help" \
       "Update Help" \
+      "Theme Asset Guide" \
       "Open README" \
       "Back")"
 
@@ -302,10 +385,10 @@ show_learn_menu() {
       "Getting Started") show_getting_started ;;
       "Keybindings") run_command_now ahr-menu-keybindings ;;
       "Quick Reference") open_markdown_doc "$quick_reference_file" "Quick reference" ;;
-      "Theme Asset Guide") open_markdown_doc "$theme_asset_file" "Theme asset guide" ;;
       "AHR Command Help") run_terminal_script "$(quote_command "$ahr_cmd" help); echo; read -r -p 'Press Enter to close...' _" ;;
       "Theme Help") run_terminal_script "$(quote_command "$theme_cmd" help); echo; read -r -p 'Press Enter to close...' _" ;;
       "Update Help") run_terminal_script "$(quote_command "$update_cmd" --help); echo; read -r -p 'Press Enter to close...' _" ;;
+      "Theme Asset Guide") open_markdown_doc "$theme_asset_file" "Theme asset guide" ;;
       "Open README")
         if ahr_has_cmd xdg-open; then
           xdg-open "https://github.com/geofedora/artix-installer" >/dev/null 2>&1 || true
@@ -545,6 +628,28 @@ run_command_capture() {
   "$command_path" "$@" 2>/dev/null || true
 }
 
+# Return the screen recording state display string.
+screenrecording_state() {
+  if pgrep -f '^gpu-screen-recorder' >/dev/null 2>&1; then
+    printf '⏺ Toggle Screen Recording (active)'
+  else
+    printf '⏹ Toggle Screen Recording (stopped)'
+  fi
+}
+
+# Return the current theme name for display in the style menu.
+theme_current_label() {
+  local theme_cmd
+  theme_cmd="$(resolve_command_path ahr-theme 2>/dev/null)" || { printf 'Theme: (not installed)'; return 0; }
+  local current
+  current="$("$theme_cmd" current --raw 2>/dev/null | sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g' || true)"
+  if [[ -n "$current" ]]; then
+    printf 'Theme: %s' "$current"
+  else
+    printf 'Theme: (none)'
+  fi
+}
+
 show_capture_menu() {
   local choice
 
@@ -553,7 +658,7 @@ show_capture_menu() {
       "Area Screenshot" \
       "Fullscreen Screenshot" \
       "Window Screenshot" \
-      "Toggle Screen Recording" \
+      "$(screenrecording_state)" \
       "Clipboard History" \
       "Color Picker" \
       "Back")"
@@ -574,7 +679,7 @@ show_capture_menu() {
           run_command_background ahr-capture-screenshot --window
         fi
         ;;
-      "Toggle Screen Recording")
+      "⏺ Toggle Screen Recording (active)"|"⏹ Toggle Screen Recording (stopped)")
         if menu_require gpu-screen-recorder gpu-screen-recorder; then
           run_command_background ahr-capture-screenrecording
         fi
@@ -603,25 +708,29 @@ show_toggle_menu() {
 
   while true; do
     choice="$(menu_select "Toggle" \
-      "Idle Lock" \
-      "Notifications" \
-      "Waybar" \
-      "Nightlight" \
-      "Waybar Position" \
+      "$(idle_lock_state)" \
+      "$(notification_state)" \
+      "$(nightlight_state)" \
+      "$(waybar_state)" \
+      "$(waybar_position_state)" \
       "Back")"
 
     case "$choice" in
-      "Idle Lock")
+      "✓ Idle Lock: On"|"✗ Idle Lock: Off")
         if ahr_has_cmd hypridle; then
           run_command_now ahr-toggle-idle
         else
           menu_require hypridle hypridle
         fi
         ;;
-      "Notifications") run_command_now ahr-toggle-notification-silencing ;;
-      "Waybar") run_command_now ahr-toggle-waybar ;;
-      "Nightlight") run_command_now ahr-toggle-nightlight ;;
-      "Waybar Position") run_command_now ahr-toggle-waybar-position ;;
+      "✓ Notifications: Enabled"|"✗ Notifications: Silenced")
+        run_command_now ahr-toggle-notification-silencing ;;
+      "✓ Nightlight: On"|"✗ Nightlight: Off")
+        run_command_now ahr-toggle-nightlight ;;
+      "✓ Waybar: Visible"|"✗ Waybar: Hidden")
+        run_command_now ahr-toggle-waybar ;;
+      "↑ Waybar: Top"|"↓ Waybar: Bottom")
+        run_command_now ahr-toggle-waybar-position ;;
       "Back"|"") return 0 ;;
       *) return 0 ;;
     esac
@@ -651,26 +760,29 @@ show_style_menu() {
 
   while true; do
     choice="$(menu_select "Style" \
+      "$(theme_current_label)" \
+      "Background Picker" \
+      "Background Next" \
       "Theme Status" \
-      "Theme Set" \
       "Download Omarchy Theme..." \
       "Background Gallery" \
-      "Background Picker" \
       "Install Background..." \
-      "Background Next" \
       "Theme Refresh" \
       "Font Status" \
       "Font Set" \
-      "Toggle Waybar" \
-      "Waybar Position" \
+      "$(waybar_state)" \
+      "$(waybar_position_state)" \
       "Restart Waybar" \
       "Restart Mako" \
       "Back")"
 
     case "$choice" in
+      Theme:*|Theme)
+        show_theme_set_menu
+        ;;
       "Theme Status") show_theme_status ;;
-      "Theme Set") show_theme_set_menu ;;
       "Download Omarchy Theme...") show_omarchy_theme_menu ;;
+      "Theme Refresh") run_command_now ahr-theme refresh ;;
       "Background Gallery")
         local bg_gallery_cmd
         bg_gallery_cmd="$(resolve_command_path ahr-theme-bg-gallery)" || ahr_fail "Command not found: ahr-theme-bg-gallery"
@@ -679,11 +791,12 @@ show_style_menu() {
       "Background Picker") run_command_now ahr-theme-bg-switcher ;;
       "Install Background...") show_theme_background_install ;;
       "Background Next") run_command_now ahr-theme bg-next ;;
-      "Theme Refresh") run_command_now ahr-theme refresh ;;
       "Font Status") run_command_now ahr-font status ;;
       "Font Set") show_font_set_menu ;;
-      "Toggle Waybar") run_command_now ahr-toggle-waybar ;;
-      "Waybar Position") run_command_now ahr-toggle-waybar-position ;;
+      "✓ Waybar: Visible"|"✗ Waybar: Hidden")
+        run_command_now ahr-toggle-waybar ;;
+      "↑ Waybar: Top"|"↓ Waybar: Bottom")
+        run_command_now ahr-toggle-waybar-position ;;
       "Restart Waybar") run_command_now ahr-restart-waybar ;;
       "Restart Mako") run_command_now ahr-restart-mako ;;
       "Back"|"") return 0 ;;
@@ -1003,6 +1116,7 @@ show_main_menu() {
 show_about_menu() {
   local version_file="${AHR_CONFIG_DIR:-$HOME/.config/artix-hypr-remix}/VERSION"
   local version=""
+  local install_log="/var/log/artix-hypr-remix-install.log"
 
   if [[ -f "$version_file" ]]; then
     version="$(head -1 "$version_file")"
@@ -1013,24 +1127,42 @@ show_about_menu() {
     title="$title ($version)"
   fi
 
-  # Use printf %q to shell-quote the dynamic title, preventing injection
-  # when the version string contains apostrophes or other shell metacharacters.
-  local quoted_title
-  quoted_title="$(printf '%q' "$title")"
+  # Gather useful diagnostics for the about display
+  local theme_cmd
+  local current_theme=""
+  theme_cmd="$(resolve_command_path ahr-theme 2>/dev/null)" || true
+  if [[ -n "$theme_cmd" ]]; then
+    current_theme="$("$theme_cmd" current --raw 2>/dev/null || echo 'none')"
+  fi
 
-  run_terminal_script "printf '%s\n\n%s\n\n%s\n%s\n%s\n\n%s\n%s\n%s\n%s\n\n%s\n%s\n\n%s\n' \
-    $quoted_title \
-    'An opinionated Artix Linux installer focused on Hyprland and OpenRC.' \
-    'Project target:' \
-    '  OpenRC-native Omarchy-equivalent Hyprland desktop' \
-    '  with a safe, repeatable installer and polished first-login experience.' \
-    'Base system: Artix Linux with OpenRC' \
-    'Shell: bash (zsh optional)' \
-    'Startup: tty (greetd optional)' \
-    'Command: ahr <command> or ahr-menu' \
-    'Log: /var/log/artix-hypr-remix-install.log' \
-    'Docs: ~/.config/artix-hypr-remix/docs/' \
-    'Licensed under MIT'; read -r -p 'Press Enter to close...' _"
+  local safe_title safe_theme
+  safe_title="$(printf '%q' "$title")"
+  safe_theme="$(printf '%q' "${current_theme:-none}")"
+
+  run_terminal_script "
+title=$safe_title
+current_theme=$safe_theme
+printf '%s\n' '┌──────────────────────────────────────────────'
+printf '%s\n' \"│  \$title\"
+printf '%s\n' '├──────────────────────────────────────────────'
+printf '%s\n' '│  An opinionated Artix Linux installer'
+printf '%s\n' '│  focused on Hyprland and OpenRC.'
+printf '%s\n' '│'
+printf '%s\n' '│  Project target:'
+printf '%s\n' '│    OpenRC-native Omarchy-equivalent desktop'
+printf '%s\n' '│    with safe, repeatable installer and'
+printf '%s\n' '│    polished first-login experience.'
+printf '%s\n' '│'
+printf '%s\n' \"│  Active theme: \$current_theme\"
+printf '%s\n' '│  Shell: bash (zsh optional)'
+printf '%s\n' '│  Command: ahr <command> or ahr-menu'
+printf '%s\n' '│'
+[[ -f '$install_log' ]] && printf '%s\n' '│  Log: $install_log'
+printf '%s\n' '│  Docs: ~/.config/artix-hypr-remix/docs/'
+printf '%s\n' '│  License: MIT'
+printf '%s\n' '└──────────────────────────────────────────────'
+read -r -p 'Press Enter to close...' _
+"
 }
 
 dispatch() {
@@ -1047,6 +1179,7 @@ dispatch() {
     remove) show_remove_menu ;;
     update) show_update_menu ;;
     system) show_system_menu ;;
+    about) show_about_menu ;;
     help|-h|--help) usage ;;
     *)
       usage >&2
