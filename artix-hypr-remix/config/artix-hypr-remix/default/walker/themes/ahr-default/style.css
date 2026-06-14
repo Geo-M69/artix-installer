@@ -1,3 +1,8 @@
+/* AHR Walker theme — inspired by Omarchy's visual design.
+ * Uses hardcoded Catppuccin Mocha colors since AHR does not
+ * inject CSS variables at runtime the way Omarchy does.
+ */
+
 * {
   all: unset;
   font-family: "JetBrainsMono Nerd Font", "Noto Sans", monospace;
@@ -10,42 +15,37 @@ scrollbar {
 }
 
 .normal-icons {
-  -gtk-icon-size: 18px;
+  -gtk-icon-size: 16px;
 }
 
 .large-icons {
   -gtk-icon-size: 32px;
 }
 
-/* ── Main window / backdrop ───────────────────────────────── */
+/* ── Main window ──────────────────────────────────────────── */
 .box-wrapper {
-  background: rgba(17, 19, 24, 0.96);
-  padding: 12px;
-  border: 2px solid rgba(94, 196, 255, 0.4);
-  border-radius: 16px;
-  box-shadow:
-    0 0 0 1px rgba(94, 196, 255, 0.08),
-    0 8px 40px rgba(0, 0, 0, 0.5);
-  min-width: 520px;
+  background: rgba(30, 30, 46, 0.96);
+  padding: 20px;
+  border: 2px solid rgba(69, 71, 90, 0.6);
+  border-radius: 12px;
+  min-width: 295px;
 }
 
-/* ── Search bar ────────────────────────────────────────────── */
+/* ── Search / prompt bar ──────────────────────────────────── */
 .search-container {
-  background: rgba(30, 30, 46, 0.85);
-  border-radius: 10px;
-  padding: 8px 14px;
-  margin: 0 4px 4px 4px;
-  border: 1px solid rgba(94, 196, 255, 0.12);
+  background: rgba(24, 26, 34, 0.85);
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 2px;
 }
 
 .input {
-  caret-color: #5ec4ff;
-  font-size: 20px;
+  caret-color: #89b4fa;
 }
 
 .input placeholder {
-  opacity: 0.4;
-  color: #6c7086;
+  opacity: 0.45;
+  color: #585b70;
 }
 
 .input:focus,
@@ -54,50 +54,44 @@ scrollbar {
   outline: none;
 }
 
-/* ── Content area ──────────────────────────────────────────── */
+/* ── Content container ────────────────────────────────────── */
 .content-container {
-  margin: 4px 0 0 0;
+  margin: 0;
 }
 
-/* ── List / items ──────────────────────────────────────────── */
+/* ── List / item rows ─────────────────────────────────────── */
 .list {
   margin: 0;
 }
 
 child {
-  border-radius: 10px;
-  margin: 1px 4px;
-  transition: background 80ms ease;
+  border-radius: 6px;
+  margin: 0;
 }
 
 child:hover {
-  background: rgba(94, 196, 255, 0.05);
+  background: rgba(205, 214, 244, 0.03);
 }
 
 child:selected {
-  background: linear-gradient(
-    135deg,
-    rgba(94, 196, 255, 0.18) 0%,
-    rgba(94, 196, 255, 0.08) 100%
-  );
-  border: 1px solid rgba(94, 196, 255, 0.2);
+  background: rgba(205, 214, 244, 0.07);
 }
 
 child:selected .item-box * {
-  color: #ffffff;
+  color: #11111b;
 }
 
 .item-box {
-  padding: 4px 14px;
+  padding-left: 14px;
 }
 
 .item-text-box {
   all: unset;
-  padding: 10px 0;
+  padding: 14px 0;
 }
 
 .item-text {
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .item-subtext {
@@ -117,42 +111,39 @@ child:selected .item-image {
   opacity: 1;
 }
 
-/* ── Placeholder / empty state ─────────────────────────────── */
+/* ── Placeholder (empty state) ────────────────────────────── */
 .placeholder {
   color: #585b70;
-  padding: 28px 14px;
+  padding: 24px 14px;
   font-size: 15px;
 }
 
-/* ── Keybind hint bar ──────────────────────────────────────── */
+/* ── Keybind hint bar ─────────────────────────────────────── */
 .keybind-hints {
   background: rgba(24, 26, 34, 0.9);
+  padding: 10px;
+  margin-top: 10px;
   border-radius: 8px;
-  padding: 6px 12px;
-  margin: 4px 4px 0 4px;
-  border: 1px solid rgba(94, 196, 255, 0.06);
 }
 
 .global-keybinds label,
 .item-keybinds label {
-  background: rgba(94, 196, 255, 0.1);
+  background: rgba(69, 71, 90, 0.3);
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 13px;
   color: #89b4fa;
 }
 
-/* ── Error state ───────────────────────────────────────────── */
+/* ── Error state ──────────────────────────────────────────── */
 .error {
   color: #f38ba8;
-  padding: 8px 14px;
+  padding: 10px;
   font-size: 14px;
-  background: rgba(243, 139, 168, 0.08);
-  border-radius: 8px;
-  margin: 4px;
 }
 
+/* ── Current / active marker ──────────────────────────────── */
 .current {
   font-style: italic;
-  color: #5ec4ff;
+  color: #89b4fa;
 }
