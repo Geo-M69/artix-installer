@@ -318,12 +318,30 @@ For each menu item, define the command behind it before implementing.
 
 ## Phase 7: Theme Integration
 
-- [ ] Add Walker CSS template rendering to `ahr-theme` refresh/set flow.
-- [ ] Ensure AHR current-theme compatibility link still satisfies Omarchy theme assets.
-- [ ] Validate `ahr-theme-install-omarchy` installs themes with usable Walker colors.
-- [ ] Validate `ahr-theme refresh` regenerates Walker CSS.
-- [ ] Validate theme changes restart or refresh Walker as needed.
-- [ ] Add doctor/repair checks for missing Walker theme CSS if useful.
+- [x] Add Walker CSS template rendering to `ahr-theme` refresh/set flow.
+  → Already built. `ahr_theme_set()` → `ahr_theme_render_templates_for_dir()` processes
+    `default/themed/walker.css.tpl` into `current/theme/walker.css` during every
+    `ahr-theme set` and `ahr-theme refresh`. No code change needed.
+- [x] Ensure AHR current-theme compatibility link still satisfies Omarchy theme assets.
+  → Already built. `ahr_theme_ensure_omarchy_current_link()` creates/verifies
+    `~/.config/omarchy/current → ~/.config/artix-hypr-remix/current` symlink.
+    Called during every `ahr-theme set`. No code change needed.
+- [x] Validate `ahr-theme-install-omarchy` installs themes with usable Walker colors.
+  → Verified. Omarchy theme `colors.toml` includes `accent`, `foreground`, `background`
+    keys which `walker.css.tpl` uses for its `@define-color` variables.
+- [x] Validate `ahr-theme refresh` regenerates Walker CSS.
+  → `ahr-theme refresh` → `ahr_theme_refresh()` → `ahr_theme_set()` →
+    `ahr_theme_render_templates_for_dir()`. The `walker.css.tpl` is processed
+    alongside existing templates. Walker CSS is regenerated on every refresh.
+- [x] Validate theme changes restart or refresh Walker as needed.
+  → **Added** Walker restart to `ahr_theme_reload_services()`. When Walker service
+    is running, it's killed and restarted so new CSS variables from the theme are
+    picked up immediately. Uses `pkill -x walker` + `setsid walker --gapplication-service`,
+    matching the pattern in `ahr-restart-walker`.
+- [x] Add doctor/repair checks for missing Walker theme CSS if useful.
+  → **Added** Walker theme CSS check to `ahr_theme_status()`. Checks for
+    `$AHR_THEME_STATE_DIR/theme/walker.css` existence and non-emptiness.
+    If missing, prints a warning with repair instructions (`ahr-theme refresh`).
 
 ## Phase 8: Validation
 

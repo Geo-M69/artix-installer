@@ -690,6 +690,18 @@ ahr_theme_reload_services() {
   if ahr_has_cmd hyprctl; then
     hyprctl reload >/dev/null 2>&1 || true
   fi
+
+  # Restart Walker so it picks up fresh theme CSS variables from
+  # current/theme/walker.css.  The @import in ahr-default/style.css
+  # is resolved when the Walker service starts, so a restart ensures
+  # new colors are visible immediately.
+  if pgrep -x walker >/dev/null 2>&1; then
+    if ahr_has_cmd walker; then
+      pkill -x walker >/dev/null 2>&1 || true
+      sleep 0.2
+      setsid walker --gapplication-service >/dev/null 2>&1 &
+    fi
+  fi
 }
 
 ahr_theme_collect_backgrounds() {
@@ -1045,6 +1057,15 @@ ahr_theme_status() {
   local waybar_css="$HOME/.config/waybar/style.css"
   local mako_config="$HOME/.config/mako/config"
   local ghostty_config="$HOME/.config/ghostty/config"
+  local walker_theme_css="$AHR_THEME_STATE_DIR/theme/walker.css"
+
+  if [[ -f "$walker_theme_css" && -s "$walker_theme_css" ]]; then
+    status_lines+=("Walker theme CSS: deployed ($(wc -l < "$walker_theme_css" | tr -d ' ') lines)")
+  else
+    status_lines+=("WARN: Walker theme CSS missing or empty: $walker_theme_css")
+    status_lines+=("  Run 'ahr-theme refresh' to regenerate from default/themed/walker.css.tpl")
+    has_issues=true
+  fi
 
   if [[ -f "$waybar_css" && -s "$waybar_css" ]]; then
     status_lines+=("Waybar CSS: deployed ($(wc -l < "$waybar_css" | tr -d ' ') lines)")

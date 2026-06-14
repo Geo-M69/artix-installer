@@ -140,8 +140,8 @@
 | Suspend | ✅ Direct | `ahr-system-suspend` | OpenRC elogind | Requires `confirm_yes` |
 | Hibernate | ✅ Direct | `ahr-system-hibernate` | OpenRC elogind | Requires `confirm_yes` |
 | Logout | ✅ Direct | `hyprctl dispatch exit` | `hyprctl` | Immediate exit |
-| Restart | ✅ Direct | `ahr-system-reboot` | `sudo` | Requires `confirm_yes` |
-| Power Off | ✅ Direct | `sudo poweroff` | `sudo` | Requires `confirm_yes` |
+| Restart | ✅ Direct | `sudo reboot` via `run_terminal_script` | `sudo` | Requires `confirm_yes` |
+| Power Off | ✅ Direct | `sudo poweroff` via `run_terminal_script` | `sudo` | Requires `confirm_yes` |
 | Open Terminal (AHR extra) | AHR extra | `ahr-launch-terminal` | Terminal app | Background |
 | Open App Launcher (AHR extra) | AHR extra | `ahr-launch-apps` | walker/wofi/rofi | Background |
 

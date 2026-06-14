@@ -1102,7 +1102,7 @@ EOF
         ;;
       *"Reboot"*)
         if confirm_yes "Reboot now? This ends all current sessions."; then
-          run_command_now ahr-system-reboot
+          run_terminal_script "printf '%s\n\n' 'Rebooting through sudo reboot.'; sudo reboot"
         fi
         ;;
       *"Power Off"*)
