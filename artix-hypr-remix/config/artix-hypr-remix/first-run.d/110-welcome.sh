@@ -13,7 +13,7 @@ HEALTH_NOTIFIED="$RUNTIME_DIR/first-run.health-notified"
 
 # Main welcome notification — essential keybindings to get started.
 notify-send "Welcome to Artix Hypr Remix" \
-  "Super + Space  Main menu\nSuper + K      Keybinding help\nSuper + Return Terminal\nSuper + P      Clipboard picker\nPrint           Screenshot picker\n\nLearn menu has docs, theme help, and quick reference." \
+  "Super + Space      App launcher\nSuper + Alt + Space  AHR menu\nSuper + K           Keybinding help\nSuper + Return      Terminal\nSuper + P           Clipboard picker\nPrint               Screenshot picker\n\nLearn menu has docs, theme help, and quick reference." \
   -u critical
 
 # Follow-up health tip (delayed so desktop is fully settled).

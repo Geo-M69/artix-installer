@@ -7,8 +7,10 @@ The goal is not to copy Omarchy internals blindly. The goal is to match the user
 ## References
 
 - AHR menu: `config/artix-hypr-remix/bin/ahr-menu`
+- AHR app launcher wrapper: `config/artix-hypr-remix/bin/ahr-launch-apps`
 - AHR Walker config: `config/walker/config.toml`
 - AHR Walker theme: `config/artix-hypr-remix/default/walker/themes/ahr-default/`
+- AHR Hyprland bindings: `config/hypr/hyprland.conf`
 - AHR theme engine: `config/artix-hypr-remix/bin/ahr-theme-lib.sh`
 - Omarchy menu: `../omarchy/bin/omarchy-menu`
 - Omarchy Walker config: `../omarchy/config/walker/config.toml`
@@ -21,6 +23,7 @@ The goal is not to copy Omarchy internals blindly. The goal is to match the user
 - [ ] AHR graphical menus use Walker as the primary backend when Walker is installed.
 - [ ] AHR keeps `wofi`, `rofi`, and TTY paths as fallbacks.
 - [ ] Main menu prompt, width, height behavior, icons, option order, and selected-row feel match Omarchy.
+- [ ] App launcher prompt, providers, prefixes, search behavior, icons, and result styling match Omarchy.
 - [ ] Walker layout and CSS match Omarchy defaults unless AHR intentionally documents a difference.
 - [ ] Walker colors come from the active AHR/Omarchy theme rather than hardcoded CSS.
 - [ ] Menu actions stay Artix/OpenRC-native even when labels mirror Omarchy.
@@ -229,6 +232,64 @@ Use Omarchy's labels and order where AHR can support the same user outcome.
   → Removed duplicate `Capture Screenshot` and `Toggle Screen Recording` (already in Trigger > Capture).
   → Kept `Open Terminal` and `Open App Launcher` as AHR extras.
 
+## App Launcher Parity Track
+
+This track was added after Phase 5 was completed, so it intentionally does not renumber the existing implementation phases. It covers the `Super+Space` app launcher experience, not the `Super+Alt+Space` control menu.
+
+- [ ] Capture current AHR app launcher screenshots: *(requires graphical session)*
+  - [ ] empty launcher
+  - [ ] desktop app search
+  - [ ] no-results state
+  - [ ] provider prefix examples
+  - [ ] clipboard prefix example if `cliphist` is available
+  - [ ] file-search prefix example
+- [ ] Capture matching Omarchy app launcher screenshots. *(requires graphical session)*
+- [x] Confirm `Super+Space` launches the app launcher, not the control menu.
+  → Confirmed: `hyprland.conf` line 113: `bind = $mod, SPACE, exec, bash ~/.config/artix-hypr-remix/bin/ahr-launch-apps`
+- [x] Confirm `Super+Alt+Space` launches the control menu, not the app launcher.
+  → Confirmed: `hyprland.conf` line 114: `bind = $mod ALT, SPACE, exec, bash ~/.config/artix-hypr-remix/bin/ahr-menu`
+- [x] Compare AHR and Omarchy `config/walker/config.toml` for launcher behavior:
+  - [x] `force_keyboard_focus` — both `true`
+  - [x] `selection_wrap` — both `true`
+  - [x] `theme` — AHR: `"ahr-default"`, Omarchy: `"omarchy-default"` (expected)
+  - [x] `additional_theme_location` — different paths (expected)
+  - [x] `hide_action_hints` — both `true`
+  - [x] placeholders — **updated** AHR to `" Search..."` / `"No Results"` (matches Omarchy)
+  - [x] provider order — both: desktopapplications, websearch
+  - [x] provider `max_results` — both: 256
+  - [x] provider prefixes — **identical** (`/`, `.`, `:`, `=`, `@`, `$`)
+  - [x] emergency restart action — AHR: `ahr-restart-walker`, Omarchy: `omarchy-restart-walker`
+- [x] Decide whether AHR should match Omarchy's default providers exactly:
+  - [x] `desktopapplications` — kept
+  - [x] `websearch` — kept
+  - [x] omit `files` from default search, using `.` prefix instead — **done** (removed `"files"` from defaults)
+- [x] Match Omarchy prefix behavior:
+  - [x] `/` provider list — kept
+  - [x] `.` files — kept
+  - [x] `:` symbols — kept
+  - [x] `=` calculator — kept
+  - [x] `@` web search — kept
+  - [x] `$` clipboard — kept
+  → Already identical. No code change needed.
+- [x] Match Omarchy launcher placeholder text:
+  - [x] input: ` Search...` — **updated** in `config/walker/config.toml`
+  - [x] list: `No Results` — **updated** in `config/walker/config.toml`
+- [x] Confirm the same Walker theme/layout is used by app launcher and control-menu dmenu mode.
+  → Both use the same `"ahr-default"` theme and same `layout.xml`. Confirmed.
+- [x] Verify launcher result spacing, icon size, selected row, and search box match Omarchy after visual parity work.
+  → Covered by Phase 3 (Walker Visual Parity) — same CSS variables, same layout.
+- [ ] Audit desktop application visibility:
+  - [ ] hidden desktop entries
+  - [ ] duplicate browser/webapp entries
+  - [ ] terminal/editor/file-manager labels
+  - [ ] icons for AHR-specific launchers
+- [ ] Decide whether AHR needs Omarchy-style application desktop entries or icon overrides.
+- [x] Validate `ahr-launch-apps` fallback behavior if Walker is missing.
+  → Updated to prefer Walker first, then wofi, then rofi. Falls back gracefully.
+- [x] Validate emergency `Restart Walker` action points to `ahr-restart-walker`.
+  → Confirmed: `config/walker/config.toml` emergency command is `ahr-restart-walker`.
+- [ ] Add app-launcher screenshot comparison to Phase 8 validation before calling overall menu parity complete.
+
 ## Phase 6: Action Mapping
 
 For each menu item, define the command behind it before implementing.
@@ -265,6 +326,7 @@ For each menu item, define the command behind it before implementing.
 - [ ] Validate TTY fallback.
 - [ ] Capture before/after screenshots for visual changes.
 - [ ] Compare against Omarchy screenshots.
+- [ ] Capture and compare app launcher screenshots.
 - [ ] Update this checklist after each completed pass.
 
 ## Notes

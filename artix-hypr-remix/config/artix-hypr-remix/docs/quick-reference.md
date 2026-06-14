@@ -4,7 +4,8 @@ This page is installed with the desktop framework and is meant as a first-login 
 
 ## First Keys
 
-- `Super + Space`: open the AHR menu.
+- `Super + Space`: open the app launcher.
+- `Super + Alt + Space`: open the AHR control menu.
 - `Super + K`: show keybindings.
 - `Super + Return`: open a terminal.
 - `Super + Shift + Return`: open the default browser.

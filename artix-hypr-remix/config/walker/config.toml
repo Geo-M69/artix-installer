@@ -5,7 +5,7 @@ additional_theme_location = "~/.config/artix-hypr-remix/default/walker/themes/"
 hide_action_hints = true
 
 [placeholders]
-default = { input = "Search...", list = "No results" }
+default = { input = " Search...", list = "No Results" }
 
 [keybinds]
 quick_activate = []
@@ -15,7 +15,7 @@ symbols = 1
 
 [providers]
 max_results = 256
-default = ["desktopapplications", "websearch", "files"]
+default = ["desktopapplications", "websearch"]
 
 [[providers.prefixes]]
 prefix = "/"

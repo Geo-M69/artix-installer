@@ -383,8 +383,8 @@ Work by user-facing surface. Each future patch should update the matching subsec
 
 Desired user experience:
 
-- [ ] `Super+Space` opens a responsive main menu with obvious routes for Apps, Learn, Trigger, Style, Setup, Install, Remove, Update, About, and System.
-- [ ] App launcher works with the best available backend and explains missing dependencies.
+- [ ] `Super+Alt+Space` opens a responsive main menu with obvious routes for Apps, Learn, Trigger, Style, Setup, Install, Remove, Update, About, and System.
+- [ ] `Super+Space` opens the app launcher with the best available backend and explains missing dependencies.
 - [ ] Utility, power, network, Bluetooth, audio, clipboard, capture, theme, wallpaper, settings, and help actions are discoverable without reading source files.
 - [ ] Every menu action either works, explains what dependency is missing, or is clearly marked unsupported.
 
@@ -432,7 +432,7 @@ Risky/deferred tasks:
 
 Validation steps:
 
-- [ ] In Hyprland, press `Super+Space` and open each top-level menu.
+- [ ] In Hyprland, press `Super+Alt+Space` and open each top-level menu.
 - [x] Run `AHR_MENU_BACKEND=tty` — verified all menu slices dispatch, all referenced 27 bin scripts exist, `menu_backend` returns tty, all 24 functions are defined. Capture menu now includes Clipboard History and Color Picker entries.
 - [ ] Temporarily hide optional commands from `PATH` and confirm graceful failure text.
 - [ ] Run `./scripts/smoke-framework.sh --keep-sandbox` after script changes.
@@ -854,7 +854,8 @@ OpenRC/Artix notes:
 | Fresh install | `./install.sh` on supported Artix OpenRC host | Phases complete, summary lists log/backups/next command | Preflight failure, package failure, config deployment failure | `install.sh`, `lib/checks.sh`, `lib/pacman.sh`, install log |
 | Re-run installer | `./install.sh --phase 4 --user <username> -y` or documented phase retry | Existing configs backed up, phase reruns safely | Missing backups, overwritten user config, stale state | `lib/dotfiles.sh`, `lib/state.sh`, install log |
 | Login to Hyprland | Reboot and log in through TTY or `greetd` | Hyprland starts with Waybar/Mako/wallpaper | Black screen, no session, missing env | `start-hyprland-session.sh`, `lib/tty.sh`, `hyprland.conf` |
-| Launch menu | Press `Super+Space`; run `ahr-menu` | Main menu opens and top-level actions are visible | No picker, command not found, blank menu | `ahr-menu`, `ahr-launch-apps`, `config/walker/config.toml` |
+| App launcher | Press `Super+Space`; run `ahr-launch-apps` | App launcher opens with desktop apps, web search, and prefixes | No picker, command not found, blank menu | `ahr-launch-apps`, `config/walker/config.toml` |
+| Control menu | Press `Super+Alt+Space`; run `ahr-menu` | Main menu opens with Apps/Learn/Trigger/Style/Setup/Install/Remove/Update/About/System | No picker, command not found, blank menu | `ahr-menu` |
 | Switch theme | `ahr theme set nord`; menu Style > Theme Set | Theme state updates and UI reloads | Missing theme, stale Waybar/Mako, broken background | `ahr-theme-lib.sh`, `default/themes/*`, `default/themed/*` |
 | Switch wallpaper | `ahr theme bg-next`; menu background action | Background changes and persists | Symlink missing, unreadable image, wallpaper backend absent | `ahr-theme-bg-next`, `ahr-launch-wallpaper-session` |
 | Take screenshot | Press Print for mode picker (area/fullscreen/window) or run `ahr-capture-screenshot` with `--area`/`--fullscreen`/`--window` | PNG saved in Pictures and notification appears | Selection fails, no file, missing `grim`/`slurp`/`jq` | `ahr-capture-picker`, `ahr-capture-screenshot`, `packages/10-hyprland.txt` |
