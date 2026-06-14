@@ -340,8 +340,8 @@ MENU STRUCTURE
   Install       Packages, Flatpak, Docker, Printing (OpenRC)
   Remove        Package, Flatpak, Docker, Printing (OpenRC)
   Update        System & framework updates, migrations
-  System        Lock, logout, suspend, reboot, power off
   About         Version, diagnostics, documentation links
+  System        Lock, logout, suspend, reboot, power off
 
 KEY COMMANDS
   ahr status              Show install state, logs, backups
@@ -1097,7 +1097,7 @@ show_main_menu() {
   local choice
 
   while true; do
-    choice="$(menu_select "AHR Menu" \
+    choice="$(menu_select "Go" \
       "󰀻 Apps" \
       "󰧑 Learn" \
       "󱓞 Trigger" \
@@ -1106,9 +1106,8 @@ show_main_menu() {
       "󰉉 Install" \
       "󰭌 Remove" \
       " Update" \
-      " System" \
       " About" \
-      "Cancel")"
+      " System")"
 
     case "$choice" in
       *Apps*) open_application_launcher ;;
@@ -1119,9 +1118,9 @@ show_main_menu() {
       *Install*) show_install_menu ;;
       *Remove*) show_remove_menu ;;
       *Update*) show_update_menu ;;
-      *System*) show_system_menu ;;
       *About*) show_about_menu ;;
-      "Cancel"|"") exit 0 ;;
+      *System*) show_system_menu ;;
+      "") exit 0 ;;
       *) exit 0 ;;
     esac
   done

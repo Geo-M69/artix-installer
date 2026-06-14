@@ -121,32 +121,38 @@ The goal is not to copy Omarchy internals blindly. The goal is to match the user
 
 ## Phase 4: Top-Level Menu Parity
 
-- [ ] Match Omarchy top-level prompt: `Go`.
-- [ ] Match Omarchy top-level order:
-  - [ ] Apps
-  - [ ] Learn
-  - [ ] Trigger
-  - [ ] Style
-  - [ ] Setup
-  - [ ] Install
-  - [ ] Remove
-  - [ ] Update
-  - [ ] About
-  - [ ] System
-- [ ] Match Omarchy top-level icons.
-- [ ] Remove visible `Cancel` from Walker menus if escape/empty selection already handles cancel.
-- [ ] Keep TTY fallback clear and usable even if graphical menus hide cancel.
-- [ ] Keep direct submenu arguments working:
-  - [ ] `ahr-menu apps`
-  - [ ] `ahr-menu learn`
-  - [ ] `ahr-menu trigger`
-  - [ ] `ahr-menu style`
-  - [ ] `ahr-menu setup`
-  - [ ] `ahr-menu install`
-  - [ ] `ahr-menu remove`
-  - [ ] `ahr-menu update`
-  - [ ] `ahr-menu about`
-  - [ ] `ahr-menu system`
+- [x] Match Omarchy top-level prompt: `Go`.
+  → Changed `show_main_menu()` prompt from `"AHR Menu"` to `"Go"`.
+- [x] Match Omarchy top-level order:
+  - [x] Apps
+  - [x] Learn
+  - [x] Trigger
+  - [x] Style
+  - [x] Setup
+  - [x] Install
+  - [x] Remove
+  - [x] Update
+  - [x] About
+  - [x] System
+  → Reordered in `show_main_menu()` to match Omarchy (About before System).
+- [x] Match Omarchy top-level icons.
+  → Verified identical per Phase 1 diff. All Nerd Font icons match.
+- [x] Remove visible `Cancel` from Walker menus if escape/empty selection already handles cancel.
+  → Removed `"Cancel"` entry. Empty/invalid input falls to `*) exit 0`.
+- [x] Keep TTY fallback clear and usable even if graphical menus hide cancel.
+  → Confirmed: TTY `menu_select_tty` returns `""` on empty input, `show_main_menu` exits on `""` or any unmatched input. Same behavior without Cancel entry.
+- [x] Keep direct submenu arguments working:
+  - [x] `ahr-menu apps`
+  - [x] `ahr-menu learn`
+  - [x] `ahr-menu trigger`
+  - [x] `ahr-menu style`
+  - [x] `ahr-menu setup`
+  - [x] `ahr-menu install`
+  - [x] `ahr-menu remove`
+  - [x] `ahr-menu update`
+  - [x] `ahr-menu about`
+  - [x] `ahr-menu system`
+  → `dispatch()` unchanged — all slice arguments still map to same handlers.
 
 ## Phase 5: Submenu Taxonomy Parity
 
