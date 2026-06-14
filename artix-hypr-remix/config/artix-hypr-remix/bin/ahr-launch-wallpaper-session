@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "${AHR_THEME_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-theme-lib.sh}"
+AHR_SCRIPT_REAL="$(readlink -f "${BASH_SOURCE[0]}")"
+AHR_SCRIPT_DIR="$(dirname "$AHR_SCRIPT_REAL")"
+
+if [[ -n "${AHR_THEME_LIB_PATH:-}" ]] && [[ -f "$AHR_THEME_LIB_PATH" ]]; then
+  source "$AHR_THEME_LIB_PATH"
+else
+  source "$AHR_SCRIPT_DIR/ahr-theme-lib.sh"
+fi
 
 ahr_theme_apply_current_background || true
 

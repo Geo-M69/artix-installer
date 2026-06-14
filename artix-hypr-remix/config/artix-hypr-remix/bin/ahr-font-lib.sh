@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
-source "${AHR_THEME_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-theme-lib.sh}"
+AHR_SCRIPT_REAL="$(readlink -f "${BASH_SOURCE[0]}")"
+AHR_SCRIPT_DIR="$(dirname "$AHR_SCRIPT_REAL")"
+
+if [[ -n "${AHR_LIB_PATH:-}" ]] && [[ -f "$AHR_LIB_PATH" ]]; then
+  source "$AHR_LIB_PATH"
+else
+  source "$AHR_SCRIPT_DIR/ahr-lib.sh"
+fi
+
+if [[ -n "${AHR_THEME_LIB_PATH:-}" ]] && [[ -f "$AHR_THEME_LIB_PATH" ]]; then
+  source "$AHR_THEME_LIB_PATH"
+else
+  source "$AHR_SCRIPT_DIR/ahr-theme-lib.sh"
+fi
 
 AHR_FONT_CONFIG_FILE="$AHR_THEME_STATE_DIR/font.toml"
 

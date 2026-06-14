@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "${AHR_FONT_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-font-lib.sh}"
+AHR_SCRIPT_REAL="$(readlink -f "${BASH_SOURCE[0]}")"
+AHR_SCRIPT_DIR="$(dirname "$AHR_SCRIPT_REAL")"
+
+if [[ -n "${AHR_FONT_LIB_PATH:-}" ]] && [[ -f "$AHR_FONT_LIB_PATH" ]]; then
+  source "$AHR_FONT_LIB_PATH"
+else
+  source "$AHR_SCRIPT_DIR/ahr-font-lib.sh"
+fi
 
 usage() {
   cat <<'EOF'

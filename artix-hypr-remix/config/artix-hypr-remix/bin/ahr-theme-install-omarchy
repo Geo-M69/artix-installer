@@ -1,7 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "${AHR_THEME_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-theme-lib.sh}"
+# Default: resolve library relative to this script's real path (following
+# symlinks).  This works regardless of how the script was invoked — via a
+# symlink in ~/.local/bin/, directly from the framework directory, or from
+# a dev checkout — because the lib files are always deployed alongside it.
+AHR_SCRIPT_REAL="$(readlink -f "${BASH_SOURCE[0]}")"
+AHR_SCRIPT_DIR="$(dirname "$AHR_SCRIPT_REAL")"
+
+# Use AHR_THEME_LIB_PATH only if it is set AND points to a valid file.
+# If it is stale (e.g. left over from development), fall back to the
+# relative path so the script still works.
+if [[ -n "${AHR_THEME_LIB_PATH:-}" ]] && [[ -f "$AHR_THEME_LIB_PATH" ]]; then
+  source "$AHR_THEME_LIB_PATH"
+else
+  source "$AHR_SCRIPT_DIR/ahr-theme-lib.sh"
+fi
 
 OMARCHY_REPO_URL="https://github.com/basecamp/omarchy.git"
 OMARCHY_BRANCH="${OMARCHY_BRANCH:-dev}"
@@ -68,18 +82,20 @@ main() {
 
   printf 'Downloading Omarchy theme "%s" via sparse checkout...\n' "$theme_name"
 
-  # Sparse checkout: only fetch the requested theme directory
-  (
-    cd "$tmp_dir"
-    git init --quiet
-    git remote add origin "$OMARCHY_REPO_URL"
-    git config core.sparseCheckout true
-    printf 'themes/%s\n' "$theme_name" > .git/info/sparse-checkout
-    if ! git fetch --depth 1 --filter=blob:none origin "$OMARCHY_BRANCH" --quiet; then
-      ahr_fail "Failed to download theme from Omarchy repository. Check network and theme name."
-    fi
+  # Sparse checkout: only fetch the requested theme directory.
+  # Using || (not set -e) for explicit error propagation from the subshell
+  # so ahr_fail runs in the main shell context and can notify correctly.
+  if ! (
+    cd "$tmp_dir" && \
+    git init --quiet && \
+    git remote add origin "$OMARCHY_REPO_URL" && \
+    git config core.sparseCheckout true && \
+    printf 'themes/%s\n' "$theme_name" > .git/info/sparse-checkout && \
+    git fetch --depth 1 --filter=blob:none origin "$OMARCHY_BRANCH" --quiet && \
     git checkout FETCH_HEAD --quiet
-  )
+  ); then
+    ahr_fail "Failed to download theme from Omarchy repository. Check network and theme name."
+  fi
 
   local source_dir="$tmp_dir/themes/$theme_name"
   if [[ ! -d "$source_dir" ]]; then

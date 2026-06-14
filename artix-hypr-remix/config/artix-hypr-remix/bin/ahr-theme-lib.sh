@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+# Resolve the real path of this file (following symlinks) so ahr-lib.sh
+# is found relative to the script regardless of how it was invoked.
+# This avoids depending on $HOME or env vars that may be stale.
+AHR_LIB_REAL="$(readlink -f "${BASH_SOURCE[0]}")"
+AHR_LIB_DIR="$(dirname "$AHR_LIB_REAL")"
+
+if [[ -n "${AHR_LIB_PATH:-}" ]] && [[ -f "$AHR_LIB_PATH" ]]; then
+  source "$AHR_LIB_PATH"
+else
+  source "$AHR_LIB_DIR/ahr-lib.sh"
+fi
 
 AHR_THEME_FRAMEWORK_ROOT="${AHR_THEME_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}"
 AHR_THEME_STATE_DIR="$AHR_THEME_FRAMEWORK_ROOT/current"
