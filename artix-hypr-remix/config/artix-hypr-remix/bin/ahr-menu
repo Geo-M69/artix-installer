@@ -388,6 +388,8 @@ show_learn_menu() {
       " Update Help" \
       "󰈙 Theme Asset Guide" \
       "󰈙 Open README" \
+      " Hyprland Reference" \
+      "󰣇 Artix Reference" \
       "Back")"
 
     case "$choice" in
@@ -404,6 +406,20 @@ show_learn_menu() {
           exit 0
         fi
         run_terminal_script "printf '%s\n' 'README: https://github.com/geofedora/artix-installer'; read -r -p 'Press Enter to close...' _"
+        ;;
+      *"Hyprland"*)
+        if ahr_has_cmd xdg-open; then
+          xdg-open "https://wiki.hypr.land/" >/dev/null 2>&1 || true
+          exit 0
+        fi
+        run_terminal_script "printf '%s\n' 'Hyprland Wiki: https://wiki.hypr.land/'; read -r -p 'Press Enter to close...' _"
+        ;;
+      *"Artix"*)
+        if ahr_has_cmd xdg-open; then
+          xdg-open "https://wiki.artixlinux.org/" >/dev/null 2>&1 || true
+          exit 0
+        fi
+        run_terminal_script "printf '%s\n' 'Artix Wiki: https://wiki.artixlinux.org/'; read -r -p 'Press Enter to close...' _"
         ;;
       "Back"|"") return 0 ;;
       *) return 0 ;;
@@ -664,12 +680,13 @@ show_capture_menu() {
 
   while true; do
     choice="$(menu_select "Capture" \
-      "Area Screenshot" \
-      "Fullscreen Screenshot" \
-      "Window Screenshot" \
+      " Screenshot" \
+      "󰧑 Area Screenshot" \
+      "󰧑 Fullscreen Screenshot" \
+      "󰧑 Window Screenshot" \
       "$(screenrecording_state)" \
-      "Clipboard History" \
-      "Color Picker" \
+      "󰘿 Clipboard History" \
+      "󰃉 Color Picker" \
       "Back")"
 
     case "$choice" in
@@ -688,12 +705,12 @@ show_capture_menu() {
           run_command_background ahr-capture-screenshot --window
         fi
         ;;
-      *"Screenshot"*)
+      *" Screenshot"*|*"Screenshot"*)
         if menu_require grim grim; then
           run_command_background ahr-capture-screenshot
         fi
         ;;
-      *"Screen Recording"*)
+      *"Screen Recording"*|*"Screenrecord"*)
         if menu_require gpu-screen-recorder gpu-screen-recorder; then
           run_command_background ahr-capture-screenrecording
         fi
@@ -705,7 +722,7 @@ show_capture_menu() {
           menu_require cliphist cliphist
         fi
         ;;
-      "Color Picker")
+      *"Color"*)
         if menu_require hyprpicker hyprpicker && menu_require wl-copy wl-clipboard; then
           nohup hyprpicker -az >/dev/null 2>&1 &
           exit 0
@@ -722,14 +739,16 @@ show_toggle_menu() {
 
   while true; do
     choice="$(menu_select "Toggle" \
+      "$(nightlight_state)" \
       "$(idle_lock_state)" \
       "$(notification_state)" \
-      "$(nightlight_state)" \
       "$(waybar_state)" \
       "$(waybar_position_state)" \
       "Back")"
 
     case "$choice" in
+      *"Nightlight"*)
+        run_command_now ahr-toggle-nightlight ;;
       *"Idle Lock"*)
         if ahr_has_cmd hypridle; then
           run_command_now ahr-toggle-idle
@@ -739,8 +758,6 @@ show_toggle_menu() {
         ;;
       *"Notifications"*)
         run_command_now ahr-toggle-notification-silencing ;;
-      *"Nightlight"*)
-        run_command_now ahr-toggle-nightlight ;;
       *"Waybar: Visible"*|*"Waybar: Hidden"*)
         run_command_now ahr-toggle-waybar ;;
       *"Waybar: Top"*|*"Waybar: Bottom"*)
@@ -758,11 +775,31 @@ show_trigger_menu() {
     choice="$(menu_select "Trigger" \
       " Capture" \
       "󰔎 Toggle" \
+      "󰔛 Reminder" \
+      "󰧸 Transcode" \
+      " Share" \
+      " Hardware" \
       "Back")"
 
     case "$choice" in
       *Capture*) show_capture_menu ;;
       *Toggle*) show_toggle_menu ;;
+      *Reminder*)
+        if ahr_has_cmd ahr-reminder; then
+          run_command_background ahr-reminder
+        else
+          ahr_notify "artix-hypr-remix" "Reminder: not yet implemented — coming soon"
+        fi
+        ;;
+      *Transcode*)
+        ahr_notify "artix-hypr-remix" "Transcode: not yet implemented — coming soon"
+        ;;
+      *Share*)
+        ahr_notify "artix-hypr-remix" "Share: not yet implemented — coming soon"
+        ;;
+      *Hardware*)
+        ahr_notify "artix-hypr-remix" "Hardware: not yet implemented — coming soon"
+        ;;
       "Back"|"") return 0 ;;
       *) return 0 ;;
     esac
@@ -775,15 +812,15 @@ show_style_menu() {
   while true; do
     choice="$(menu_select "Style" \
       "$(theme_current_label)" \
+      " Font Set" \
+      " Font Status" \
       " Background Picker" \
       "󰁨 Background Next" \
-      "󰸌 Theme Status" \
-      "󱧥 Download Omarchy Theme..." \
       "󰈙 Background Gallery" \
       "󰉏 Install Background..." \
+      "󰸌 Theme Status" \
+      "󱧥 Download Omarchy Theme..." \
       " Theme Refresh" \
-      " Font Status" \
-      " Font Set" \
       "$(waybar_state)" \
       "$(waybar_position_state)" \
       "󰜫 Restart Waybar" \
@@ -1024,15 +1061,13 @@ show_system_menu() {
   while true; do
     choice="$(menu_select "System" \
       " Lock Screen" \
-      "󰍃 Logout Hyprland" \
       "󰒲 Suspend" \
       "󰤁 Hibernate" \
+      "󰍃 Logout Hyprland" \
       "󰜉 Reboot" \
       "󰐥 Power Off" \
       " Open Terminal" \
       "󰀻 Open App Launcher" \
-      " Capture Screenshot" \
-      "⏺ Toggle Screen Recording" \
       "Back")"
 
     case "$choice" in
@@ -1077,16 +1112,6 @@ EOF
         ;;
       *"Open Terminal"*) run_command_background ahr-launch-terminal ;;
       *"App Launcher"*) open_application_launcher ;;
-      *"Screenshot"*)
-        if menu_require grim grim && menu_require slurp slurp; then
-          run_command_background ahr-capture-screenshot
-        fi
-        ;;
-      *"Screen Recording"*)
-        if menu_require gpu-screen-recorder gpu-screen-recorder; then
-          run_command_background ahr-capture-screenrecording
-        fi
-        ;;
       "Back"|"") return 0 ;;
       *) return 0 ;;
     esac

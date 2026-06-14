@@ -158,70 +158,76 @@ The goal is not to copy Omarchy internals blindly. The goal is to match the user
 
 Use Omarchy's labels and order where AHR can support the same user outcome.
 
-- [ ] Learn menu:
-  - [ ] Keybindings
-  - [ ] Tmux keybindings or documented omission
-  - [ ] AHR/Omarchy manual link strategy
-  - [ ] Hyprland reference
-  - [ ] Artix/Arch reference decision
-  - [ ] Editor/shell references
-- [ ] Trigger menu:
-  - [ ] Reminder
-  - [ ] Capture
-  - [ ] Transcode
-  - [ ] Share
-  - [ ] Toggle
-  - [ ] Hardware
-- [ ] Capture menu:
-  - [ ] Screenshot
-  - [ ] Screenrecord
-  - [ ] Text extraction
-  - [ ] Color picker
-- [ ] Toggle menu:
-  - [ ] Screensaver
-  - [ ] Nightlight
-  - [ ] Idle lock
-  - [ ] Notifications
-  - [ ] Top bar
-  - [ ] Workspace layout
-  - [ ] Window gaps
-  - [ ] One-window ratio
-  - [ ] Monitor scaling
-  - [ ] Direct boot
-  - [ ] Passwordless sudo
-- [ ] Style menu:
-  - [ ] Theme
-  - [ ] Unlock/lock screen styling
-  - [ ] Font
-  - [ ] Background
-  - [ ] Waybar/top bar
-  - [ ] Corners
-  - [ ] Hyprland visual settings
-  - [ ] Screensaver/about branding decision
-- [ ] Setup menu:
-  - [ ] Defaults
-  - [ ] Config editing
-  - [ ] Audio
-  - [ ] Network
-  - [ ] Bluetooth
-  - [ ] Power/input/monitor items where safe
+- [x] Learn menu:
+  - [x] Keybindings — kept, moved to 2nd position
+  - [ ] Tmux keybindings — documented omission (AHR doesn't have tmux keybinding docs)
+  - [x] AHR/Omarchy manual link strategy — GitHub README link kept; AHR-specific manual via Getting Started
+  - [x] Hyprland reference — added ` Hyprland Reference` (opens wiki.hypr.land)
+  - [x] Artix/Arch reference decision — added `󰣇 Artix Reference` (opens wiki.artixlinux.org)
+  - [ ] Editor/shell references — deferred (AHR has Quick Reference instead; can add Neovim/Bash devhints later)
+- [x] Trigger menu:
+  - [ ] Reminder — menu entry added with "coming soon" notification (no `ahr-reminder` command yet)
+  - [x] Capture — kept, first position
+  - [ ] Transcode — menu entry added with "coming soon" notification
+  - [ ] Share — menu entry added with "coming soon" notification
+  - [x] Toggle — kept, second position
+  - [ ] Hardware — menu entry added with "coming soon" notification
+- [x] Capture menu:
+  - [x] Screenshot — restructured: ` Screenshot` (default), then Area/Fullscreen/Window variants
+  - [x] Screenrecord — kept, renamed label includes state
+  - [ ] Text extraction — deferred (no AHR command equivalent)
+  - [x] Color picker — kept
+- [x] Toggle menu:
+  - [ ] Screensaver — deferred (no toggle command)
+  - [x] Nightlight — moved to first position (matches Omarchy order)
+  - [x] Idle lock — moved to second position
+  - [x] Notifications — third position
+  - [x] Top bar — fourth position (Waybar Visible/Hidden)
+  - [x] Waybar Position — kept (matches Omarchy's Waybar submenu)
+  - [ ] Workspace layout — deferred
+  - [ ] Window gaps — deferred
+  - [ ] One-window ratio — deferred
+  - [ ] Monitor scaling — deferred
+  - [ ] Direct boot — deferred
+  - [ ] Passwordless sudo — deferred
+- [x] Style menu:
+  - [x] Theme — kept, first position
+  - [ ] Unlock/lock screen styling — deferred (no Omarchy unlock screens in AHR)
+  - [x] Font — moved to 2nd/3rd position (Font Set then Font Status)
+  - [x] Background — moved up (Background Picker, Background Next, Gallery, Install)
+  - [x] Waybar/top bar — kept (Waybar state, position, restart)
+  - [ ] Corners — deferred
+  - [ ] Hyprland visual settings — deferred
+  - [ ] Screensaver/about branding — deferred
+- [x] Setup menu:
+  - [x] Defaults — kept (Browser/Terminal/Editor)
+  - [x] Config editing — kept (Hyprland/Hypridle/Hyprlock/Waybar/Mako/Walker/AHR)
+  - [x] Audio — kept, first position
+  - [x] Network — kept, second position
+  - [x] Bluetooth — kept, third position
+  - [ ] Power/input/monitor items — deferred (no AHR commands for these yet)
 - [ ] Install menu:
   - [ ] Keep broad Omarchy categories classified before exposing them.
   - [ ] Only add menu entries with safe package checks and rollback/remove notes.
+  → AHR's install menu is intentionally minimal (pacman/AUR/flatpak/docker/printing). Broad Omarchy catalog deferred.
 - [ ] Remove menu:
   - [ ] Keep destructive removals conservative.
   - [ ] Require confirmation for service/package removal.
+  → AHR already requires confirmation (`confirm_yes`) for Docker/Printing removal. Minimal menu kept.
 - [ ] Update menu:
-  - [ ] Preserve AHR update/migration semantics.
+  - [x] Preserve AHR update/migration semantics.
   - [ ] Add Omarchy-like process/config refresh entries only where AHR has safe commands.
-- [ ] System menu:
-  - [ ] Screensaver decision
-  - [ ] Lock
-  - [ ] Suspend
-  - [ ] Hibernate
-  - [ ] Logout
-  - [ ] Restart
-  - [ ] Shutdown
+  → AHR's update menu is migration-focused. Omarchy's process/config/hardware refresh can be added when AHR has safe equivalents.
+- [x] System menu:
+  - [ ] Screensaver — deferred
+  - [x] Lock — kept, first position
+  - [x] Suspend — moved to second position (matches Omarchy order)
+  - [x] Hibernate — third position
+  - [x] Logout — moved to fourth position
+  - [x] Restart — moved to fifth position
+  - [x] Shutdown — moved to sixth position
+  → Removed duplicate `Capture Screenshot` and `Toggle Screen Recording` (already in Trigger > Capture).
+  → Kept `Open Terminal` and `Open App Launcher` as AHR extras.
 
 ## Phase 6: Action Mapping
 
