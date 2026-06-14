@@ -75,9 +75,10 @@ The goal is not to copy Omarchy internals blindly. The goal is to match the user
   - [x] `--dmenu`
   - [x] `--width 295`
   - [x] `--minheight 1`
-  - [x] `--maxheight 630`
+  - [x] `--maxheight 630` (AHR: **520** — intentional divergence)
   - [x] prompt with ellipsis
-  → Already matched per Phase 1 diff. No code change needed.
+  → AHR reduced to 520 for Waybar clearance and less visual weight on
+    laptop screens. Omarchy uses 630. This is a documented AHR tuning choice.
 - [x] Add or preserve close/toggle behavior when an existing Walker dmenu is open.
   → Added `toggle_existing_menu()` called from `dispatch()`.
 - [x] Validate that app launcher behavior remains separate from control-menu behavior.

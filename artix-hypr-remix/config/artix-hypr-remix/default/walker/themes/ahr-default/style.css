@@ -5,9 +5,16 @@
  * from default/themed/walker.css.tpl by the theme engine.
  *
  * Border-radius is intentionally omitted to match Omarchy's sharp style.
+ *
+ * window margin-top shifts the dmenu below Waybar so the
+ * top bar doesn't overlap the menu.
  */
 
 @import url("../../../../current/theme/walker.css");
+
+window {
+  margin-top: 36px;
+}
 
 * {
   all: unset;

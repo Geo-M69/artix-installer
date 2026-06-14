@@ -256,7 +256,7 @@ menu_select() {
 
   case "$(menu_backend)" in
     walker)
-      printf '%s\n' "${options[@]}" | walker --dmenu --width 295 --minheight 1 --maxheight 630 -p "${prompt}…" 2>/dev/null || true
+      printf '%s\n' "${options[@]}" | walker --dmenu --width 295 --minheight 1 --maxheight 520 -p "${prompt}…" 2>/dev/null || true
       ;;
     wofi)
       printf '%s\n' "${options[@]}" | wofi --dmenu --prompt "${prompt}…" 2>/dev/null || true
