@@ -6,13 +6,13 @@ This directory should contain screenshots or expected-result descriptions for th
 
 | # | Screenshot | What to capture | Status |
 |---|-----------|-----------------|--------|
-| 1 | First-login desktop | Clean Hyprland session after first boot: Waybar visible, Mako notification area, empty desktop with wallpaper/theme | ❌ Not yet captured |
-| 2 | App launcher | `Super+Space` or `ahr-launch-apps` showing the app launcher with desktop apps and search | ❌ Not yet captured |
-| 3 | Control menu | `Super+Alt+Space` or `ahr-menu` showing the main menu with all top-level slices | ❌ Not yet captured |
-| 4 | Waybar detail | Waybar showing workspaces, clock, system tray, audio/network indicators, battery (if laptop) | ❌ Not yet captured |
-| 5 | Theme showcase | Desktop with `nord` theme applied; terminal open showing themed colors | ❌ Not yet captured |
-| 6 | Update workflow | Terminal output of `ahr update --dry-run` showing update checks | ❌ Not yet captured |
-| 7 | greetd login screen | `greetd` tuigreet greeter prompt on VT7 (if `greetd` mode is documented as tested) | ❌ Not yet captured |
+| 1 | First-login desktop | Clean Hyprland session after first boot: Waybar visible, Mako notification area, empty desktop with wallpaper/theme | ✅ Captured (2026-06-14, NVIDIA laptop, nord theme) |
+| 2 | App launcher | `Super+Space` or `ahr-launch-apps` showing the app launcher with desktop apps and search | ✅ Captured (2026-06-14, NVIDIA laptop, Walker backend) |
+| 3 | Control menu | `Super+Alt+Space` or `ahr-menu` showing the main menu with all top-level slices | ✅ Captured (2026-06-14, NVIDIA laptop, Walker backend) |
+| 4 | Waybar detail | Waybar showing workspaces, clock, system tray, audio/network indicators, battery (if laptop) | ✅ Captured (2026-06-14, NVIDIA laptop, nord theme) |
+| 5 | Theme showcase | Desktop with `nord` theme applied; terminal open showing themed colors | ✅ Captured (2026-06-14, NVIDIA laptop, nord theme) |
+| 6 | Update workflow | Terminal output of `ahr update --dry-run` showing update checks | ✅ Captured (2026-06-14, NVIDIA laptop, Ghostty terminal) |
+| 7 | greetd login screen | `greetd` tuigreet greeter prompt on VT7 (if `greetd` mode is documented as tested) | ❌ Not yet captured (requires greetd session) |
 
 ## How To Capture
 

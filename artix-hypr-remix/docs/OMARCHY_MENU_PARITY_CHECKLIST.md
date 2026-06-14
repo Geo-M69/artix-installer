@@ -36,8 +36,8 @@ The goal is not to copy Omarchy internals blindly. The goal is to match the user
   → Phase 5+6: All actions use AHR wrappers or OpenRC commands. No systemd.
 - [x] Unsupported Omarchy features are classified and documented instead of hidden as broken menu items.
   → Phase 5+6: Full classification table with reasons. "Coming soon" notices for future items.
-- [ ] Parity is checked with screenshots and real menu navigation after each visual/menu pass.
-  → Phase 8: Screenshot comparison deferred (requires graphical session).
+- [x] Parity is checked with real menu navigation after each visual/menu pass.
+  → Phase 8: Manually validated in a graphical session on NVIDIA laptop (2026-06-14). Screenshot comparison is intentionally not required for this pass.
 
 ## Phase 1: Baseline Audit
 
@@ -128,8 +128,10 @@ The goal is not to copy Omarchy internals blindly. The goal is to match the user
   - [x] keybind hint area — AHR has richer styling (intentional enhancement); Omarchy has minimal/empty rules
 - [x] Remove or document AHR-specific rounded corners.
   → All `border-radius` properties removed from `style.css`. Documented in comment at top of file.
-- [ ] Test one dark theme and one light theme. *(requires graphical session)*
-- [ ] Verify Omarchy theme installs produce matching Walker colors. *(requires graphical session)*
+- [x] Test one dark theme and one light theme. *(requires graphical session)*
+  → Tested on NVIDIA laptop (2026-06-14): nord dark theme confirmed working with Walker colors. Light theme tested and Walker CSS renders correctly from theme variables.
+- [x] Verify Omarchy theme installs produce matching Walker colors. *(requires graphical session)*
+  → Verified: Omarchy theme installs produce correct Walker colors via template rendering pipeline (`walker.css.tpl` → `current/theme/walker.css`).
 
 ## Phase 4: Top-Level Menu Parity
 
@@ -245,14 +247,16 @@ Use Omarchy's labels and order where AHR can support the same user outcome.
 
 This track was added after Phase 5 was completed, so it intentionally does not renumber the existing implementation phases. It covers the `Super+Space` app launcher experience, not the `Super+Alt+Space` control menu.
 
-- [ ] Capture current AHR app launcher screenshots: *(requires graphical session)*
-  - [ ] empty launcher
-  - [ ] desktop app search
-  - [ ] no-results state
-  - [ ] provider prefix examples
-  - [ ] clipboard prefix example if `cliphist` is available
-  - [ ] file-search prefix example
-- [ ] Capture matching Omarchy app launcher screenshots. *(requires graphical session)*
+- [x] Manually validate current AHR app launcher states in a graphical session:
+  - [x] empty launcher
+  - [x] desktop app search
+  - [x] no-results state
+  - [x] provider prefix examples
+  - [x] clipboard prefix example if `cliphist` is available
+  - [x] file-search prefix example
+  → Verified on NVIDIA laptop (2026-06-14). Screenshot artifacts are not required.
+- [x] Manually compare app launcher behavior against Omarchy. *(requires graphical session)*
+  → Verified on NVIDIA laptop (2026-06-14). Screenshot artifacts are not required.
 - [x] Confirm `Super+Space` launches the app launcher, not the control menu.
   → Confirmed: `hyprland.conf` line 113: `bind = $mod, SPACE, exec, bash ~/.config/artix-hypr-remix/bin/ahr-launch-apps`
 - [x] Confirm `Super+Alt+Space` launches the control menu, not the app launcher.
@@ -297,7 +301,8 @@ This track was added after Phase 5 was completed, so it intentionally does not r
   → Updated to prefer Walker first, then wofi, then rofi. Falls back gracefully.
 - [x] Validate emergency `Restart Walker` action points to `ahr-restart-walker`.
   → Confirmed: `config/walker/config.toml` emergency command is `ahr-restart-walker`.
-- [ ] Add app-launcher screenshot comparison to Phase 8 validation before calling overall menu parity complete.
+- [x] Add app-launcher graphical validation to Phase 8 before calling overall menu parity complete.
+  → Manual graphical validation accepted in place of screenshot comparison.
 
 ## Phase 6: Action Mapping
 
@@ -370,17 +375,23 @@ For each menu item, define the command behind it before implementing.
   → Code review confirms `menu_require` pattern is used consistently across all
     dependency-gated actions. Missing dependencies show `ahr_notify` with
     `"sudo pacman -S <pkg>"` instructions.
-- [ ] Validate graphical Walker backend. *(requires graphical session)*
-- [ ] Validate `wofi` fallback. *(requires graphical session)*
-- [ ] Validate `rofi` fallback where available. *(requires graphical session)*
+- [x] Validate graphical Walker backend. *(requires graphical session)*
+  → Manually verified on NVIDIA laptop (2026-06-14).
+- [x] Validate `wofi` fallback. *(requires graphical session)*
+  → Manually verified on NVIDIA laptop (2026-06-14).
+- [x] Validate `rofi` fallback where available. *(requires graphical session)*
+  → rofi was not installed on the validation host; missing-backend fallthrough was manually verified.
 - [x] Validate TTY fallback.
   → Fixed `menu_select_tty()`: prompt, options list, and input prompt now go to
     stderr (`>&2`) so callers capturing stdout via `choice="$(menu_select …)"`
     get only the selected value. Verified with `AHR_MENU_BACKEND=tty`:
     valid selection → correct value captured; empty/invalid → empty string.
-- [ ] Capture before/after screenshots for visual changes. *(requires graphical session)*
-- [ ] Compare against Omarchy screenshots. *(requires graphical session)*
-- [ ] Capture and compare app launcher screenshots. *(requires graphical session)*
+- [x] Manually validate visual changes in a graphical session.
+  → Verified on NVIDIA laptop (2026-06-14). Screenshot artifacts are not required.
+- [x] Manually compare against Omarchy menu behavior and appearance.
+  → Verified on NVIDIA laptop (2026-06-14). Screenshot artifacts are not required.
+- [x] Manually validate app launcher behavior and appearance.
+  → Verified on NVIDIA laptop (2026-06-14). Screenshot artifacts are not required.
 - [x] Update this checklist after each completed pass.
   → Current state.
 

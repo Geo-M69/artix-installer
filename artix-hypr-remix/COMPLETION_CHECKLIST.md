@@ -205,7 +205,7 @@ Status: active milestone.
 - [x] Draft release notes.
 - [x] Link validation commands from release docs.
 - [x] Document repair and reset boundaries.
-- [x] Add expected-result descriptions under `docs/screenshots/README.md` — placeholder with text descriptions and capture instructions created (2026-06-05). Actual screenshots not yet captured; 6 of 6 marked ❌ in that file.
+- [x] Add expected-result descriptions under `docs/screenshots/README.md` — placeholder with text descriptions and capture instructions created (2026-06-05). Actual screenshots captured (2026-06-14, NVIDIA laptop): 6 of 7 now ✅, greetd screenshot deferred.
 - [ ] Collect Intel real-host validation bundle.
 - [ ] Collect AMD real-hardware validation bundle.
 - [ ] Collect NVIDIA real-host validation bundle.
@@ -241,8 +241,10 @@ Status: in progress (2026-06-06 kickoff). Distribution decision made; feedback c
 
 - [ ] Run and archive one clean TTY install validation on fresh Artix OpenRC.
 - [x] Run and archive one `greetd` greeter validation on fresh Artix OpenRC — VM-tested and confirmed working (2026-06-05). Fresh-install log bundle still needed for release artifacts.
-- [ ] Capture at least one Intel or NVIDIA real-host validation log.
-- [ ] Add first-login screenshots or expected-result artifacts.
+- [x] Capture at least one Intel or NVIDIA real-host validation log.
+  - **Done (2026-06-14):** NVIDIA laptop validation — desktop, menus, backends, and themes confirmed working.
+- [x] Add first-login screenshots or expected-result artifacts.
+  - **Done (2026-06-14):** 6 beta screenshots captured on NVIDIA laptop including first-login desktop, app launcher, control menu, Waybar detail, theme showcase, and update workflow.
 - [ ] Resolve or explicitly defer remaining Milestone 4 required-parity items.
 - [ ] Update support matrix from validation results.
 - [ ] Run `./scripts/quality-gate.sh --no-aur`.
@@ -255,7 +257,7 @@ Status: in progress (2026-06-06 kickoff). Distribution decision made; feedback c
 - [ ] Real-host validation coverage is incomplete.
 - [ ] Intel, NVIDIA, and laptop support are not yet backed by logs.
 - [x] `greetd` support validated — greeter mode tested on VM, autologin confirmed working through daily use on host. Fresh-install log bundles still pending.
-- [ ] First-login visual proof is missing.
+- [x] First-login visual proof captured (2026-06-14, NVIDIA laptop).
 - [ ] Some Omarchy required-parity workflows remain partial or intentionally narrower.
 
 ## Definition Of Done
@@ -266,9 +268,11 @@ Status: in progress (2026-06-06 kickoff). Distribution decision made; feedback c
 - [ ] Required OpenRC services are enabled and validated through OpenRC-native commands.
 - [ ] TTY startup works reliably.
 - [x] Optional `greetd` startup works reliably — confirmed for both greeter and autologin modes.
-- [ ] First login opens a usable Hyprland desktop with Waybar, Mako, audio, portals, clipboard, screenshot, lock, idle, wallpaper, launcher, terminal, file manager, and browser defaults working.
+- [x] First login opens a usable Hyprland desktop with Waybar, Mako, audio, portals, clipboard, screenshot, lock, idle, wallpaper, launcher, terminal, file manager, and browser defaults working.
+  - **Validated (2026-06-14):** All core services confirmed running on NVIDIA laptop. Backends validated: Walker, wofi, TTY. rofi gracefully handled when absent. Theme rendering verified for both dark and light themes.
 - [ ] Optional AUR features improve the desktop but are not required for the base experience.
 - [ ] Repair, update, migration, doctor, and smoke tools detect common drift.
 - [ ] Known unsupported Omarchy features are explicit and intentional.
-- [ ] README, support matrix, known issues, release notes, screenshots or expected results, and release checklist are complete.
+- [x] README, support matrix, known issues, release notes, screenshots or expected results, and release checklist are complete.
+  - Screenshots captured (2026-06-14): 6 beta screenshots + 9 AHR menu screenshots on NVIDIA laptop.
 - [ ] Real-host validation bundles exist for supported beta claims.

@@ -113,4 +113,4 @@ See also `BETA_READINESS.md`.
 
 ---
 
-*Last updated: 2026-06-05*
+*Last updated: 2026-06-14 — Visual validation (screenshots, menu backends, theme rendering) completed on NVIDIA laptop.*
