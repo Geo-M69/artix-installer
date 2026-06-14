@@ -117,13 +117,13 @@ show_menu() {
     output="$(print_static_help)"
   fi
 
-  if ahr_has_cmd wofi; then
-    printf '%s\n' "$output" | wofi --dmenu --prompt "Keybindings" >/dev/null 2>&1 || true
+  if ahr_has_cmd walker; then
+    printf '%s\n' "$output" | walker --dmenu -p "Keybindings" >/dev/null 2>&1 || true
     return 0
   fi
 
-  if ahr_has_cmd walker; then
-    printf '%s\n' "$output" | walker --dmenu -p "Keybindings" >/dev/null 2>&1 || true
+  if ahr_has_cmd wofi; then
+    printf '%s\n' "$output" | wofi --dmenu --prompt "Keybindings" >/dev/null 2>&1 || true
     return 0
   fi
 

@@ -176,6 +176,24 @@ run_terminal_command() {
   run_terminal_script "$command_line"
 }
 
+# If a Walker dmenu is already open, close it and exit (toggle behavior).
+# This matches Omarchy's menu toggle behavior.
+# Only toggles when Walker will actually be used as the menu backend —
+# respects AHR_MENU_BACKEND overrides to non-Walker backends.
+toggle_existing_menu() {
+  # If backend is explicitly overridden to a non-Walker value, skip toggle
+  if [[ -n "${AHR_MENU_BACKEND:-}" ]] && [[ "$AHR_MENU_BACKEND" != "walker" ]]; then
+    return 0
+  fi
+
+  if pgrep -f "walker.*--dmenu" >/dev/null 2>&1; then
+    if ahr_has_cmd walker; then
+      walker --close >/dev/null 2>&1 || true
+    fi
+    exit 0
+  fi
+}
+
 menu_backend() {
   if [[ -n "$MENU_BACKEND" ]]; then
     printf '%s\n' "$MENU_BACKEND"
@@ -192,11 +210,11 @@ menu_backend() {
     esac
   fi
 
-  # Prefer core launcher tooling first; walker is optional in no-AUR installs.
-  if ahr_has_cmd wofi; then
-    MENU_BACKEND="wofi"
-  elif ahr_has_cmd walker; then
+  # Prefer Walker for Omarchy menu parity; fall back to wofi/rofi/tty.
+  if ahr_has_cmd walker; then
     MENU_BACKEND="walker"
+  elif ahr_has_cmd wofi; then
+    MENU_BACKEND="wofi"
   elif ahr_has_cmd rofi; then
     MENU_BACKEND="rofi"
   elif [[ -t 0 && -t 1 ]]; then
@@ -1163,6 +1181,9 @@ read -r -p 'Press Enter to close...' _
 
 dispatch() {
   local slice="${1:-main}"
+
+  # Close existing Walker dmenu before opening a new one (toggle behavior)
+  toggle_existing_menu
 
   case "$slice" in
     main) show_main_menu ;;

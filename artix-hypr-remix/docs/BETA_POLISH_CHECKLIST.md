@@ -13,6 +13,7 @@ Primary reference points:
 - Downloaded Omarchy manual: `../the-omarchy-manual.md`
 - Existing parity audit: `MILESTONE4_PARITY_AUDIT.md`
 - Existing completion tracker: `COMPLETION_CHECKLIST.md`
+- Menu/Walker parity tracker: `docs/OMARCHY_MENU_PARITY_CHECKLIST.md`
 - Installed framework source: `config/artix-hypr-remix/`
 
 ## 2. Non-negotiable project constraints

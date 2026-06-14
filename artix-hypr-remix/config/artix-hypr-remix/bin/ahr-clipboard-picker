@@ -9,14 +9,14 @@ if ! ahr_require cliphist cliphist; then
 fi
 
 pick_command() {
-  # Prefer core launcher tooling first; walker is optional in no-AUR installs.
-  if ahr_has_cmd wofi; then
-    wofi --dmenu --prompt "Clipboard"
+  # Prefer Walker for Omarchy menu parity; fall back to wofi/rofi.
+  if ahr_has_cmd walker; then
+    walker --dmenu -p "Clipboard"
     return 0
   fi
 
-  if ahr_has_cmd walker; then
-    walker --dmenu -p "Clipboard"
+  if ahr_has_cmd wofi; then
+    wofi --dmenu --prompt "Clipboard"
     return 0
   fi
 

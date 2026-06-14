@@ -39,8 +39,8 @@ _bg_menu_backend() {
     esac
   fi
 
-  if ahr_has_cmd wofi;        then printf 'wofi\n';   return 0; fi
   if ahr_has_cmd walker;      then printf 'walker\n'; return 0; fi
+  if ahr_has_cmd wofi;        then printf 'wofi\n';   return 0; fi
   if ahr_has_cmd rofi;        then printf 'rofi\n';   return 0; fi
   if [[ -t 0 && -t 1 ]];      then printf 'tty\n';    return 0; fi
 

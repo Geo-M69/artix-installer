@@ -30,10 +30,10 @@ if [[ -n "${AHR_MENU_BACKEND:-}" ]]; then
 fi
 
 if [[ -z "$MENU_BACKEND" ]]; then
-  if ahr_has_cmd wofi; then
-    MENU_BACKEND="wofi"
-  elif ahr_has_cmd walker; then
+  if ahr_has_cmd walker; then
     MENU_BACKEND="walker"
+  elif ahr_has_cmd wofi; then
+    MENU_BACKEND="wofi"
   elif ahr_has_cmd rofi; then
     MENU_BACKEND="rofi"
   elif [[ -t 0 && -t 1 ]]; then

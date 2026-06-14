@@ -1,13 +1,19 @@
-/* AHR Walker theme — inspired by Omarchy's visual design.
- * Uses hardcoded Catppuccin Mocha colors since AHR does not
- * inject CSS variables at runtime the way Omarchy does.
+/* AHR Walker theme — Omarchy-compatible visual design.
+ *
+ * Colors come from the active AHR/Omarchy theme via @import rather than
+ * being hardcoded. The imported file (current/theme/walker.css) is rendered
+ * from default/themed/walker.css.tpl by the theme engine.
+ *
+ * Border-radius is intentionally omitted to match Omarchy's sharp style.
  */
+
+@import url("../../../../current/theme/walker.css");
 
 * {
   all: unset;
   font-family: "JetBrainsMono Nerd Font", "Noto Sans", monospace;
   font-size: 18px;
-  color: #cdd6f4;
+  color: @text;
 }
 
 scrollbar {
@@ -24,28 +30,26 @@ scrollbar {
 
 /* ── Main window ──────────────────────────────────────────── */
 .box-wrapper {
-  background: rgba(30, 30, 46, 0.96);
+  background: alpha(@base, 0.95);
   padding: 20px;
-  border: 2px solid rgba(69, 71, 90, 0.6);
-  border-radius: 12px;
+  border: 2px solid @border;
   min-width: 295px;
 }
 
 /* ── Search / prompt bar ──────────────────────────────────── */
 .search-container {
-  background: rgba(24, 26, 34, 0.85);
+  background: @base;
   padding: 10px;
-  border-radius: 8px;
   margin-bottom: 2px;
 }
 
 .input {
-  caret-color: #89b4fa;
+  caret-color: @selected-text;
 }
 
 .input placeholder {
   opacity: 0.45;
-  color: #585b70;
+  color: @text;
 }
 
 .input:focus,
@@ -65,20 +69,19 @@ scrollbar {
 }
 
 child {
-  border-radius: 6px;
   margin: 0;
 }
 
 child:hover {
-  background: rgba(205, 214, 244, 0.03);
+  background: alpha(@text, 0.03);
 }
 
 child:selected {
-  background: rgba(205, 214, 244, 0.07);
+  background: alpha(@text, 0.07);
 }
 
 child:selected .item-box * {
-  color: #11111b;
+  color: @selected-text;
 }
 
 .item-box {
@@ -113,31 +116,30 @@ child:selected .item-image {
 
 /* ── Placeholder (empty state) ────────────────────────────── */
 .placeholder {
-  color: #585b70;
+  color: @text;
   padding: 24px 14px;
   font-size: 15px;
+  opacity: 0.45;
 }
 
 /* ── Keybind hint bar ─────────────────────────────────────── */
 .keybind-hints {
-  background: rgba(24, 26, 34, 0.9);
+  background: alpha(@base, 0.9);
   padding: 10px;
   margin-top: 10px;
-  border-radius: 8px;
 }
 
 .global-keybinds label,
 .item-keybinds label {
-  background: rgba(69, 71, 90, 0.3);
+  background: alpha(@border, 0.3);
   padding: 2px 8px;
-  border-radius: 4px;
   font-size: 13px;
-  color: #89b4fa;
+  color: @selected-text;
 }
 
 /* ── Error state ──────────────────────────────────────────── */
 .error {
-  color: #f38ba8;
+  color: @selected-text;
   padding: 10px;
   font-size: 14px;
 }
@@ -145,5 +147,5 @@ child:selected .item-image {
 /* ── Current / active marker ──────────────────────────────── */
 .current {
   font-style: italic;
-  color: #89b4fa;
+  color: @selected-text;
 }
