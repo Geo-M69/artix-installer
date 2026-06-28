@@ -22,6 +22,7 @@ Options:
   --no-aur         Skip AUR updates
   --no-system      Skip system (pacman) updates
   --no-migrate     Skip migration run
+  --framework      Also check for framework version updates
   --flatpak        Also update Flatpak applications
   --dry-run        Show what would run without making changes
   -y, --yes        Run non-interactively when supported
@@ -35,6 +36,7 @@ do_system=true
 do_aur=true
 do_flatpak=false
 do_migrate=true
+do_framework=false
 dry_run=false
 assume_yes=false
 
@@ -49,6 +51,7 @@ while (( $# > 0 )); do
     --no-aur) do_aur=false ;;
     --no-system) do_system=false ;;
     --no-migrate) do_migrate=false ;;
+    --framework) do_framework=true ;;
     --flatpak) do_flatpak=true ;;
     --dry-run) dry_run=true ;;
     -y|--yes) assume_yes=true ;;
@@ -59,7 +62,7 @@ while (( $# > 0 )); do
   shift
 done
 
-if [[ "$do_system" == "false" && "$do_aur" == "false" && "$do_flatpak" == "false" && "$do_migrate" == "false" ]]; then
+if [[ "$do_system" == "false" && "$do_aur" == "false" && "$do_flatpak" == "false" && "$do_migrate" == "false" && "$do_framework" == "false" ]]; then
   ahr_fail "Nothing to do: all update actions are disabled"
 fi
 
@@ -189,7 +192,7 @@ acquire_lock
 write_run_file "${original_args[@]}"
 write_status "running" "Update run is in progress"
 
-log_line "Starting update run: system=$do_system aur=$do_aur flatpak=$do_flatpak migrate=$do_migrate dry_run=$dry_run assume_yes=$assume_yes"
+log_line "Starting update run: system=$do_system aur=$do_aur flatpak=$do_flatpak framework=$do_framework migrate=$do_migrate dry_run=$dry_run assume_yes=$assume_yes"
 
 if [[ "$do_system" == "true" ]]; then
   if ! ahr_has_cmd sudo; then
@@ -244,6 +247,19 @@ if [[ "$do_flatpak" == "true" ]]; then
     run_cmd "Running flatpak update" "${flatpak_cmd[@]}"
   else
     log_and_print "flatpak not available; skipping flatpak updates"
+  fi
+fi
+
+if [[ "$do_framework" == "true" ]]; then
+  framework_checker="$FRAMEWORK_ROOT/bin/ahr-update-framework"
+  if [[ -f "$framework_checker" ]]; then
+    if [[ "$dry_run" == "true" ]]; then
+      run_cmd "Checking for framework update" bash "$framework_checker" --check
+    else
+      run_cmd "Checking for framework update" bash "$framework_checker" --check || true
+    fi
+  else
+    log_and_print "Framework update checker not found at $framework_checker"
   fi
 fi
 

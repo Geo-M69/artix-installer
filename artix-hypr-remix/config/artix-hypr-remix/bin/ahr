@@ -42,6 +42,7 @@ Commands:
   list-backups        List config backups created by installer phase 4
   update              System + AUR update helper
   update-available    Check whether updates are available (for status bars)
+  update-framework    Check for framework version updates (apply not yet implemented)
   repair              Check and apply safe framework repairs
   doctor              Run installed-framework health checks
   voxtype-model       Open voxtype model setup
@@ -92,6 +93,7 @@ dispatch() {
     default-editor) exec_ahr_command ahr-default-editor "$@" ;;
     update) exec_ahr_command ahr-update "$@" ;;
     update-available) exec_ahr_command ahr-update-available "$@" ;;
+    update-framework) exec_ahr_command ahr-update-framework "$@" ;;
     status) exec_ahr_command ahr-status "$@" ;;
     list-backups) exec_ahr_command ahr-list-backups "$@" ;;
     repair) exec_ahr_command ahr-repair "$@" ;;
@@ -136,6 +138,7 @@ dispatch() {
         "ahr-default-editor" \
         "ahr-update" \
         "ahr-update-available" \
+        "ahr-update-framework" \
         "ahr-status" \
         "ahr-list-backups" \
         "ahr-repair" \

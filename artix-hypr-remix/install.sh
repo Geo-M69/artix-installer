@@ -22,6 +22,7 @@ source "$LIB_DIR/flatpak.sh"
 source "$LIB_DIR/post_install.sh"
 source "$LIB_DIR/dev_baseline.sh"
 source "$LIB_DIR/state.sh"
+source "$LIB_DIR/framework.sh"
 
 # --- Auto-elevate with sudo if not already root ---
 # This lets users run ./install.sh directly instead of sudo ./install.sh.

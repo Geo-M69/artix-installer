@@ -335,5 +335,6 @@ prepare_post_install_framework() {
   write_reboot_sudoers "$target_user" "$dry_run"
   initialize_migration_state "$target_user" "$target_home" "$dry_run"
   install_command_namespace "$target_user" "$target_home" "$dry_run"
+  framework_deploy_metadata "$target_user" "$target_home" "$dry_run"
   seed_omarchy_themes "$target_user" "$target_home" "$dry_run"
 }

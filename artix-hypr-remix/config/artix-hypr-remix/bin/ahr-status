@@ -185,6 +185,24 @@ if [[ "$show_framework" == "true" ]]; then
     print_kv "Last update status" "${status_value:-unknown}"
   fi
 
+  FRAMEWORK_JSON="$FRAMEWORK_ROOT/framework.json"
+  if [[ -f "$FRAMEWORK_JSON" ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      fw_version="$(jq -r '.version // "unknown"' "$FRAMEWORK_JSON" 2>/dev/null || echo unknown)"
+      fw_channel="$(jq -r '.channel // "unknown"' "$FRAMEWORK_JSON" 2>/dev/null || echo unknown)"
+      fw_updated="$(jq -r '.updated_at // ""' "$FRAMEWORK_JSON" 2>/dev/null || echo '')"
+    else
+      fw_version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FRAMEWORK_JSON" | head -n1)"
+      fw_channel="$(sed -n 's/.*"channel"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FRAMEWORK_JSON" | head -n1)"
+      fw_updated="$(sed -n 's/.*"updated_at"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FRAMEWORK_JSON" | head -n1)"
+    fi
+    print_kv "Framework version" "${fw_version:-unknown}"
+    print_kv "Framework channel" "${fw_channel:-unknown}"
+    [[ -n "${fw_updated:-}" ]] && print_kv "Framework updated" "$fw_updated"
+  else
+    print_kv "Framework metadata" "not deployed"
+  fi
+
   startup_mode_file="$STATE_ROOT/startup.mode"
   if [[ -f "$startup_mode_file" ]]; then
     print_kv "Startup mode" "$(<"$startup_mode_file")"

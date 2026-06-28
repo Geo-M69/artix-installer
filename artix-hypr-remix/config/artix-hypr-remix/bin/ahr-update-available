@@ -4,8 +4,9 @@ set -euo pipefail
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
 FRAMEWORK_ROOT="$HOME/.config/artix-hypr-remix"
+STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
 MIGRATION_DIR="$FRAMEWORK_ROOT/migrations"
-MIGRATION_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/migrations"
+MIGRATION_STATE_DIR="$STATE_ROOT/migrations"
 MIGRATION_SKIPPED_DIR="$MIGRATION_STATE_DIR/skipped"
 
 json=false
@@ -66,14 +67,124 @@ if [[ -d "$MIGRATION_DIR" ]]; then
   shopt -u nullglob
 fi
 
+# framework state
+# Track: "pending" (update available), "current" (up to date), "unavailable" (check failed), "disabled" (no source)
+
+# Cache path shared with ahr-update-framework
+FRAMEWORK_JSON="$FRAMEWORK_ROOT/framework.json"
+FRAMEWORK_CACHE="$STATE_ROOT/framework-remote.cache"
+FRAMEWORK_CACHE_TTL=900
+
+framework_state="disabled"
+framework_local_version=""
+framework_remote_version=""
+
+# Check framework version using jq (guaranteed by package manifest)
+if command -v jq >/dev/null 2>&1; then
+  framework_local_version="$(jq -r '.version // ""' "$FRAMEWORK_JSON" 2>/dev/null || true)"
+  update_source="$(jq -r '.update_source // ""' "$FRAMEWORK_JSON" 2>/dev/null || true)"
+else
+  framework_local_version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FRAMEWORK_JSON" 2>/dev/null | head -n1)"
+  update_source="$(sed -n 's/.*"update_source"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FRAMEWORK_JSON" 2>/dev/null | head -n1)"
+fi
+
+# If there is an update_source but git isn't available, report unavailable
+if [[ -n "$update_source" ]] && ! ahr_has_cmd git; then
+  framework_state="unavailable"
+elif [[ -n "$update_source" ]] && ahr_has_cmd git; then
+  framework_state="unavailable"  # pessimistic until proven otherwise
+
+  # Try cache first (same path as ahr-update-framework)
+  if [[ -f "$FRAMEWORK_CACHE" ]]; then
+    cache_ts="$(head -n1 "$FRAMEWORK_CACHE" 2>/dev/null || printf '0')"
+    cache_ver="$(sed -n '2p' "$FRAMEWORK_CACHE" 2>/dev/null || true)"
+    cache_source="$(sed -n '3p' "$FRAMEWORK_CACHE" 2>/dev/null || true)"
+    now="$(date +%s 2>/dev/null || printf '0')"
+    if [[ "$now" =~ ^[0-9]+$ ]] && [[ "$cache_ts" =~ ^[0-9]+$ ]] && [[ "$cache_source" == "$update_source" ]]; then
+      age=$(( now - cache_ts ))
+      if (( age < FRAMEWORK_CACHE_TTL )) && [[ -n "$cache_ver" ]]; then
+        framework_remote_version="$cache_ver"
+        framework_state="current"
+      fi
+    fi
+  fi
+
+  # No fresh cache — do a lightweight remote fetch
+  if [[ "$framework_state" != "current" ]]; then
+    tmpdir="$(mktemp -d "/tmp/ahr-update-check-XXXXXXXX" 2>/dev/null || true)"
+    if [[ -n "$tmpdir" ]]; then
+      # Blobless no-checkout clone (fast), fallback to standard shallow
+      if git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir" 2>/dev/null; then
+        remote_raw="$(git -C "$tmpdir" cat-file -p HEAD:artix-hypr-remix/config/artix-hypr-remix/framework.json 2>/dev/null || true)"
+      elif git clone --depth 1 --quiet "$update_source" "$tmpdir" 2>/dev/null; then
+        if [[ -f "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json" ]]; then
+          remote_raw="$(cat "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json")"
+        fi
+      fi
+      rm -rf "$tmpdir"
+    fi
+
+    if [[ -n "${remote_raw:-}" ]]; then
+      if command -v jq >/dev/null 2>&1; then
+        framework_remote_version="$(printf '%s' "$remote_raw" | jq -r '.version // ""' 2>/dev/null || true)"
+      else
+        framework_remote_version="$(printf '%s' "$remote_raw" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+      fi
+
+      if [[ -n "$framework_remote_version" ]]; then
+        # Write cache
+        mkdir -p "$(dirname "$FRAMEWORK_CACHE")"
+        {
+          printf '%s\n' "$(date +%s 2>/dev/null || printf '0')"
+          printf '%s\n' "$framework_remote_version"
+          printf '%s\n' "$update_source"
+        } > "$FRAMEWORK_CACHE"
+        framework_state="current"
+      fi
+    fi
+  fi
+
+  # Compare versions only if we have both; if local is empty but remote
+  # was fetched, stay "unavailable" rather than jumping to "current".
+  if [[ -n "$framework_local_version" && -n "$framework_remote_version" ]]; then
+    if command -v vercmp >/dev/null 2>&1; then
+      # vercmp prints negative/zero/positive to stdout, exits 0.
+      vc="$(vercmp "$framework_remote_version" "$framework_local_version" 2>/dev/null || echo '')"
+      # Validate output is numeric; non-numeric means vercmp failed.
+      if [[ ! "$vc" =~ ^-?[0-9]+$ ]]; then
+        framework_state="unavailable"
+      elif (( vc > 0 )); then
+        framework_state="pending"
+      elif (( vc < 0 )); then
+        framework_state="current"  # local is newer, no downgrade
+      fi
+    else
+      # String fallback
+      if [[ "$framework_remote_version" == "$framework_local_version" ]]; then
+        framework_state="current"
+      elif [[ "$framework_remote_version" > "$framework_local_version" ]]; then
+        framework_state="pending"
+      fi
+    fi
+  elif [[ -z "$framework_local_version" && -n "$framework_remote_version" ]]; then
+    framework_state="unavailable"
+  fi
+fi
+
 total=$((system_count + aur_count + migration_pending_count + migration_skipped_count))
+framework_pending=false
+if [[ "$framework_state" == "pending" ]]; then
+  framework_pending=true
+  ((total+=1))
+fi
 
 if [[ "$json" == "true" ]]; then
   pending=false
   if (( total > 0 )); then
     pending=true
   fi
-  printf '{"system": %s, "aur": %s, "migrations": %s, "skipped_migrations": %s, "total": %s, "pending": %s}\n' "$system_count" "$aur_count" "$migration_pending_count" "$migration_skipped_count" "$total" "$pending"
+  printf '{"system": %s, "aur": %s, "migrations": %s, "skipped_migrations": %s, "framework": "%s", "total": %s, "pending": %s}\n' \
+    "$system_count" "$aur_count" "$migration_pending_count" "$migration_skipped_count" "$framework_state" "$total" "$pending"
 else
   if (( total > 0 )); then
     printf 'Updates pending: %s total\n' "$total"
@@ -81,13 +192,25 @@ else
     printf '  AUR packages: %s\n' "$aur_count"
     printf '  pending migrations: %s\n' "$migration_pending_count"
     printf '  skipped migrations: %s\n' "$migration_skipped_count"
+    if [[ "$framework_state" == "pending" ]]; then
+      printf '  framework update: %s → %s available\n' "$framework_local_version" "$framework_remote_version"
+    elif [[ "$framework_state" == "unavailable" ]]; then
+      printf '  framework version: check failed\n'
+    fi
     printf '\nRun `ahr update` for normal updates, or `ahr update --flatpak` to include Flatpak apps.\n'
     if (( migration_skipped_count > 0 )); then
       printf 'Skipped migrations need review. Use `ahr migrate --status` and `ahr migrate --retry-skipped`.\n'
     fi
   else
     printf 'No updates pending.\n'
-    printf 'Checked repo packages, AUR packages, pending migrations, and skipped migrations.\n'
+    printf 'Checked repo packages, AUR packages, pending migrations, skipped migrations'
+    case "$framework_state" in
+      pending)    printf ', and framework update' ;;
+      current)    printf ', and framework version (up to date)' ;;
+      unavailable) printf ', and framework version (check failed)' ;;
+      disabled)   ;;
+    esac
+    printf '.\n'
   fi
 fi
 

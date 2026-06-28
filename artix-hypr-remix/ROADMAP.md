@@ -24,30 +24,46 @@ Artix Hypr Remix aims to deliver an Artix Linux, OpenRC-native, Omarchy-equivale
 
 ## Current Status
 
-The repo is in active beta readiness. Milestones 1-5 are functionally complete: the phased installer, backup behavior, logging, OpenRC service handling, startup-mode switching, first-run framework, desktop runtime paths, Omarchy-like UX parity scaffolding, menu polish, theme/update UX, migration tooling, repair framework, doctor/smoke validation, and beta expected-results docs are in place. **Milestone 6** (documentation finalization, validation log collection, release readiness) is complete — `v0.1.0-beta1` tagged and published on 2026-06-06. The project is now on **Milestone 7**, focused on optional distribution work and post-beta hardening.
+The repo is past the first public beta: `v0.1.0-beta1` was tagged and published
+on 2026-06-06. Milestones 1-5 are functionally complete: the phased installer,
+backup behavior, logging, OpenRC service handling, startup-mode switching,
+first-run framework, desktop runtime paths, Omarchy-like UX parity scaffolding,
+menu polish, theme/update UX, migration tooling, repair framework, doctor/smoke
+validation, and beta expected-results docs are in place. **Milestone 6** shipped
+the initial beta; the raised bar for beta finalization now requires real visual
+proof, broader live-session validation, and support claims backed by archived
+bundles. **Milestone 7** remains focused on post-beta hardening and optional
+distribution work, but ISO/profile work should wait until the raised beta gate is
+cleared.
+
+Post-beta product direction, including the native-core/Flatpak-first application
+policy and the decision not to adopt Chromium-centered web apps, is tracked in
+`docs/PRODUCT_ROADMAP.md`.
 
 ## Gap Analysis
 
 - Installer safety: strong progress; post-install smoke validation now covers functional desktop readiness beyond package/config structure.
-- Artix/OpenRC base layer: OpenRC service handling is validated on VM; package naming confirmed for core profile. Real-host validation still needed for Intel, NVIDIA, and laptop profiles.
+- Artix/OpenRC base layer: OpenRC service handling is validated on VM; package naming confirmed for core profile. The raised beta bar requires current bundles for claimed Intel/AMD/NVIDIA/laptop support, or explicit support-matrix downgrades.
 - Desktop functionality: Hyprland, Waybar, Mako, PipeWire, screenshots, clipboard, theming, first-run, and update hooks are present and validated for Milestone 3 scope.
 - Omarchy-like UX: parity table is documented in `MILESTONE4_PARITY_AUDIT.md`. Most required-parity items are addressed; remaining items are explicitly deferred post-beta.
-- Release readiness: README, support matrix, known issues, release notes, and beta checklist are published. Screenshots/visual artifacts and validation bundles are still needed before the public beta tag.
+- Release readiness: README, support matrix, known issues, release notes, and beta checklist are published. The raised beta bar requires replacing placeholder screenshots with real first-login/menu artifacts, validating portal screen sharing and suspend/resume, and rerunning live smoke/doctor/repair/update checks on a fresh install.
 
-## Fastest Path To Beta
+## Fastest Path To Raised-Bar Beta
 
 1. ✅ Build the Omarchy parity table and decide which UX differences are required parity versus Artix/OpenRC adaptations — done in `MILESTONE4_PARITY_AUDIT.md`.
-2. ✅ Validate and tighten the OpenRC/session stack on real Artix systems — core services validated on VM (2026-06-05); Intel/NVIDIA/laptop validation pending.
+2. ✅ Validate and tighten the OpenRC/session stack on real Artix systems — core services validated on VM (2026-06-05); raised-bar hardware coverage still requires current bundles or downgraded support claims.
 3. ✅ Close remaining first-login polish gaps: menus, update UX, welcome flow, visual cohesion, and documented expected behavior — all addressed in Milestone 4 work.
 4. ✅ Freeze a supported beta matrix and document what is intentionally unsupported — done in `BETA_SUPPORT_MATRIX.md` and `BETA_READINESS.md`.
-5. Collect validation logs for Intel, NVIDIA, laptop, and `greetd` autologin profiles.
-6. Add screenshots or expected-result artifacts under `docs/screenshots/`.
-7. Tag the beta release and publish with validation bundles.
+5. Collect fresh validation logs for clean TTY, `greetd` greeter, `greetd` autologin, laptop suspend/resume, portal screen sharing, and each supported hardware claim.
+6. Replace placeholder expected-result artifacts with real screenshots under `docs/screenshots/`.
+7. Run final live quality, smoke, doctor, repair, migration, update, status, and backup-list checks.
+8. Publish the next beta refresh only after validation bundles and support docs agree.
 
 ## Critical Blockers
 
-- ~~Real-host validation coverage is incomplete — Intel, NVIDIA, laptop, and `greetd` autologin profiles lack validation logs.~~ ✅ NVIDIA + laptop validated; Intel deferred.
-- ~~First-login visual proof (screenshots / expected-result artifacts) is missing.~~ ✅ Placeholder and expected-result descriptions created.
+- Raised-bar real-host validation coverage is incomplete until current bundles back every support claim or the support matrix is downgraded.
+- Real first-login visual proof is missing; placeholders no longer satisfy the raised beta bar.
+- Laptop suspend/resume and portal screen sharing need live validation.
 - Some Omarchy required-parity workflows remain partial or intentionally narrower.
 - ~~CI must pass on the final beta branch before tagging.~~ ✅ CI passes; tag pushed.
 
@@ -61,7 +77,7 @@ The repo is in active beta readiness. Milestones 1-5 are functionally complete: 
 | Theme engine + command namespace | Present | Optional polish | Good foundation, but needs more end-user polish validation. |
 | Walker/Elephant assistant workflow | Partial | Optional polish | Supported, but should never be required for the base install to function. |
 | Update + migration framework | Present | Required parity | Repo already has `ahr update`, `ahr migrate`, and hook wiring. |
-| Web app / extended app workflow | Mostly absent | Unsupported for now | Not a beta blocker unless intentionally adopted. |
+| Chromium-centered web app workflow | Absent | Intentional difference | AHR prefers Flatpak for optional GUI applications; Chromium remains a browser, not application infrastructure. |
 | ISO/distribution workflow | Absent | Unsupported for now | Explicitly defer until script installer is solid. |
 
 ## Milestones

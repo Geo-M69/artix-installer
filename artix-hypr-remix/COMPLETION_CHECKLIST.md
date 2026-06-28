@@ -109,8 +109,9 @@ Status: core desktop is present; polish and validation remain.
 - [x] Add Mako restart/silence/dismiss behavior.
 - [x] Add fonts, theme, and icon package manifests.
 - [x] Add first-run welcome path.
-- [x] Validate first login visually on a clean Artix host.
-- [x] Capture screenshots or expected-result images for first login, menu, Waybar, launcher, and theme state.
+- [x] Validate first login visually on a clean Artix host for beta1 scope.
+- [x] Capture expected-result descriptions for first login, menu, Waybar, launcher, and theme state for beta1 scope.
+- [ ] Capture real screenshots for first login, menu, Waybar, launcher, and theme state for the raised beta bar.
 - [ ] Validate TTY startup on real hardware (already tested via VM; real hardware pending).
 - [x] Validate `greetd` greeter mode on real hardware (tested on VM).
 - [x] Validate `greetd` autologin mode on real hardware — confirmed working through daily use on host (2026-06-05).
@@ -162,7 +163,8 @@ Manual UX validation: PASS (menu, keybindings, theme, update, discoverability, c
 - [ ] Explicitly mark LocalSend/share workflow as optional polish or unsupported for beta (deferred — post-beta).
 - [x] Keep broad install/remove menus intentionally narrow until package operations are tested.
 - [x] Keep web app installer unsupported for beta unless it becomes a release goal.
-- [x] Add user-facing expected-results screenshots or text for first login.
+- [x] Add user-facing expected-result text for first login.
+- [ ] Replace first-login expected-result text with real screenshots for the raised beta bar.
 - [ ] Run one clean-install usability pass where the tester does not read the source docs first.
 
 ## Milestone 5 - Maintenance, Repair, And Upgrade Tooling
@@ -196,7 +198,7 @@ Status: strong foundation; repair coverage extended, new diagnostic commands add
 
 ## Milestone 6 - Documentation And Release Readiness
 
-Status: active milestone.
+Status: beta1 shipped; raised-bar validation remains open for the next beta refresh.
 
 - [x] Rewrite README around current supported install flow.
 - [x] Add beta checklist.
@@ -212,12 +214,13 @@ Status: active milestone.
 - [ ] Collect laptop validation bundle.
 - [ ] Collect `greetd` greeter-mode validation bundle (VM-tested; needs archived log bundle for release).
 - [ ] Collect `greetd` autologin validation bundle — validated through daily use; bundle archival still pending.
-- [ ] Confirm CI passes on the final beta branch.
+- [x] Confirm CI passes on the beta1 branch.
 - [x] Review README for any stale milestone language — README is current; references Milestone 6 beta docs.
 - [x] Review ROADMAP for current status consistency with Milestone 6 — updated stale "Milestone 5 alpha" language to beta readiness state (2026-06-05).
-- [ ] Review release notes for exact release date and version.
-- [ ] Attach validation bundles to release assets.
-- [ ] Tag beta release, for example `v0.1.0-beta1`.
+- [x] Review release notes for exact release date and version for `v0.1.0-beta1`.
+- [x] Attach beta1 validation bundles to release assets.
+- [x] Tag beta release: `v0.1.0-beta1` (2026-06-06).
+- [ ] Refresh release notes, validation bundles, and assets for the raised-bar beta refresh.
 
 ## Milestone 7 - Optional Distribution Work
 
@@ -241,23 +244,30 @@ Status: in progress (2026-06-06 kickoff). Distribution decision made; feedback c
 
 - [ ] Run and archive one clean TTY install validation on fresh Artix OpenRC.
 - [x] Run and archive one `greetd` greeter validation on fresh Artix OpenRC — VM-tested and confirmed working (2026-06-05). Fresh-install log bundle still needed for release artifacts.
-- [x] Capture at least one Intel or NVIDIA real-host validation log.
-  - **Done (2026-06-14):** NVIDIA laptop validation — desktop, menus, backends, and themes confirmed working.
-- [x] Add first-login screenshots or expected-result artifacts.
-  - **Done (2026-06-14):** 6 beta screenshots captured on NVIDIA laptop including first-login desktop, app launcher, control menu, Waybar detail, theme showcase, and update workflow.
-- [ ] Resolve or explicitly defer remaining Milestone 4 required-parity items.
+- [ ] Run and archive a fresh `greetd` autologin validation bundle; daily-use confirmation is no longer enough for the raised beta bar.
+- [ ] Capture at least two real-host validation logs across the supported hardware claims, including one laptop and either Intel/AMD/NVIDIA coverage or explicit support-matrix downgrades.
+- [ ] Replace expected-result placeholders with real first-login screenshots: desktop, app launcher, control menu, theme/background state, and one capture result.
+- [ ] Run graphical Walker/menu smoke: open every top-level menu in a live Hyprland session and archive representative screenshots.
+- [ ] Validate suspend/resume on laptop hardware: lock/unlock, idle restore, audio, network, and Waybar indicators.
+- [ ] Validate browser or Flatpak portal screen sharing.
+- [ ] Validate default apps/MIME behavior for URL, directory, text, PDF, image, video, and archive files.
+- [ ] Resolve or explicitly defer remaining Milestone 4 required-parity items; deferred items must appear in known issues or release notes.
 - [ ] Update support matrix from validation results.
 - [ ] Run `./scripts/quality-gate.sh --no-aur`.
 - [ ] Run full quality gate with AUR checks on a host that can query/install AUR dependencies.
 - [ ] Run `./scripts/post-install-smoke.sh --user <username>` after a live install.
-- [ ] Review and tag `v0.1.0-beta1`.
+- [ ] Run `./scripts/doctor.sh --no-aur`, `ahr repair --dry-run`, `ahr migrate --status`, `ahr update --dry-run`, `ahr status`, and `ahr list-backups` on the live install.
+- [x] Review and tag `v0.1.0-beta1`.
+- [ ] Review and tag the raised-bar beta refresh only after all validation artifacts are archived.
 
 ## Critical Blockers Before Public Beta
 
-- [ ] Real-host validation coverage is incomplete.
-- [ ] Intel, NVIDIA, and laptop support are not yet backed by logs.
+- [ ] Raised-bar real-host validation coverage is incomplete.
+- [ ] Hardware support claims are not yet fully backed by current validation bundles or explicitly downgraded in the support matrix.
 - [x] `greetd` support validated — greeter mode tested on VM, autologin confirmed working through daily use on host. Fresh-install log bundles still pending.
-- [x] First-login visual proof captured (2026-06-14, NVIDIA laptop).
+- [ ] Fresh `greetd` autologin bundle is missing.
+- [ ] Real first-login visual proof is missing; placeholders no longer satisfy the raised beta bar.
+- [ ] Suspend/resume and portal screen sharing are not yet validated on real hardware.
 - [ ] Some Omarchy required-parity workflows remain partial or intentionally narrower.
 
 ## Definition Of Done
@@ -271,8 +281,8 @@ Status: in progress (2026-06-06 kickoff). Distribution decision made; feedback c
 - [x] First login opens a usable Hyprland desktop with Waybar, Mako, audio, portals, clipboard, screenshot, lock, idle, wallpaper, launcher, terminal, file manager, and browser defaults working.
   - **Validated (2026-06-14):** All core services confirmed running on NVIDIA laptop. Backends validated: Walker, wofi, TTY. rofi gracefully handled when absent. Theme rendering verified for both dark and light themes.
 - [ ] Optional AUR features improve the desktop but are not required for the base experience.
+- [ ] Optional AUR features have both installed and missing-dependency validation results.
 - [ ] Repair, update, migration, doctor, and smoke tools detect common drift.
 - [ ] Known unsupported Omarchy features are explicit and intentional.
-- [x] README, support matrix, known issues, release notes, screenshots or expected results, and release checklist are complete.
-  - Screenshots captured (2026-06-14): 6 beta screenshots + 9 AHR menu screenshots on NVIDIA laptop.
+- [ ] README, support matrix, known issues, release notes, real screenshots, and release checklist are complete and mutually consistent.
 - [ ] Real-host validation bundles exist for supported beta claims.

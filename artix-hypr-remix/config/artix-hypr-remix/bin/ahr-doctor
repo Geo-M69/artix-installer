@@ -237,6 +237,21 @@ else
   printf '  OK: Waybar position — default (top)\n'
 fi
 
+printf '\n=== Framework Version ===\n'
+FRAMEWORK_JSON="$HOME/.config/artix-hypr-remix/framework.json"
+if [[ -f "$FRAMEWORK_JSON" ]]; then
+  if command -v jq >/dev/null 2>&1; then
+    fw_version="$(jq -r '.version // "unknown"' "$FRAMEWORK_JSON" 2>/dev/null || echo "unknown")"
+    fw_channel="$(jq -r '.channel // "unknown"' "$FRAMEWORK_JSON" 2>/dev/null || echo "unknown")"
+  else
+    fw_version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FRAMEWORK_JSON" | head -n1)"
+    fw_channel="$(sed -n 's/.*"channel"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FRAMEWORK_JSON" | head -n1)"
+  fi
+  printf '  OK: version %s (%s)\n' "${fw_version:-unknown}" "${fw_channel:-unknown}"
+else
+  printf '  WARN: framework metadata not deployed (run installer phase 7)\n'
+fi
+
 printf '\n=== Framework Commands ===\n'
 framework_cmd_check ahr-menu
 framework_cmd_check ahr-menu-keybindings
@@ -259,6 +274,10 @@ framework_cmd_check ahr-capture-picker
 framework_cmd_check ahr-theme
 framework_cmd_check ahr-status
 framework_cmd_check ahr-doctor
+framework_cmd_check ahr-update
+framework_cmd_check ahr-update-available
+framework_cmd_check ahr-update-framework
+framework_cmd_check ahr-migrate
 
 printf '\n'
 if (( overall_status == 0 )); then

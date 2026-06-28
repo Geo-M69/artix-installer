@@ -46,6 +46,7 @@ declare -a commands=(
   ahr-default-terminal
   ahr-update
   ahr-update-available
+  ahr-update-framework
   ahr-repair
   ahr-status
   ahr-list-backups

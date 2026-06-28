@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ahr-update-framework — Check for framework version updates.
+#
+# Phase 1 framework delivery command.  Modes:
+#   --check    Compare installed version against the remote update source.
+#   --status   Print the installed framework version and metadata (default).
+#
+# Future iterations will add: --dry-run (stage but don't activate), --apply
+# (fetch, backup, activate), and --rollback (restore previous backup).
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${AHR_LIB_PATH:-$SCRIPT_DIR/ahr-lib.sh}"
+
+FRAMEWORK_ROOT="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}"
+FRAMEWORK_JSON="$FRAMEWORK_ROOT/framework.json"
+STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
+FRAMEWORK_CACHE="$STATE_ROOT/framework-remote.cache"
+FRAMEWORK_CACHE_TTL=900  # 15 minutes (exceeds Waybar 600s poll interval)
+
+# ── Helpers ────────────────────────────────────────────────────────
+
+usage() {
+  cat <<'EOF'
+Usage: ahr update-framework [options]
+
+Options:
+  --check      Compare installed version against the remote update source
+  --status     Print installed framework version and metadata (default)
+  --quiet      Suppress non-error output
+  -h, --help   Show this help
+EOF
+}
+
+quiet=false
+mode="status"
+
+while (( $# > 0 )); do
+  case "$1" in
+    --check) mode="check" ;;
+    --status) mode="status" ;;
+    --quiet) quiet=true ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+  esac
+  shift
+done
+
+# Read a string value from a JSON file using jq, with sed fallback.
+# Usage: read_json_value <file> <key>
+read_json_value() {
+  local json="$1"
+  local key="$2"
+
+  if command -v jq >/dev/null 2>&1; then
+    jq -r --arg k "$key" '.[$k] // ""' "$json" 2>/dev/null && return 0
+  fi
+
+  sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$json" 2>/dev/null | head -n1
+}
+
+# ── Remote version fetching with caching ──────────────────────────
+
+# Fetch remote version from the update source.
+# Returns 0 on success (prints remote version), 1 on failure.
+# Caches result in FRAMEWORK_CACHE to avoid repeated git clones.
+fetch_remote_version() {
+  local update_source="$1"
+  local remote_version=""
+
+  # Check cache freshness (must match update_source as well)
+  if [[ -f "$FRAMEWORK_CACHE" ]]; then
+    local cache_age cache_ver cache_ts cache_source now
+    now="$(date +%s 2>/dev/null || printf '0')"
+    cache_ts="$(head -n1 "$FRAMEWORK_CACHE" 2>/dev/null || printf '0')"
+    cache_ver="$(sed -n '2p' "$FRAMEWORK_CACHE" 2>/dev/null || true)"
+    cache_source="$(sed -n '3p' "$FRAMEWORK_CACHE" 2>/dev/null || true)"
+    if [[ "$now" =~ ^[0-9]+$ ]] && [[ "$cache_ts" =~ ^[0-9]+$ ]] && [[ "$cache_source" == "$update_source" ]]; then
+      cache_age=$(( now - cache_ts ))
+      if (( cache_age < FRAMEWORK_CACHE_TTL )) && [[ -n "$cache_ver" ]]; then
+        printf '%s\n' "$cache_ver"
+        return 0
+      fi
+    fi
+  fi
+
+  local tmpdir
+  tmpdir="$(mktemp -d "/tmp/ahr-framework-check-XXXXXXXX")"
+
+  # Use blobless, no-checkout clone for speed, fall back to depth-1.
+  if ! git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir" 2>/dev/null; then
+    rm -rf "$tmpdir"
+    # Fallback: standard shallow clone
+    tmpdir="$(mktemp -d "/tmp/ahr-framework-check-XXXXXXXX")"
+    if ! git clone --depth 1 --quiet "$update_source" "$tmpdir" 2>/dev/null; then
+      rm -rf "$tmpdir"
+      return 1
+    fi
+  fi
+
+  # Read framework.json directly from git tree (no checkout needed).
+  local remote_raw
+  remote_raw="$(git -C "$tmpdir" cat-file -p HEAD:artix-hypr-remix/config/artix-hypr-remix/framework.json 2>/dev/null)" || remote_raw=""
+
+  # Fallback to filesystem path if cat-file failed (e.g. full checkout path).
+  if [[ -z "$remote_raw" ]]; then
+    if [[ -f "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json" ]]; then
+      remote_raw="$(cat "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json")"
+    fi
+  fi
+
+  rm -rf "$tmpdir"
+
+  if [[ -z "$remote_raw" ]]; then
+    return 1
+  fi
+
+  # Extract version from raw JSON using jq, with sed fallback.
+  if command -v jq >/dev/null 2>&1; then
+    remote_version="$(printf '%s' "$remote_raw" | jq -r '.version // ""' 2>/dev/null || true)"
+  else
+    remote_version="$(printf '%s' "$remote_raw" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+  fi
+
+  if [[ -z "$remote_version" ]]; then
+    return 1
+  fi
+
+  # Write cache
+  mkdir -p "$(dirname "$FRAMEWORK_CACHE")"
+  {
+    printf '%s\n' "$(date +%s 2>/dev/null || printf '0')"
+    printf '%s\n' "$remote_version"
+    printf '%s\n' "$update_source"
+  } > "$FRAMEWORK_CACHE"
+
+  printf '%s\n' "$remote_version"
+  return 0
+}
+
+# ── Status Mode ────────────────────────────────────────────────────
+
+cmd_status() {
+  if [[ ! -f "$FRAMEWORK_JSON" ]]; then
+    if [[ "$quiet" == "false" ]]; then
+      printf 'Framework metadata not found at %s\n' "$FRAMEWORK_JSON"
+      printf 'Run the installer (phase 7) to deploy framework metadata.\n'
+    fi
+    return 1
+  fi
+
+  local version revision channel update_source updated_at
+  version="$(read_json_value "$FRAMEWORK_JSON" "version")" || version="unknown"
+  revision="$(read_json_value "$FRAMEWORK_JSON" "revision")" || revision=""
+  channel="$(read_json_value "$FRAMEWORK_JSON" "channel")" || channel="unknown"
+  update_source="$(read_json_value "$FRAMEWORK_JSON" "update_source")" || update_source=""
+  updated_at="$(read_json_value "$FRAMEWORK_JSON" "updated_at")" || updated_at="unknown"
+
+  if [[ "$quiet" == "true" ]]; then
+    printf 'version=%s\n' "$version"
+    [[ -n "$revision" ]] && printf 'revision=%s\n' "$revision"
+    printf 'channel=%s\n' "$channel"
+    printf 'update_source=%s\n' "$update_source"
+    printf 'updated_at=%s\n' "$updated_at"
+    return 0
+  fi
+
+  printf 'Framework: %s\n' "$version"
+  printf 'Channel:   %s\n' "$channel"
+  [[ -n "$revision" ]] && printf 'Revision:  %s\n' "$revision"
+  [[ -n "$update_source" ]] && printf 'Source:    %s\n' "$update_source"
+  printf 'Updated:   %s\n' "$updated_at"
+}
+
+# ── Check Mode ─────────────────────────────────────────────────────
+
+cmd_check() {
+  if [[ ! -f "$FRAMEWORK_JSON" ]]; then
+    printf 'Framework metadata not found. Nothing to compare.\n' >&2
+    return 1
+  fi
+
+  local local_version update_source remote_version vercmp_result
+
+  local_version="$(read_json_value "$FRAMEWORK_JSON" "version")" || local_version=""
+  update_source="$(read_json_value "$FRAMEWORK_JSON" "update_source")" || update_source=""
+
+  if [[ -z "$local_version" ]]; then
+    printf 'Could not read local framework version from %s\n' "$FRAMEWORK_JSON" >&2
+    return 1
+  fi
+
+  if [[ -z "$update_source" ]]; then
+    printf 'No update source configured in %s\n' "$FRAMEWORK_JSON" >&2
+    printf 'Set "update_source" to a git URL to enable remote checks.\n' >&2
+    return 1
+  fi
+
+  if ! ahr_has_cmd git; then
+    printf 'git is required to check for framework updates.\n' >&2
+    printf 'Install with: sudo pacman -S git\n' >&2
+    return 1
+  fi
+
+  if [[ "$quiet" == "false" ]]; then
+    printf 'Checking framework update source: %s\n' "$update_source"
+  fi
+
+  remote_version="$(fetch_remote_version "$update_source")" || {
+    if [[ "$quiet" == "false" ]]; then
+      printf 'Failed to fetch framework version from remote source: %s\n' "$update_source" >&2
+    fi
+    return 1
+  }
+
+  if [[ -z "$remote_version" ]]; then
+    printf 'Could not determine remote framework version.\n' >&2
+    return 1
+  fi
+
+  # Use vercmp from pacman for proper version comparison.
+  # vercmp A B prints a number to stdout and exits 0:
+  #   negative if A < B  (A is older)
+  #   0         if A == B
+  #   positive if A > B  (A is newer)
+  vercmp_result=0
+  if command -v vercmp >/dev/null 2>&1; then
+    vercmp_result="$(vercmp "$remote_version" "$local_version" 2>/dev/null || echo '')"
+    # Validate output is numeric; if vercmp produced garbage, report unavailable.
+    if [[ ! "$vercmp_result" =~ ^-?[0-9]+$ ]]; then
+      if [[ "$quiet" == "false" ]]; then
+        printf 'vercmp produced non-numeric output: %s\n' "$vercmp_result" >&2
+      fi
+      return 1
+    fi
+  else
+    # Fallback: string comparison (ordered so "0.1.9" < "0.1.10" if plain
+    # string doesn't work, but this is imprecise; vercmp is strongly preferred).
+    if [[ "$remote_version" == "$local_version" ]]; then
+      vercmp_result=0
+    elif [[ "$remote_version" > "$local_version" ]]; then
+      vercmp_result=1
+    else
+      vercmp_result=-1
+    fi
+  fi
+
+  if (( vercmp_result > 0 )); then
+    if [[ "$quiet" == "false" ]]; then
+      printf 'Framework update available: %s → %s\n' "$local_version" "$remote_version"
+      printf 'Run \`ahr update-framework\` with --apply (in a future release) to update.\n'
+    fi
+    return 0
+  elif (( vercmp_result == 0 )); then
+    if [[ "$quiet" == "false" ]]; then
+      printf 'Framework is up to date: %s\n' "$local_version"
+    fi
+    return 1
+  else
+    if [[ "$quiet" == "false" ]]; then
+      printf 'Local framework (%s) is newer than remote (%s). No update needed.\n' \
+        "$local_version" "$remote_version"
+    fi
+    return 1
+  fi
+}
+
+# ── Main ───────────────────────────────────────────────────────────
+
+case "$mode" in
+  status) cmd_status ;;
+  check)  cmd_check  ;;
+esac

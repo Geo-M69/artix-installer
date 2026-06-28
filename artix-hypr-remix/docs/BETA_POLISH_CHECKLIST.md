@@ -321,7 +321,7 @@ Use this checklist for the "overall UI/UX is lacking" workstream.
 - [ ] Notification copy is short, action-oriented, and consistent with AHR command names.
 - [ ] First-run notifications point to the menu, keybindings, healthcheck, and quick reference without repeating after success.
 - [ ] About screen communicates "Artix OpenRC-native Omarchy-equivalent" plus supported scope and version/status.
-- [ ] Screenshots or expected-result artifacts exist for first login, menu, theme picker, Waybar, and capture flow.
+- [ ] Real screenshots exist for first login, menu, theme picker, Waybar, and capture flow; expected-result placeholders are not enough for the raised beta bar.
 
 ### Keyboard-first daily workflow
 
@@ -788,6 +788,48 @@ OpenRC/Artix notes:
 
 ## 6. Prioritization
 
+### Raised public beta bar
+
+Treat this as the stricter gate for the next public beta refresh. The earlier
+`v0.1.0-beta1` tag proved the installer and desktop direction; the raised bar
+requires end-user proof that the system is comfortable as a daily desktop.
+
+- [ ] Fresh Artix OpenRC TTY install is run from scratch, completes without
+  manual repair, and has an archived validation bundle.
+- [ ] `greetd` greeter and autologin modes each have a fresh-install bundle, not
+  only daily-use confirmation.
+- [ ] At least two real hardware classes are validated with bundles: one laptop
+  and one non-laptop desktop, with Intel, AMD, and NVIDIA claims either backed
+  by logs or explicitly downgraded in the support matrix.
+- [ ] First-login visual proof uses real screenshots, not placeholders:
+  desktop, app launcher, control menu, theme/background state, and one capture
+  result.
+- [ ] Graphical Walker/menu parity is checked by opening every top-level menu in
+  a live Hyprland session and capturing representative screenshots.
+- [ ] Suspend/resume is tested on laptop hardware: idle state, lock/unlock, audio,
+  network, and Waybar indicators still behave after resume.
+- [ ] Browser or Flatpak screen sharing is validated through
+  `xdg-desktop-portal-hyprland` and PipeWire.
+- [ ] Default apps and MIME handling are proven by opening a URL, directory,
+  text file, PDF, image, video, and archive from a live session.
+- [ ] Capture workflows are proven from keybindings and menu: area, fullscreen,
+  window, open-after-capture, clipboard history, screen recording, and color
+  picker when `hyprpicker` is installed.
+- [ ] Theme workflows are proven across reboot: `list`, `current`, `set`, `status`,
+  `refresh`, `bg-next`, gallery/switcher, repair dry-run, and missing optional
+  asset reporting.
+- [ ] Optional AUR behavior is tested both with and without an AUR helper: Walker,
+  Elephant, `hyprpicker`, and any optional theme/gallery helpers must degrade
+  clearly when missing.
+- [ ] Final gates pass on a live install:
+  `./scripts/quality-gate.sh --no-aur`, full quality gate with AUR checks where
+  possible, `./scripts/post-install-smoke.sh --user <username>`,
+  `./scripts/doctor.sh --no-aur`, `ahr repair --dry-run`,
+  `ahr migrate --status`, `ahr update --dry-run`, `ahr status`, and
+  `ahr list-backups`.
+- [ ] README, support matrix, known issues, release notes, screenshots, and
+  validation bundle links all agree on the same supported scope.
+
 ### Public beta blockers
 
 | Item | UX surface | Why it matters | Files likely involved | Dependencies | Validation command or manual test | Risk level |
@@ -797,6 +839,9 @@ OpenRC/Artix notes:
 | ~~Resolve OpenRC portability policy for guarded `loginctl`~~ | Power/healthcheck | Portability check and runtime suspend helper must agree | `scripts/check-openrc-portability.sh`, `ahr-system-suspend`, laptop module | elogind `loginctl`, `pm-suspend` | `scripts/check-openrc-portability.sh`; suspend test | Medium |
 | Clean-install menu smoke pass | Launcher/first-login | User must discover core actions without docs | `ahr-menu`, `hyprland.conf`, docs | menu backend | Fresh install, open every top-level menu | Low |
 | Healthcheck covers UX-critical commands | Healthcheck | Users need actionable repair output | `scripts/doctor.sh`, `ahr-repair` | installed framework commands | `./scripts/doctor.sh --no-aur` | Low |
+| Real first-login screenshot set | Release proof | Placeholder artifacts are not enough for a confidence beta | `docs/screenshots/`, README/release notes | graphical session | Capture desktop, menu, launcher, theme/background, capture output | Low |
+| Live post-install smoke pass | End-to-end confidence | Static checks cannot prove the running desktop | `scripts/post-install-smoke.sh`, installed config | live Hyprland session | `./scripts/post-install-smoke.sh --user <username>` after install | Medium |
+| Hardware/support matrix reconciliation | Support contract | Claims must match validation bundles | `BETA_SUPPORT_MATRIX.md`, release notes | validation bundles | Update matrix after Intel/AMD/NVIDIA/laptop runs | Low |
 
 ### High-impact polish
 

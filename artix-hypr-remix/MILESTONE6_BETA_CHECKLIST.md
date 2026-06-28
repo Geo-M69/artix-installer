@@ -2,6 +2,9 @@
 
 Purpose
 - Finalize release-facing documentation, validation artifacts, and a concise beta checklist so the project is ready for a public beta release.
+- `v0.1.0-beta1` was tagged on 2026-06-06 as the first public beta. The raised
+  bar below defines what must be true before calling the beta finalized or
+  publishing the next beta refresh.
 
 Acceptance criteria
 - README rewritten to clearly state the supported starting point, install path, validation workflow, and repair boundaries.
@@ -28,6 +31,32 @@ Checklist
 - [x] Tag and publish the beta release after CI passes.
   - Decision: ✅ Ship `v0.1.0-beta1` now with CI passing + NVIDIA/laptop validated. Intel validation deferred to post-beta.
   - Tag pushed: `v0.1.0-beta1` (2026-06-06)
+
+Raised-bar beta finalization checklist
+- [ ] Replace placeholder expected-result artifacts with real first-login
+  screenshots: desktop, app launcher, control menu, theme/background, and one
+  capture result.
+- [ ] Archive one clean TTY install validation bundle from a fresh Artix OpenRC
+  install.
+- [ ] Archive fresh-install bundles for `greetd` greeter and `greetd` autologin;
+  daily-use confirmation alone is no longer sufficient.
+- [ ] Validate suspend/resume on laptop hardware, including lock/unlock,
+  idle-state restore, audio, network, and Waybar indicators.
+- [ ] Validate portal screen sharing from a browser or Flatpak app.
+- [ ] Validate default app/MIME behavior by opening a URL, directory, text file,
+  PDF, image, video, and archive.
+- [ ] Validate graphical Walker/menu parity by opening every top-level menu in a
+  live Hyprland session and capturing representative screenshots.
+- [ ] Validate optional AUR behavior both with and without an AUR helper; optional
+  tools must degrade clearly when absent.
+- [ ] Update `BETA_SUPPORT_MATRIX.md` so Intel/AMD/NVIDIA/laptop claims match the
+  archived validation bundles exactly.
+- [ ] Run final live gates: `./scripts/quality-gate.sh --no-aur`, full quality
+  gate with AUR checks where possible,
+  `./scripts/post-install-smoke.sh --user <username>`,
+  `./scripts/doctor.sh --no-aur`, `ahr repair --dry-run`,
+  `ahr migrate --status`, `ahr update --dry-run`, `ahr status`, and
+  `ahr list-backups`.
 
 Minimum validation commands
 
@@ -59,7 +88,9 @@ Release checklist (high level)
   - AMD VM bundle (2026-06-05)
   - NVIDIA laptop bundle (2026-06-06)
 - [x] Release notes drafted and reviewed: [RELEASE_NOTES.md](RELEASE_NOTES.md)
-- [ ] Tag release (example: `v0.1.0-beta1`) and publish on GitHub.
+- [x] Tag release (`v0.1.0-beta1`) and publish on GitHub.
+- [ ] Publish raised-bar beta refresh only after the finalization checklist above
+  is complete.
 
 Notes
 - Keep the beta checklist intentionally concise — link into deeper docs for long-running validation artifacts (e.g., `MILESTONE2_VALIDATION_MATRIX.md`).
