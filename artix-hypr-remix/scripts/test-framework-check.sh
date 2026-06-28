@@ -122,6 +122,34 @@ restore_path() {
   export PATH="${PATH#$VERCMP_STUB_DIR:}"
 }
 
+# Push a directory onto PATH for a scoped test, pop it afterward.
+push_path() { export PATH="$1:$PATH"; }
+pop_path()  { local d="$1"; export PATH="${PATH#$d:}"; }
+
+# Create a git wrapper that fails when --filter is passed (simulating
+# an older git that doesn't support blobless clone), but passes other
+# invocations through to the real git.
+GIT_STUB_DIR=""
+create_git_stub() {
+  GIT_STUB_DIR="$(mktemp -d "/tmp/ahr-git-stub-XXXXXXXX")"
+  local real_git
+  real_git="$(command -v git)"
+  cat > "$GIT_STUB_DIR/git" <<GITSTUB
+#!/usr/bin/env bash
+for arg in "\$@"; do
+  if [[ "\$arg" == "--filter"* ]]; then
+    exit 1
+  fi
+done
+exec $real_git "\$@"
+GITSTUB
+  chmod +x "$GIT_STUB_DIR/git"
+}
+
+destroy_git_stub() {
+  rm -rf "${GIT_STUB_DIR:-/tmp/nonexistent}"
+}
+
 setup_temp_home() {
   mktemp -d "/tmp/ahr-test-XXXXXXXX"
 }
@@ -354,6 +382,134 @@ run_test \
   "pending" \
   "0.1.9" \
   "0.1.10"
+
+# ── TC8: Failing clone → unavailable ────────────────────────────
+printf '\n---[ Failing clone returns unavailable ]---\n'
+
+tc8_home="$(setup_temp_home)"
+mkdir -p "$tc8_home/.config/artix-hypr-remix"
+cat > "$tc8_home/.config/artix-hypr-remix/framework.json" <<EOF
+{
+  "version": "0.1.0",
+  "revision": null,
+  "channel": "stable",
+  "update_source": "file:///nonexistent-ahr-test-repo-$(date +%s)",
+  "updated_at": "2026-06-28T00:00:00Z"
+}
+EOF
+
+export HOME="$tc8_home"
+export XDG_STATE_HOME="$tc8_home/.local/state"
+export AHR_LIB_PATH="$REPO_ROOT/config/artix-hypr-remix/bin/ahr-lib.sh"
+inject_vercmp_stub
+
+rm -f "$tc8_home/.local/state/artix-hypr-remix/framework-remote.cache" 2>/dev/null || true
+
+# Test CHECK: should fail (exit 1) because clone fails
+tc8_check_exit=0
+tc8_check_output="$(bash "$UPDATE_FRAMEWORK" --check 2>&1)" || tc8_check_exit=$?
+if (( tc8_check_exit == 1 )); then
+  printf '  CHECK: exit 1 (expected 1) — PASS\n'
+  ((PASS+=1))
+else
+  printf '  CHECK: exit %d (expected 1) — FAIL\n' "$tc8_check_exit"
+  printf '    Output: %s\n' "$tc8_check_output"
+  ((FAIL+=1))
+fi
+
+# Test AVAIL: should show framework=unavailable
+tc8_avail_json="$(bash "$UPDATE_AVAILABLE" --json 2>&1 || true)"
+tc8_avail_framework=""
+if command -v jq >/dev/null 2>&1; then
+  tc8_avail_framework="$(printf '%s' "$tc8_avail_json" | jq -r '.framework' 2>/dev/null || echo 'parse-error')"
+else
+  tc8_avail_framework="$(printf '%s' "$tc8_avail_json" | sed -n 's/.*"framework"[[:space:]]*:[[:space:]]*"\{0,1\}\([^",}]*\)"\{0,1\}.*/\1/p' | head -n1)"
+fi
+
+if [[ "$tc8_avail_framework" == "unavailable" ]]; then
+  printf '  AVAIL: framework=unavailable (expected unavailable) — PASS\n'
+  ((PASS+=1))
+else
+  printf '  AVAIL: framework=%s (expected unavailable) — FAIL\n' "$tc8_avail_framework"
+  printf '    JSON: %s\n' "$tc8_avail_json"
+  ((FAIL+=1))
+fi
+
+restore_path
+cleanup "$tc8_home"
+unset HOME XDG_STATE_HOME AHR_LIB_PATH
+cd "$REPO_ROOT"
+
+# ── TC9: Blobless fails, shallow fallback succeeds ────────────────
+printf '\n---[ Blobless clone fails, shallow fallback succeeds ]---\n'
+
+tc9_home="$(setup_temp_home)"
+
+# Create a valid repo
+tc9_repo_dir="$(create_framework_repo "$tc9_home" "tc9-repo" "0.2.0")"
+
+mkdir -p "$tc9_home/.config/artix-hypr-remix"
+cat > "$tc9_home/.config/artix-hypr-remix/framework.json" <<EOF
+{
+  "version": "0.1.0",
+  "revision": null,
+  "channel": "stable",
+  "update_source": "file://$tc9_repo_dir",
+  "updated_at": "2026-06-28T00:00:00Z"
+}
+EOF
+
+export HOME="$tc9_home"
+export XDG_STATE_HOME="$tc9_home/.local/state"
+export AHR_LIB_PATH="$REPO_ROOT/config/artix-hypr-remix/bin/ahr-lib.sh"
+inject_vercmp_stub
+
+# Create git stub that rejects --filter and inject into PATH
+create_git_stub
+push_path "$GIT_STUB_DIR"
+
+rm -f "$tc9_home/.local/state/artix-hypr-remix/framework-remote.cache" 2>/dev/null || true
+
+# Test CHECK: should succeed (exit 0) because shallow fallback works
+tc9_check_exit=0
+tc9_check_output="$(bash "$UPDATE_FRAMEWORK" --check 2>&1)" || tc9_check_exit=$?
+if (( tc9_check_exit == 0 )); then
+  printf '  CHECK: exit 0 (expected 0) — PASS\n'
+  ((PASS+=1))
+else
+  printf '  CHECK: exit %d (expected 0) — FAIL\n' "$tc9_check_exit"
+  printf '    Output: %s\n' "$tc9_check_output"
+  ((FAIL+=1))
+fi
+
+# Clear cache so AVAIL exercises its own clone logic, not the cached result
+# from the CHECK command above.
+rm -f "$tc9_home/.local/state/artix-hypr-remix/framework-remote.cache" 2>/dev/null || true
+
+# Test AVAIL: should show framework=pending
+tc9_avail_json="$(bash "$UPDATE_AVAILABLE" --json 2>&1 || true)"
+tc9_avail_framework=""
+if command -v jq >/dev/null 2>&1; then
+  tc9_avail_framework="$(printf '%s' "$tc9_avail_json" | jq -r '.framework' 2>/dev/null || echo 'parse-error')"
+else
+  tc9_avail_framework="$(printf '%s' "$tc9_avail_json" | sed -n 's/.*"framework"[[:space:]]*:[[:space:]]*"\{0,1\}\([^",}]*\)"\{0,1\}.*/\1/p' | head -n1)"
+fi
+
+if [[ "$tc9_avail_framework" == "pending" ]]; then
+  printf '  AVAIL: framework=pending (expected pending) — PASS\n'
+  ((PASS+=1))
+else
+  printf '  AVAIL: framework=%s (expected pending) — FAIL\n' "$tc9_avail_framework"
+  printf '    JSON: %s\n' "$tc9_avail_json"
+  ((FAIL+=1))
+fi
+
+pop_path "$GIT_STUB_DIR"
+destroy_git_stub
+restore_path
+cleanup "$tc9_home"
+unset HOME XDG_STATE_HOME AHR_LIB_PATH
+cd "$REPO_ROOT"
 
 # Clean up vercmp stub
 destroy_vercmp_stub

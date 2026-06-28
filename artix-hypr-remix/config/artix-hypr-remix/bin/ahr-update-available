@@ -111,14 +111,40 @@ elif [[ -n "$update_source" ]] && ahr_has_cmd git; then
 
   # No fresh cache — do a lightweight remote fetch
   if [[ "$framework_state" != "current" ]]; then
+    # Suppress credential prompts and cap clone time.
+    export GIT_TERMINAL_PROMPT=0
+    git_timeout=15
+    if ! command -v timeout >/dev/null 2>&1; then
+      git_timeout=0
+    fi
+
     tmpdir="$(mktemp -d "/tmp/ahr-update-check-XXXXXXXX" 2>/dev/null || true)"
     if [[ -n "$tmpdir" ]]; then
-      # Blobless no-checkout clone (fast), fallback to standard shallow
-      if git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir" 2>/dev/null; then
+      # Blobless no-checkout clone (fast), fallback to standard shallow.
+      # If timeout (exit 124), skip fallback — remote is unreachable.
+      clone_exit=0
+      if (( git_timeout > 0 )); then
+        timeout "$git_timeout" git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
+      else
+        git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
+      fi
+
+      if (( clone_exit == 0 )); then
         remote_raw="$(git -C "$tmpdir" cat-file -p HEAD:artix-hypr-remix/config/artix-hypr-remix/framework.json 2>/dev/null || true)"
-      elif git clone --depth 1 --quiet "$update_source" "$tmpdir" 2>/dev/null; then
-        if [[ -f "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json" ]]; then
-          remote_raw="$(cat "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json")"
+      elif (( clone_exit != 124 )); then
+        # Non-timeout failure — try shallow fallback.
+        rm -rf "$tmpdir"
+        tmpdir="$(mktemp -d "/tmp/ahr-update-check-XXXXXXXX" 2>/dev/null || true)"
+        if [[ -n "$tmpdir" ]]; then
+          clone_exit=0  # reset so a successful fallback is not masked
+          if (( git_timeout > 0 )); then
+            timeout "$git_timeout" git clone --depth 1 --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
+          else
+            git clone --depth 1 --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
+          fi
+          if (( clone_exit == 0 )) && [[ -f "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json" ]]; then
+            remote_raw="$(cat "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json")"
+          fi
         fi
       fi
       rm -rf "$tmpdir"

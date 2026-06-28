@@ -85,17 +85,41 @@ fetch_remote_version() {
     fi
   fi
 
+  # Suppress credential prompts and cap clone time so the check never
+  # hangs waiting for interactive input.
+  export GIT_TERMINAL_PROMPT=0
+  local git_timeout=15
+  if ! command -v timeout >/dev/null 2>&1; then
+    git_timeout=0
+  fi
+
   local tmpdir
   tmpdir="$(mktemp -d "/tmp/ahr-framework-check-XXXXXXXX")"
 
   # Use blobless, no-checkout clone for speed, fall back to depth-1.
-  if ! git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir" 2>/dev/null; then
+  # If timeout (exit 124), skip fallback — remote is unreachable.
+  local git_cmd
+  local clone_exit=0
+  git_cmd=(git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir")
+  if (( git_timeout > 0 )); then
+    timeout "$git_timeout" "${git_cmd[@]}" 2>/dev/null || clone_exit=$?
+  else
+    "${git_cmd[@]}" 2>/dev/null || clone_exit=$?
+  fi
+
+  if (( clone_exit != 0 )); then
     rm -rf "$tmpdir"
-    # Fallback: standard shallow clone
-    tmpdir="$(mktemp -d "/tmp/ahr-framework-check-XXXXXXXX")"
-    if ! git clone --depth 1 --quiet "$update_source" "$tmpdir" 2>/dev/null; then
-      rm -rf "$tmpdir"
+    if (( clone_exit == 124 )); then
+      # Timed out — remote unreachable, no point retrying.
       return 1
+    fi
+    # Fallback: standard shallow clone for unsupported options.
+    tmpdir="$(mktemp -d "/tmp/ahr-framework-check-XXXXXXXX")"
+    git_cmd=(git clone --depth 1 --quiet "$update_source" "$tmpdir")
+    if (( git_timeout > 0 )); then
+      timeout "$git_timeout" "${git_cmd[@]}" 2>/dev/null || { rm -rf "$tmpdir"; return 1; }
+    else
+      "${git_cmd[@]}" 2>/dev/null || { rm -rf "$tmpdir"; return 1; }
     fi
   fi
 
@@ -210,6 +234,7 @@ cmd_check() {
   remote_version="$(fetch_remote_version "$update_source")" || {
     if [[ "$quiet" == "false" ]]; then
       printf 'Failed to fetch framework version from remote source: %s\n' "$update_source" >&2
+      printf 'Check network connectivity or run manually: git ls-remote %s\n' "$update_source" >&2
     fi
     return 1
   }
