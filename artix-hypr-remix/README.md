@@ -14,7 +14,7 @@ Supported base system:
 - GPU support target: Intel, AMD, and NVIDIA through Artix/OpenRC-safe adaptations and hardware profile stubs
 
 > **Beta feedback welcome!** If you try artix-hypr-remix on a fresh Artix install,
-> please [open a bug report](https://github.com/geo/artix-installer/issues/new/choose)
+> please [open a bug report](https://github.com/Geo-M69/artix-installer/issues/new/choose)
 > with any friction, breakage, or missing docs you encounter. Validation bundles
 > help a lot — see `CONTRIBUTING.md` for details.
 
@@ -99,7 +99,7 @@ Phase 4 configuration strategy:
 ### Quick install
 
 ```bash
-git clone https://github.com/geo/artix-installer.git
+git clone https://github.com/Geo-M69/artix-installer.git
 cd artix-installer/artix-hypr-remix
 ./install.sh
 ```

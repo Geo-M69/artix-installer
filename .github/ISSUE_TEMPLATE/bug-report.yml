@@ -1,0 +1,94 @@
+name: 🐛 Beta Bug Report
+description: Report a bug or issue with artix-hypr-remix
+labels: ["bug", "beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! Before you start:
+        - Check [MILESTONE6_KNOWN_ISSUES.md](https://github.com/Geo-M69/artix-installer/blob/main/artix-hypr-remix/MILESTONE6_KNOWN_ISSUES.md) for known issues.
+        - Run `ahr repair --dry-run` and include the output below.
+
+  - type: input
+    id: version
+    attributes:
+      label: artix-hypr-remix version
+      description: What version are you running? Check with `git describe --tags` or look at the release tag.
+      placeholder: e.g. v0.1.0-beta1
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+      placeholder: What happened? What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce this issue?
+      placeholder: |
+        1. Run '...'
+        2. Click '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: |
+        Please run the following and paste the output below:
+        - `ahr repair --dry-run`
+        - `ahr status`
+        - `artix-hypr-remix/scripts/doctor.sh` (or `artix-hypr-remix/scripts/doctor.sh --no-aur` if AUR helpers are unavailable)
+      render: shell
+
+  - type: textarea
+    id: validation-bundle
+    attributes:
+      label: Validation bundle (optional but helpful)
+      description: |
+        If possible, collect and attach a diagnostics bundle:
+        ```bash
+        sudo artix-hypr-remix/scripts/collect-validation-bundle.sh
+        ```
+        This captures hardware profile, installed packages, OpenRC service state, config state, and logs without personal data.
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Hardware / GPU profile
+      description: What GPU profile is your system using?
+      options:
+        - AMD
+        - Intel
+        - NVIDIA
+        - Unknown / Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: startup
+    attributes:
+      label: Startup mode
+      description: Which startup mode are you using?
+      options:
+        - tty (default)
+        - greetd (greeter)
+        - greetd (autologin)
+        - Other / modified
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add any other context about the problem here (screenshots, workarounds, etc.)

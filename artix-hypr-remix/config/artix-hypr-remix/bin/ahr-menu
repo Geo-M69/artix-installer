@@ -404,10 +404,10 @@ show_learn_menu() {
       *"Theme Asset"*) open_markdown_doc "$theme_asset_file" "Theme asset guide" ;;
       *README*)
         if ahr_has_cmd xdg-open; then
-          xdg-open "https://github.com/geofedora/artix-installer" >/dev/null 2>&1 || true
+          xdg-open "https://github.com/Geo-M69/artix-installer" >/dev/null 2>&1 || true
           exit 0
         fi
-        run_terminal_script "printf '%s\n' 'README: https://github.com/geofedora/artix-installer'; read -r -p 'Press Enter to close...' _"
+        run_terminal_script "printf '%s\n' 'README: https://github.com/Geo-M69/artix-installer'; read -r -p 'Press Enter to close...' _"
         ;;
       *"Hyprland"*)
         if ahr_has_cmd xdg-open; then

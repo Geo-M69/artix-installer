@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Feature request
+    url: https://github.com/Geo-M69/artix-installer/issues/new?template=feature-request.yml
+    about: Suggest an idea for artix-hypr-remix

@@ -5,7 +5,7 @@ set -euo pipefail
 # This is a post-install-safe subset of scripts/doctor.sh.  For the full
 # suite (hardware checks, quality-gate integration, etc.) run the repo
 # script from a cloned artix-installer checkout:
-#   git clone https://github.com/geofedora/artix-installer && ./scripts/doctor.sh --no-aur
+#   git clone https://github.com/Geo-M69/artix-installer && ./scripts/doctor.sh --no-aur
 
 overall_status=0
 

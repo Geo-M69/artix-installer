@@ -1,0 +1,38 @@
+name: ✨ Feature Request
+description: Suggest an idea for artix-hypr-remix
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest an improvement! Before you start:
+        - Check [ROADMAP.md](https://github.com/Geo-M69/artix-installer/blob/main/artix-hypr-remix/ROADMAP.md) for current milestones and scope.
+        - Check [MILESTONE4_PARITY_AUDIT.md](https://github.com/Geo-M69/artix-installer/blob/main/artix-hypr-remix/MILESTONE4_PARITY_AUDIT.md) if your request relates to Omarchy parity.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem are you trying to solve? Is something missing, broken, or harder than it should be?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the feature or change you'd like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches or workarounds have you considered?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add any screenshots, mockups, or references that help explain the request.
