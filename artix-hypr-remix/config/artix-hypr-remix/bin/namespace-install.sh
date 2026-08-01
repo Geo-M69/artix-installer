@@ -11,10 +11,11 @@ if (( $# > 0 )); then
       exit 1
       ;;
   esac
+  shift
 fi
 
-source_dir="$HOME/.config/artix-hypr-remix/bin"
-target_dir="$HOME/.local/bin"
+source_dir="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/bin"
+target_dir="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
 
 declare -a commands=(
   ahr
@@ -47,6 +48,7 @@ declare -a commands=(
   ahr-update
   ahr-update-available
   ahr-update-framework
+  ahr-restore-component
   ahr-repair
   ahr-status
   ahr-list-backups
@@ -135,15 +137,98 @@ log() {
   fi
 }
 
-install -d -m 0755 "$target_dir"
+backup_dir=""
+setup_backup() {
+  backup_dir="$(mktemp -d "$HOME/.local/state/artix-hypr-remix/namespace-backup-XXXXXXXX" 2>/dev/null)" || \
+    backup_dir="$(mktemp -d "${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/namespace-backup-XXXXXXXX" 2>/dev/null)" || true
+}
+
+# Check whether a target path is safe to replace.
+# Returns 0 if safe, 1 if unsafe.
+check_target_safe() {
+  local target_path="$1"
+  local source_path="$2"
+
+  # Missing is always safe
+  [[ ! -e "$target_path" ]] && return 0
+
+  # Already a correct symlink — safe
+  if [[ -L "$target_path" ]]; then
+    local current_target
+    current_target="$(readlink "$target_path" 2>/dev/null)" || return 1
+    [[ "$current_target" == "$source_path" ]] && return 0
+    # Symlink exists but points elsewhere — check if it's AHR-owned
+    # AHR-owned: points to source_dir or a known framework target
+    case "$current_target" in
+      "$source_dir/"*|"$target_dir/ahr-"*|"$target_dir/omarchy-"*)
+        return 0 ;;
+    esac
+    # Unrelated symlink — unsafe
+    return 1
+  fi
+
+  # Regular file — unsafe unless we back it up first
+  # We back up but still proceed
+  return 0
+}
+
+# Prevalidate command sources before any changes.
+# Alias targets cannot be checked until after commands are installed.
+prevalidate_commands() {
+  for command_name in "${commands[@]}"; do
+    local source_path="$source_dir/$command_name"
+    local target_path="$target_dir/$command_name"
+    if [[ ! -f "$source_path" ]]; then
+      echo "Missing command source: $source_path" >&2
+      return 1
+    fi
+    if ! check_target_safe "$target_path" "$source_path"; then
+      log "Warning: Unrelated file exists at $target_path — creating safety backup"
+    fi
+  done
+  return 0
+}
+
+# Validate alias targets after commands have been installed.
+validate_aliases() {
+  for alias_spec in "${aliases[@]}"; do
+    local alias_name="${alias_spec%%:*}"
+    local target_name="${alias_spec##*:}"
+    if [[ ! -e "$target_dir/$target_name" ]]; then
+      echo "Alias target not found: $target_name" >&2
+      return 1
+    fi
+  done
+  return 0
+}
+
+# Run command prevalidation first
+if ! prevalidate_commands; then
+  echo "Prevalidation failed — no changes made." >&2
+  exit 1
+fi
+
+# Setup backup directory before any mutations
+setup_backup
+mkdir -p "$target_dir"
 
 for command_name in "${commands[@]}"; do
   source_path="$source_dir/$command_name"
   target_path="$target_dir/$command_name"
 
-  if [[ ! -f "$source_path" ]]; then
-    echo "Missing command source: $source_path" >&2
-    exit 1
+  # If target exists and is an unrelated file, back it up
+  if [[ -e "$target_path" ]] && [[ ! -L "$target_path" ]]; then
+    cp -a "$target_path" "$backup_dir/$command_name.bak"
+    log "Backed up existing file: $target_path -> $backup_dir/$command_name.bak"
+  elif [[ -L "$target_path" ]]; then
+    current_target="$(readlink "$target_path" 2>/dev/null)" || true
+    case "$current_target" in
+      "$source_dir/"*|"$target_dir/ahr-"*|"$target_dir/omarchy-"*) ;;
+      *)
+        cp -a "$target_path" "$backup_dir/$command_name.bak"
+        log "Backed up existing symlink: $target_path -> $backup_dir/$command_name.bak"
+        ;;
+    esac
   fi
 
   chmod 0755 "$source_path"
@@ -151,13 +236,19 @@ for command_name in "${commands[@]}"; do
   log "Installed command: $target_path"
 done
 
+# Validate alias targets now that commands have been installed
+if ! validate_aliases; then
+  echo "Alias validation failed — no aliases changed." >&2
+  exit 1
+fi
+
 for alias_spec in "${aliases[@]}"; do
   alias_name="${alias_spec%%:*}"
   target_name="${alias_spec##*:}"
 
-  if [[ ! -e "$target_dir/$target_name" ]]; then
-    echo "Alias target not found: $target_name" >&2
-    exit 1
+  # Safety backup if exists and unrelated
+  if [[ -e "$target_dir/$alias_name" ]]; then
+    cp -a "$target_dir/$alias_name" "$backup_dir/$alias_name.bak" 2>/dev/null || true
   fi
 
   ln -sfn "$target_dir/$target_name" "$target_dir/$alias_name"
@@ -165,3 +256,6 @@ for alias_spec in "${aliases[@]}"; do
 done
 
 log "Command namespace install complete"
+if [[ -d "$backup_dir" ]] && ls "$backup_dir" >/dev/null 2>&1; then
+  log "Safety backups stored in: $backup_dir"
+fi

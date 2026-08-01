@@ -3,7 +3,7 @@ set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
 
-FRAMEWORK_ROOT="$HOME/.config/artix-hypr-remix"
+FRAMEWORK_ROOT="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
 LOCK_FILE="$STATE_DIR/update.lock"
 LOCK_DIR="$STATE_DIR/.update.lock"
@@ -12,6 +12,7 @@ RUN_FILE="$STATE_DIR/update.run"
 STATUS_FILE="$STATE_DIR/update.status"
 lock_mode=""
 original_args=("$@")
+overall_exit=0
 
 usage() {
   cat <<'EOF'
@@ -28,6 +29,10 @@ Options:
   -y, --yes        Run non-interactively when supported
   --quiet          Suppress non-error output
   -h, --help       Show this help
+
+Exit status:
+  0  All update actions succeeded
+  1  One or more update actions failed
 EOF
 }
 
@@ -145,6 +150,8 @@ acquire_lock() {
   exit 1
 }
 
+# Run a command, logging its output. Returns the command's exit code.
+# In dry-run mode, prints what would run without executing.
 run_cmd() {
   local message="$1"
   shift
@@ -161,6 +168,11 @@ run_cmd() {
 
 finalize() {
   local exit_code=$?
+  # Use overall_exit if set (framework or migration failure)
+  if (( overall_exit != 0 )); then
+    exit_code=$overall_exit
+  fi
+
   cleanup_lock
   signal_waybar_update
 
@@ -251,16 +263,33 @@ if [[ "$do_flatpak" == "true" ]]; then
 fi
 
 if [[ "$do_framework" == "true" ]]; then
-  framework_checker="$FRAMEWORK_ROOT/bin/ahr-update-framework"
-  if [[ -f "$framework_checker" ]]; then
+  framework_updater="$FRAMEWORK_ROOT/bin/ahr-update-framework"
+  if [[ -f "$framework_updater" ]]; then
+    framework_exit=0
     if [[ "$dry_run" == "true" ]]; then
-      run_cmd "Checking for framework update" bash "$framework_checker" --check
+      bash "$framework_updater" --dry-run || framework_exit=$?
     else
-      run_cmd "Checking for framework update" bash "$framework_checker" --check || true
+      bash "$framework_updater" --apply || framework_exit=$?
+    fi
+    if (( framework_exit != 0 )); then
+      overall_exit=$framework_exit
+      log_line "Framework update failed (exit $framework_exit)"
+      if [[ "$quiet" == "false" ]]; then
+        printf '%s\n' "Framework update failed; general migrations and post-update hooks were not run." >&2
+        printf '%s\n' "Recovery: ahr update-framework --recover or ahr update-framework --rollback" >&2
+      fi
+      # The framework updater owns its migrations. Do not retry them through
+      # the general updater after any framework failure.
+      exit "$overall_exit"
     fi
   else
-    log_and_print "Framework update checker not found at $framework_checker"
+    log_and_print "Framework update command not found at $framework_updater"
+    overall_exit=1
+    exit "$overall_exit"
   fi
+  # A successful framework update already runs its delivered migrations.
+  # Do not run the general migration phase a second time.
+  do_migrate=false
 fi
 
 if [[ "$do_migrate" == "true" ]]; then
@@ -281,7 +310,12 @@ if [[ "$do_migrate" == "true" ]]; then
     if [[ "$quiet" == "true" ]]; then
       migration_cmd+=(--quiet)
     fi
-    run_cmd "Running framework migrations" "${migration_cmd[@]}"
+    migration_exit=0
+    run_cmd "Running framework migrations" "${migration_cmd[@]}" || migration_exit=$?
+    if (( migration_exit != 0 )); then
+      overall_exit=$migration_exit
+      log_line "Migration run failed (exit $migration_exit)"
+    fi
   fi
 fi
 
@@ -292,4 +326,4 @@ else
   log_and_print "No hook runner found at $hook_runner; skipping post-update hooks"
 fi
 
-exit 0
+exit "$overall_exit"

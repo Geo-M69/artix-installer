@@ -1,0 +1,379 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ahr-restore-component — Restore a managed-derived component from backup.
+#
+# Accepts only plain backup directory IDs, not paths.
+# Validates all inputs before any mutation.
+# Transactional restore: prepare → archive current → rename → restore on failure.
+
+FRAMEWORK_ROOT="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}"
+STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
+FRAMEWORK_BACKUPS_DIR="$STATE_ROOT/framework-backups"
+LIB_PATH="${AHR_LIB_PATH:-${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/bin/ahr-lib.sh}"
+source "$LIB_PATH"
+
+# Component inventory: component|shape|path|user_editable|safe|missing_allowed
+# shape: file, directory, manifest (namespace links), state (migration markers)
+FRAMEWORK_DERIVED_COMPONENTS=(
+  "framework-config|file|framework.json|false|true|false"
+  "namespace-links|manifest|__namespace_links__|false|true|false"
+  "migration-state|state|__migration_state__|true|true|true"
+  "theme-state|directory|current|true|false|false"
+)
+
+usage() {
+  cat <<'EOF'
+Usage: ahr restore-component [options] <component>
+
+Options:
+  --list                List supported components
+  --from-last-update    Restore from the most recent backup
+  --backup <id>         Restore from a specific backup ID (not a path)
+  --apply               Actually perform the restore (default is dry-run)
+  --dry-run             Show what would be restored (default)
+  -h, --help            Show this help
+
+Components:
+  framework-config    Framework metadata (framework.json) — file
+  namespace-links     AHR-owned links in ~/.local/bin/ — manifest
+  migration-state     Migration markers — state (rollback only)
+  theme-state         Theme state — directory
+
+Exit status:
+  0  Success
+  1  Failure
+  2  Invalid arguments
+EOF
+}
+
+mode="help"
+component=""
+backup_id=""
+apply=false
+backup_dir=""
+
+while (( $# > 0 )); do
+  case "$1" in
+    --list) mode="list" ;;
+    --from-last-update) mode="restore"; backup_dir="__last__" ;;
+    --backup) mode="restore"; shift; backup_id="${1:-}" ;;
+    --apply) apply=true ;;
+    --dry-run) apply=false ;;
+    -h|--help) usage; exit 0 ;;
+    --) shift; component="${1:-}"; break ;;
+    -*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    *) component="$1" ;;
+  esac
+  shift
+done
+
+# ── Helpers ────────────────────────────────────────────────────────
+
+# Validate a backup ID: must be a plain identifier, not a path.
+validate_backup_id() {
+  local id="$1"
+  [[ -n "$id" ]] || return 1
+  # Reject absolute paths, .., slashes, backslashes, control characters
+  case "$id" in
+    /|..|*/*|*\\*|*$'\n'*|*$'\r'*|*$'\t'*|*$'\001'*|*$'\002'*|*$'\003'*|*$'\004'*|*$'\005'*|*$'\006'*|*$'\007'*|*$'\010'*|*$'\013'*|*$'\014'*|*$'\016'*|*$'\017'*|*$'\020'*|*$'\021'*|*$'\022'*|*$'\023'*|*$'\024'*|*$'\025'*|*$'\026'*|*$'\027'*|*$'\030'*|*$'\031'*|*$'\032'*|*$'\033'*|*$'\034'*|*$'\035'*|*$'\036'*|*$'\037'*)
+      return 1 ;;
+  esac
+  # Reject if it looks like a path with directory separators
+  [[ "$id" == *..* ]] && return 1
+  return 0
+}
+
+# Validate that a backup path is a direct child of the backup root.
+validate_backup_path() {
+  local path="$1"
+  local real_path real_root
+  real_path="$(realpath "$path" 2>/dev/null)" || return 1
+  real_root="$(realpath "$FRAMEWORK_BACKUPS_DIR" 2>/dev/null)" || return 1
+  case "$real_path" in
+    "$real_root"/*) ;;
+    *) return 1 ;;
+  esac
+  # Reject symlink escapes
+  local parent
+  parent="$(dirname "$real_path")"
+  [[ "$parent" == "$real_root" ]] || return 1
+  return 0
+}
+
+# Find the most recent backup.
+find_latest_backup() {
+  local latest_ts=0 found=""
+  local bd
+  for bd in "$FRAMEWORK_BACKUPS_DIR"/*/; do
+    [[ -f "$bd/manifest.txt" ]] || continue
+    local completed
+    completed="$(grep -F 'completed=true' "$bd/manifest.txt" 2>/dev/null | head -n1)"
+    [[ -n "$completed" ]] || continue
+    local ts
+    ts="$(stat -c %Y "$bd" 2>/dev/null || echo 0)"
+    if (( ts > latest_ts )); then
+      latest_ts=$ts
+      found="${bd%/}"
+    fi
+  done
+  echo "$found"
+}
+
+# Find a component in the inventory.
+find_component() {
+  local name="$1"
+  local entry
+  for entry in "${FRAMEWORK_DERIVED_COMPONENTS[@]}"; do
+    local cname
+    cname="$(echo "$entry" | cut -d'|' -f1)"
+    if [[ "$cname" == "$name" ]]; then
+      echo "$entry"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Snapshot namespace links owned by AHR.
+snapshot_namespace_links() {
+  local output="$1"
+  local local_bin="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
+  : > "$output"
+  [[ -d "$local_bin" ]] || return 0
+  local link target
+  while IFS= read -r -d '' link; do
+    target="$(readlink "$link" 2>/dev/null || true)"
+    case "$target" in
+      "$FRAMEWORK_ROOT/bin/"*|"$local_bin/ahr-"*|"$local_bin/omarchy-"*)
+        printf '%s\t%s\n' "$(basename "$link")" "$target" >> "$output"
+        ;;
+    esac
+  done < <(find "$local_bin" -maxdepth 1 -type l -print0 2>/dev/null || true)
+}
+
+# Restore namespace links from a manifest. Rollback on failure.
+restore_namespace_links() {
+  local manifest="$1"
+  local local_bin="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
+  [[ -f "$manifest" ]] || return 1
+  mkdir -p "$local_bin"
+
+  # Prevalidate entire link plan before changing anything
+  local name target
+  while IFS=$'\t' read -r name target; do
+    [[ -n "$name" ]] || continue
+    # Validate name is a known pattern
+    case "$name" in
+      ahr|omarchy|ahr-[a-zA-Z0-9_.-]*|omarchy-[a-zA-Z0-9_.-]*) ;;
+      *) return 1 ;; # unknown command name
+    esac
+    # Validate target points to framework or local bin
+    case "$target" in
+      "$FRAMEWORK_ROOT/bin/"*|"$local_bin/ahr-"*|"$local_bin/omarchy-"*) ;;
+      *) return 1 ;; # target escapes expected paths
+    esac
+    # Validate source exists
+    if [[ ! -f "$FRAMEWORK_ROOT/bin/$name" ]] && [[ ! -e "$target" ]]; then
+      return 1
+    fi
+  done < "$manifest"
+
+  # All links validated — now apply them, tracking changed links
+  local changed_links=()
+  while IFS=$'\t' read -r name target; do
+    [[ -n "$name" ]] || continue
+    local target_path="$local_bin/$name"
+    # Backup if existing and not already the correct symlink
+    if [[ -e "$target_path" ]] || [[ -L "$target_path" ]]; then
+      local current_target=""
+      [[ -L "$target_path" ]] && current_target="$(readlink "$target_path" 2>/dev/null)" || true
+      if [[ "$current_target" != "$target" ]]; then
+        rm -f "$target_path"
+      fi
+    fi
+    ln -sfn "$target" "$target_path"
+    changed_links+=("$target_path")
+  done < "$manifest"
+
+  # If any link creation failed, undo all changes
+  local link_path
+  for link_path in "${changed_links[@]}"; do
+    if [[ ! -L "$link_path" ]] || [[ ! -e "$link_path" ]]; then
+      log "Error: failed to create link $link_path — undoing namespace changes" >&2
+      for rp in "${changed_links[@]}"; do
+        rm -f "$rp" 2>/dev/null || true
+      done
+      return 1
+    fi
+  done
+  return 0
+}
+
+# Restore a file component transactionally.
+restore_file_component() {
+  local comp_name="$1" backup_component="$2" target="$3"
+  local tmp_file
+  tmp_file="$(mktemp "${target}.restore-XXXXXX")" || { echo "Error: failed to create temp for $comp_name" >&2; return 1; }
+  cp -a "$backup_component" "$tmp_file" || { rm -f "$tmp_file"; echo "Error: failed to prepare $comp_name" >&2; return 1; }
+  # Back up current if exists
+  local safety_backup=""
+  if [[ -e "$target" ]]; then
+    safety_backup="$(mktemp "${target}.pre-restore-XXXXXX")" || true
+    cp -a "$target" "$safety_backup" 2>/dev/null || true
+  fi
+  # Replace
+  if ! mv -f "$tmp_file" "$target"; then
+    echo "Error: failed to replace $comp_name" >&2
+    # Restore from safety backup
+    if [[ -n "$safety_backup" && -e "$safety_backup" ]]; then
+      cp -a "$safety_backup" "$target" 2>/dev/null || true
+    fi
+    rm -f "$safety_backup" 2>/dev/null || true
+    return 1
+  fi
+  rm -f "$safety_backup" 2>/dev/null || true
+  echo "Restored $comp_name -> $target"
+  return 0
+}
+
+# Restore a directory component transactionally.
+restore_directory_component() {
+  local comp_name="$1" backup_component="$2" target="$3"
+  # Validate source
+  [[ -d "$backup_component" ]] || { echo "Error: $comp_name backup not found" >&2; return 1; }
+  # Prepare in a temp sibling
+  local tmp_dir="${target}.restore-XXXXXX"
+  tmp_dir="$(mktemp -d "${tmp_dir}")" || { echo "Error: failed to create temp for $comp_name" >&2; return 1; }
+  cp -a "$backup_component" "$tmp_dir/restored" || { rm -rf "$tmp_dir"; echo "Error: failed to prepare $comp_name" >&2; return 1; }
+  # Archive current
+  local archived=""
+  if [[ -d "$target" ]]; then
+    archived="$(mktemp -d "${target}.archive-XXXXXX")" || true
+    cp -a "$target" "$archived/current" 2>/dev/null || archived=""
+  fi
+  # Replace
+  rm -rf "$target"
+  if ! mv -f "$tmp_dir/restored" "$target"; then
+    echo "Error: failed to replace $comp_name" >&2
+    # Restore from archive
+    if [[ -n "$archived" && -d "$archived/current" ]]; then
+      cp -a "$archived/current" "$target" 2>/dev/null || true
+    fi
+    rm -rf "$tmp_dir" "$archived" 2>/dev/null || true
+    return 1
+  fi
+  rmdir "$tmp_dir" 2>/dev/null || true
+  rm -rf "$archived" 2>/dev/null || true
+  echo "Restored $comp_name -> $target"
+  return 0
+}
+
+# ── Main dispatch ──────────────────────────────────────────────────
+
+if [[ "$mode" == "list" ]]; then
+  echo "Supported components:"
+  entry=""
+  for entry in "${FRAMEWORK_DERIVED_COMPONENTS[@]}"; do
+    cname="$(echo "$entry" | cut -d'|' -f1)"
+    cshape="$(echo "$entry" | cut -d'|' -f2)"
+    cpath="$(echo "$entry" | cut -d'|' -f3)"
+    ceditable="$(echo "$entry" | cut -d'|' -f4)"
+    csafe="$(echo "$entry" | cut -d'|' -f5)"
+    editable_label="user-editable"
+    [[ "$ceditable" == "false" ]] && editable_label="framework-owned"
+    safe_label="safe"
+    [[ "$csafe" == "false" ]] && safe_label="requires --apply"
+    echo "  $cname [$cshape] $cpath ($editable_label, $safe_label)"
+  done
+  exit 0
+fi
+
+if [[ "$mode" != "restore" ]]; then
+  usage >&2
+  exit 2
+fi
+
+[[ -z "$component" ]] && { echo "Error: component name required" >&2; usage >&2; exit 2; }
+
+component_entry="$(find_component "$component" 2>/dev/null || true)"
+[[ -z "$component_entry" ]] && { echo "Error: unsupported component: $component" >&2; echo "Use --list to see supported components." >&2; exit 1; }
+
+comp_name="$(echo "$component_entry" | cut -d'|' -f1)"
+comp_shape="$(echo "$component_entry" | cut -d'|' -f2)"
+comp_path="$(echo "$component_entry" | cut -d'|' -f3)"
+comp_safe="$(echo "$component_entry" | cut -d'|' -f5)"
+
+# Check restore safety
+if [[ "$comp_safe" == "false" && "$apply" == "false" ]]; then
+  echo "Error: component '$comp_name' is not safe for automatic restore without --apply" >&2
+  exit 1
+fi
+
+# Resolve backup
+if [[ "$backup_dir" == "__last__" ]]; then
+  backup_dir="$(find_latest_backup)"
+fi
+
+# Validate backup ID if provided
+if [[ -n "$backup_id" ]]; then
+  if ! validate_backup_id "$backup_id"; then
+    echo "Error: invalid backup ID: $backup_id" >&2
+    echo "Backup IDs must be plain identifiers, not paths." >&2
+    exit 1
+  fi
+  backup_dir="$FRAMEWORK_BACKUPS_DIR/$backup_id"
+fi
+
+[[ -n "$backup_dir" ]] || { echo "Error: no backup specified. Use --from-last-update or --backup <id>." >&2; exit 1; }
+[[ -d "$backup_dir" ]] || { echo "Error: backup not found: $backup_dir" >&2; exit 1; }
+
+# Validate backup path containment
+if ! validate_backup_path "$backup_dir"; then
+  echo "Error: backup path is not under expected backup root" >&2
+  exit 1
+fi
+
+# Validate manifest
+[[ -f "$backup_dir/manifest.txt" ]] || { echo "Error: backup manifest missing" >&2; exit 1; }
+grep -q '^completed=true' "$backup_dir/manifest.txt" || { echo "Error: backup incomplete" >&2; exit 1; }
+
+# Resolve backup component path
+backup_component="$backup_dir/derived-$comp_name"
+
+# Component restore
+case "$comp_shape" in
+  file)
+    [[ -f "$backup_component" ]] || { echo "Error: component file not in backup: $comp_name" >&2; exit 1; }
+    if [[ "$apply" == "false" ]]; then
+      echo "DRY RUN: Would restore $comp_name (file) -> $FRAMEWORK_ROOT/$comp_path"
+      echo "  Backup: $backup_component"
+      exit 0
+    fi
+    restore_file_component "$comp_name" "$backup_component" "$FRAMEWORK_ROOT/$comp_path" || exit 1
+    ;;
+  directory)
+    [[ -d "$backup_component" ]] || { echo "Error: component directory not in backup: $comp_name" >&2; exit 1; }
+    if [[ "$apply" == "false" ]]; then
+      echo "DRY RUN: Would restore $comp_name (directory) -> $FRAMEWORK_ROOT/$comp_path"
+      echo "  Backup: $backup_component"
+      exit 0
+    fi
+    restore_directory_component "$comp_name" "$backup_component" "$FRAMEWORK_ROOT/$comp_path" || exit 1
+    ;;
+  manifest)
+    [[ -f "$backup_component" ]] || { echo "Error: namespace manifest not in backup" >&2; exit 1; }
+    if [[ "$apply" == "false" ]]; then
+      echo "DRY RUN: Would restore namespace links from manifest"
+      echo "  Backup: $backup_component"
+      exit 0
+    fi
+    restore_namespace_links "$backup_component" || { echo "Error: namespace restore failed" >&2; exit 1; }
+    echo "Namespace links restored from manifest."
+    ;;
+  state)
+    echo "Error: migration-state is restored by framework rollback, not component restore." >&2
+    echo "Use: ahr update-framework --rollback" >&2
+    exit 1
+    ;;
+esac

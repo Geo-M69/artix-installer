@@ -1,179 +1,785 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ahr-update-framework — Check for framework version updates.
+# ahr-update-framework — Phase 1 framework delivery and recovery.
 #
-# Phase 1 framework delivery command.  Modes:
-#   --check    Compare installed version against the remote update source.
-#   --status   Print the installed framework version and metadata (default).
+# Modes:
+#   --status     Print installed framework metadata (default)
+#   --check      Compare installed version against remote (read-only)
+#   --dry-run    Discover and validate the staged update; stop before backup
+#   --apply      Apply a framework update with full transaction safety
+#   --rollback   Restore the previous framework from the last backup
+#   --recover    Recover from an interrupted apply/rollback transaction
 #
-# Future iterations will add: --dry-run (stage but don't activate), --apply
-# (fetch, backup, activate), and --rollback (restore previous backup).
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${AHR_LIB_PATH:-$SCRIPT_DIR/ahr-lib.sh}"
+# All destructive operations use an exclusive transaction model with:
+#   - collision-proof transaction ID (mktemp -d, never PID alone)
+#   - durable transaction state under $STATE_ROOT/framework-transactions/
+#   - per-target progress tracking
+#   - signal-aware restoration (EXIT/INT/TERM/HUP)
+#   - exact staged commit pinning
+#   - prevalidated rollback before any mutation
+#   - exact migration-state restoration
+#   - structured state records (no space-separated fields, no sourceable data)
+#
+# Exit codes:
+#   0  Operation succeeded or update available (check/dry-run)
+#   1  Up to date, no rollback, or operation failed
+#   2  Invalid arguments
 
 FRAMEWORK_ROOT="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}"
+SCRIPT_DIR="$FRAMEWORK_ROOT/bin"
+LIB_PATH="${AHR_LIB_PATH:-$SCRIPT_DIR/ahr-lib.sh}"
+source "$LIB_PATH"
+# Resolve from the canonical framework root so commands invoked through
+# ~/.local/bin symlinks never source libraries from the namespace directory.
+# shellcheck source=ahr-version.sh
+source "${AHR_VERSION_LIB_PATH:-$(dirname "$LIB_PATH")/ahr-version.sh}"
 FRAMEWORK_JSON="$FRAMEWORK_ROOT/framework.json"
 STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
-FRAMEWORK_CACHE="$STATE_ROOT/framework-remote.cache"
-FRAMEWORK_CACHE_TTL=900  # 15 minutes (exceeds Waybar 600s poll interval)
+CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/artix-hypr-remix"
 
-# ── Helpers ────────────────────────────────────────────────────────
+# Paths
+FRAMEWORK_BACKUPS_DIR="$STATE_ROOT/framework-backups"
+FRAMEWORK_TRANSACTIONS_DIR="$STATE_ROOT/framework-transactions"
+FRAMEWORK_LOG="$STATE_ROOT/framework-update.log"
+FRAMEWORK_LOCK_FILE="$STATE_ROOT/framework.lock"
+FRAMEWORK_LOCK_DIR="$STATE_ROOT/.framework.lock"
+MIGRATION_DIR="$FRAMEWORK_ROOT/migrations"
+MIGRATION_STATE_DIR="$STATE_ROOT/migrations"
+MIGRATION_SKIPPED_DIR="$MIGRATION_STATE_DIR/skipped"
+
+# Cache is invalid; apply and rollback always do a fresh authoritative clone.
+# We keep a single file for status/check with a strict atomic record.
+FRAMEWORK_CACHE="$CACHE_ROOT/framework-remote.cache"
+FRAMEWORK_CACHE_TTL=900
+
+# Managed framework targets replaced atomically during activation.
+FRAMEWORK_TARGETS=(bin migrations docs hooks first-run.d default)
+FRAMEWORK_MANAGED_FILES=(framework.json)
+
+# Managed-derived components with backup and restore support.
+# Format: component|source|shape|user_editable|safe
+# Special sources (__namespace_links__, __migration_state__) are handled
+# by explicit helpers, not by fictional paths in the framework root.
+#
+# Generated paths that AHR theme hooks and migrations write:
+#   ~/.config/foot/foot.ini         (theme hook — overwrite on theme change)
+#   ~/.config/chromium/             (theme hook — overwrite on theme change)
+#   ~/.config/vscode/               (theme hook — overwrite on theme change)
+#   ~/.config/walker/walker.css     (migration — overwrite on theme change)
+#   ~/.config/waybar/style.css      (theme hook — backup-before-replace)
+#   ~/.config/mako/config           (theme hook — backup-before-replace)
+#   ~/.config/artix-hypr-remix/current/  (fully managed)
+#   ~/.config/artix-hypr-remix/current/font.toml  (fully managed)
+#
+# User-edited configs (Hyprland, Waybar, Mako, terminal, shell) are NOT
+# included.  Migrations that edit user files must perform backup-before-edit.
+FRAMEWORK_DERIVED_COMPONENTS=(
+  "framework-config|framework.json|file|false|true"
+  "namespace-links|__namespace_links__|manifest|false|true"
+  "migration-state|__migration_state__|state|true|true"
+  "theme-state|current|directory|true|false"
+)
+
+# Required scripts that must exist and be executable in the staged framework.
+REQUIRED_STAGED_SCRIPTS=(
+  bin/ahr
+  bin/ahr-update-framework
+  bin/ahr-update
+  bin/ahr-update-available
+  bin/ahr-lib.sh
+  bin/ahr-version.sh
+  bin/ahr-cache.sh
+  bin/migrate.sh
+  bin/namespace-install.sh
+)
+
+lock_mode=""
+signal_received=""
+
+# ── Usage ───────────────────────────────────────────────────────────
 
 usage() {
   cat <<'EOF'
 Usage: ahr update-framework [options]
 
 Options:
-  --check      Compare installed version against the remote update source
   --status     Print installed framework version and metadata (default)
+  --check      Compare installed version against the remote update source
+  --dry-run    Discover and validate; stop before backup or activation
+  --apply      Fetch, stage, validate, backup, activate, migrate, health-check
+  --rollback   Restore the previous framework version from the last backup
+  --recover    Recover from an interrupted apply/rollback transaction
   --quiet      Suppress non-error output
   -h, --help   Show this help
+
+Exit status:
+  0  Success (check/dry-run found update, apply/rollback/recover succeeded)
+  1  Up to date, no rollback, recovery not needed, or operation failed
+  2  Invalid arguments
 EOF
 }
 
 quiet=false
 mode="status"
-
 while (( $# > 0 )); do
   case "$1" in
     --check) mode="check" ;;
     --status) mode="status" ;;
+    --dry-run) mode="dry-run" ;;
+    --apply) mode="apply" ;;
+    --rollback) mode="rollback" ;;
+    --recover) mode="recover" ;;
     --quiet) quiet=true ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
 
-# Read a string value from a JSON file using jq, with sed fallback.
-# Usage: read_json_value <file> <key>
-read_json_value() {
-  local json="$1"
-  local key="$2"
+# ── Output helpers ─────────────────────────────────────────────────
 
-  if command -v jq >/dev/null 2>&1; then
-    jq -r --arg k "$key" '.[$k] // ""' "$json" 2>/dev/null && return 0
+log() {
+  if [[ "$quiet" == "false" ]]; then
+    echo "$1"
+  fi
+}
+
+log_line() {
+  local message="$1"
+  mkdir -p "$(dirname "$FRAMEWORK_LOG")"
+  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$message" >> "$FRAMEWORK_LOG"
+}
+
+die() {
+  local message="$1"
+  echo "$message" >&2
+  log_line "FATAL: $message"
+  exit 1
+}
+
+# ── Structured state records ──────────────────────────────────────
+# State is written as key=value with strict validation of values.
+# No space-separated lists. No sourcing of state files.
+
+# Required keys must be present in every valid transaction state.
+TX_REQUIRED_KEYS=(txid action pid target_version staging_commit backup_dir phase completion)
+
+# Create a new transaction with a unique ID.
+# For apply: target_version=NEW version, previous_version=OLD version.
+# For rollback: target_version=RESTORED version, previous_version=ROLLED_BACK version.
+create_transaction() {
+  local action="$1"
+  local target_version="$2"
+  local previous_version="$3"
+  local staging_commit="$4"
+  local backup_dir="$5"
+
+  mkdir -p "$FRAMEWORK_TRANSACTIONS_DIR"
+  local txid
+  txid="$(mktemp -d "$FRAMEWORK_TRANSACTIONS_DIR/tx-XXXXXXXX")" || die "Failed to create transaction directory"
+  local txname
+  txname="$(basename "$txid")"
+
+  write_transaction_state "$txid" \
+    "format_version=1" \
+    "txid=$txname" \
+    "action=$action" \
+    "pid=$$" \
+    "target_version=$target_version" \
+    "previous_version=$previous_version" \
+    "staging_commit=$staging_commit" \
+    "backup_dir=$backup_dir" \
+    "phase=created" \
+    "targets=$(IFS=,; echo "${FRAMEWORK_TARGETS[*]}")" \
+    "completion=in_progress"
+
+  echo "$txid"
+}
+
+# Atomically merge transaction fields into a complete state record.
+# State values are one-line records; callers must not pass newlines. The parser
+# never evaluates state as shell and rejects duplicate critical keys.
+write_transaction_state() {
+  local txdir="$1"
+  shift
+  local state_file="$txdir/state"
+  local tmp key value line
+  declare -A updates=()
+  declare -A existing=()
+
+  for line in "$@"; do
+    [[ "$line" == *=* ]] || { echo "Invalid transaction update" >&2; return 1; }
+    key="${line%%=*}"
+    value="${line#*=}"
+    [[ "$key" =~ ^[a-zA-Z0-9_.-]+$ ]] || { echo "Invalid transaction key: $key" >&2; return 1; }
+    [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || { echo "Invalid multiline transaction value: $key" >&2; return 1; }
+    updates["$key"]="$value"
+  done
+
+  if [[ -f "$state_file" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" == *=* ]] || { echo "Malformed transaction state: $state_file" >&2; return 1; }
+      key="${line%%=*}"
+      value="${line#*=}"
+      [[ "$key" =~ ^[a-zA-Z0-9_.-]+$ ]] || { echo "Invalid transaction key: $key" >&2; return 1; }
+      [[ -z "${existing[$key]+x}" ]] || { echo "Duplicate transaction key: $key" >&2; return 1; }
+      existing["$key"]="$value"
+    done < "$state_file"
+    for key in "${TX_REQUIRED_KEYS[@]}"; do
+      [[ -n "${existing[$key]+x}" ]] || { echo "Corrupt transaction missing $key" >&2; return 1; }
+    done
+    [[ "${existing[format_version]:-}" == "1" ]] || { echo "Unsupported transaction format" >&2; return 1; }
   fi
 
+  for key in "${!updates[@]}"; do
+    existing["$key"]="${updates[$key]}"
+  done
+
+  tmp="$(mktemp "${state_file}.tmp.XXXXXX")"
+  chmod 600 "$tmp"
+  # Deterministic order aids diagnostics and tests.
+  for key in format_version txid action pid target_version staging_commit backup_dir phase completion \
+    failure_reason current_target migration_exit doctor_exit log_path recovery_command targets; do
+    [[ -n "${existing[$key]+x}" ]] && echo "$key=${existing[$key]}" >> "$tmp"
+  done
+  for key in "${!existing[@]}"; do
+    case "$key" in
+      format_version|txid|action|pid|target_version|staging_commit|backup_dir|phase|completion|failure_reason|current_target|migration_exit|doctor_exit|log_path|recovery_command|targets) ;;
+      *) echo "$key=${existing[$key]}" >> "$tmp" ;;
+    esac
+  done
+  mv -f "$tmp" "$state_file"
+}
+
+# Read a single key from a transaction state file.
+read_tx_field() {
+  local txdir="$1" key="$2"
+  local state_file="$txdir/state"
+  [[ -f "$state_file" ]] || return 1
+  grep -F "${key}=" "$state_file" 2>/dev/null | head -n1 | sed -e "s/^${key}=//"
+}
+
+# Read all values for a key (one per line).
+read_tx_field_all() {
+  local txdir="$1" key="$2"
+  local state_file="$txdir/state"
+  [[ -f "$state_file" ]] || return 1
+  grep -F "${key}=" "$state_file" 2>/dev/null | sed -e "s/^${key}=//"
+}
+
+# Mark a transaction as completed (or abandoned).
+finalize_transaction() {
+  local txdir="$1" status="$2" phase="$3"
+  local state_file="$txdir/state"
+  [[ -f "$state_file" ]] || return 0
+  write_transaction_state "$txdir" \
+    "completion=$status" \
+    "phase=$phase" \
+    "completed=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+}
+
+# ── JSON helpers (safe, no sourceing) ──────────────────────────────
+
+# Read a string value from a JSON file.
+read_json_value() {
+  local json="$1" key="$2"
+  if command -v jq >/dev/null 2>&1; then
+    jq -r --arg k "$key" -- '.[$k] // ""' "$json" 2>/dev/null
+    return 0
+  fi
   sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$json" 2>/dev/null | head -n1
 }
 
-# ── Remote version fetching with caching ──────────────────────────
+# ── Cache (atomic, version+commit binding) ─────────────────────────
 
-# Fetch remote version from the update source.
-# Returns 0 on success (prints remote version), 1 on failure.
-# Caches result in FRAMEWORK_CACHE to avoid repeated git clones.
-fetch_remote_version() {
-  local update_source="$1"
-  local remote_version=""
+write_cache() {
+  local version="$1" source="$2" channel="$3" commit="$4"
+  mkdir -p "$(dirname "$FRAMEWORK_CACHE")"
+  local tmp
+  tmp="$(mktemp "${FRAMEWORK_CACHE}.tmp.XXXXXX")"
+  chmod 600 "$tmp"
+  {
+    echo "timestamp=$(date +%s 2>/dev/null || echo 0)"
+    echo "source=$source"
+    echo "channel=$channel"
+    echo "version=$version"
+    echo "commit=$commit"
+  } > "$tmp"
+  mv -f "$tmp" "$FRAMEWORK_CACHE"
+}
 
-  # Check cache freshness (must match update_source as well)
-  if [[ -f "$FRAMEWORK_CACHE" ]]; then
-    local cache_age cache_ver cache_ts cache_source now
-    now="$(date +%s 2>/dev/null || printf '0')"
-    cache_ts="$(head -n1 "$FRAMEWORK_CACHE" 2>/dev/null || printf '0')"
-    cache_ver="$(sed -n '2p' "$FRAMEWORK_CACHE" 2>/dev/null || true)"
-    cache_source="$(sed -n '3p' "$FRAMEWORK_CACHE" 2>/dev/null || true)"
-    if [[ "$now" =~ ^[0-9]+$ ]] && [[ "$cache_ts" =~ ^[0-9]+$ ]] && [[ "$cache_source" == "$update_source" ]]; then
-      cache_age=$(( now - cache_ts ))
-      if (( cache_age < FRAMEWORK_CACHE_TTL )) && [[ -n "$cache_ver" ]]; then
-        printf '%s\n' "$cache_ver"
-        return 0
-      fi
+read_cache() {
+  [[ -f "$FRAMEWORK_CACHE" ]] || return 1
+  local ts src ch ver co
+  ts="$(grep -F 'timestamp=' "$FRAMEWORK_CACHE" 2>/dev/null | head -n1 | cut -d= -f2)"
+  src="$(grep -F 'source=' "$FRAMEWORK_CACHE" 2>/dev/null | head -n1 | cut -d= -f2)"
+  ch="$(grep -F 'channel=' "$FRAMEWORK_CACHE" 2>/dev/null | head -n1 | cut -d= -f2)"
+  ver="$(grep -F 'version=' "$FRAMEWORK_CACHE" 2>/dev/null | head -n1 | cut -d= -f2)"
+  co="$(grep -F 'commit=' "$FRAMEWORK_CACHE" 2>/dev/null | head -n1 | cut -d= -f2)"
+  [[ -n "$ver" && -n "$co" && -n "$src" && -n "$ch" ]] || return 1
+  echo "$ver|$co|$src|$ch|$ts"
+}
+
+invalidate_cache() {
+  rm -f "$FRAMEWORK_CACHE"
+}
+
+# ── Locking ─────────────────────────────────────────────────────────
+
+cleanup_lock() {
+  if [[ "$lock_mode" == "mkdir" ]]; then
+    rmdir "$FRAMEWORK_LOCK_DIR" 2>/dev/null || true
+  fi
+}
+
+acquire_framework_lock() {
+  mkdir -p "$STATE_ROOT"
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$FRAMEWORK_LOCK_FILE"
+    if ! flock -n 9; then
+      echo "Another framework operation is already running." >&2
+      echo "Check: $FRAMEWORK_LOCK_FILE" >&2
+      exit 1
     fi
+    lock_mode="flock"
+    trap cleanup_lock EXIT
+    return 0
   fi
-
-  # Suppress credential prompts and cap clone time so the check never
-  # hangs waiting for interactive input.
-  export GIT_TERMINAL_PROMPT=0
-  local git_timeout=15
-  if ! command -v timeout >/dev/null 2>&1; then
-    git_timeout=0
+  if mkdir "$FRAMEWORK_LOCK_DIR" 2>/dev/null; then
+    lock_mode="mkdir"
+    trap cleanup_lock EXIT
+    return 0
   fi
+  echo "Another framework operation is already running (stale lock: $FRAMEWORK_LOCK_DIR)." >&2
+  echo "If no framework operation is active, remove the directory." >&2
+  exit 1
+}
 
-  local tmpdir
-  tmpdir="$(mktemp -d "/tmp/ahr-framework-check-XXXXXXXX")"
+# ── Path safety ────────────────────────────────────────────────────
 
-  # Use blobless, no-checkout clone for speed, fall back to depth-1.
-  # If timeout (exit 124), skip fallback — remote is unreachable.
-  local git_cmd
-  local clone_exit=0
-  git_cmd=(git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir")
-  if (( git_timeout > 0 )); then
-    timeout "$git_timeout" "${git_cmd[@]}" 2>/dev/null || clone_exit=$?
+# Validate that a path is contained under an expected root.
+# Returns 0 if contained, 1 otherwise.
+path_under() {
+  local target="$1" root="$2"
+  local real_target real_root
+  real_target="$(realpath -m "$target" 2>/dev/null)" || return 1
+  real_root="$(realpath -m "$root" 2>/dev/null)" || return 1
+  case "$real_target" in
+    "$real_root"/*|"$real_root") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# ── Migration state snapshot and restore ─────────────────────────
+
+# Create a transaction-safe snapshot of migration state.
+# Writes applied and skipped markers to temp directories, then atomically
+# renames them into place.
+snapshot_migration_state() {
+  local snapshot_dir="$1"
+  mkdir -p "$snapshot_dir"
+
+  # Snapshot applied markers
+  if [[ -d "$MIGRATION_STATE_DIR" ]]; then
+    local tmp_applied
+    tmp_applied="$(mktemp -d "$snapshot_dir/.applied.XXXXXX")"
+    find "$MIGRATION_STATE_DIR" -maxdepth 1 -type f -exec cp -a {} "$tmp_applied/" \; 2>/dev/null || true
+    mv -f "$tmp_applied" "$snapshot_dir/applied"
   else
-    "${git_cmd[@]}" 2>/dev/null || clone_exit=$?
+    mkdir -p "$snapshot_dir/applied"
+  fi
+
+  # Snapshot skipped markers
+  if [[ -d "$MIGRATION_SKIPPED_DIR" ]]; then
+    local tmp_skipped
+    tmp_skipped="$(mktemp -d "$snapshot_dir/.skipped.XXXXXX")"
+    find "$MIGRATION_SKIPPED_DIR" -maxdepth 1 -type f -exec cp -a {} "$tmp_skipped/" \; 2>/dev/null || true
+    mv -f "$tmp_skipped" "$snapshot_dir/skipped"
+  else
+    mkdir -p "$snapshot_dir/skipped"
+  fi
+}
+
+# Restore migration state exactly from a snapshot.
+# Replaces applied and skipped marker directories atomically.
+restore_migration_state() {
+  local snapshot_dir="$1"
+
+  # Lock ordering: main update lock -> framework lock -> migration lock.
+  # Rollback already owns the framework lock; acquiring the same migration
+  # lock used by migrate.sh prevents concurrent marker writes.
+  mkdir -p "$MIGRATION_STATE_DIR"
+  if command -v flock >/dev/null 2>&1; then
+    exec 8>"$MIGRATION_STATE_DIR/migrate.lock"
+    flock -n 8 || { echo "Another migration run is in progress." >&2; return 1; }
+  else
+    mkdir "$MIGRATION_STATE_DIR/.restore-migrate.lock" 2>/dev/null || { echo "Another migration run is in progress." >&2; return 1; }
+  fi
+
+  if [[ ! -d "$snapshot_dir" ]]; then
+    die "Migration snapshot missing: $snapshot_dir"
+  fi
+
+  # Ensure migration state directory exists
+  mkdir -p "$MIGRATION_STATE_DIR"
+
+  # Restore applied markers atomically
+  if [[ -d "$snapshot_dir/applied" ]]; then
+    local tmp_applied
+    tmp_applied="$(mktemp -d "$MIGRATION_STATE_DIR/.applied.XXXXXX")"
+    find "$snapshot_dir/applied" -maxdepth 1 -type f -exec cp -a {} "$tmp_applied/" \; 2>/dev/null || true
+    # Remove old applied markers (keep only the directory itself)
+    find "$MIGRATION_STATE_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+    mv -f "$tmp_applied"/* "$MIGRATION_STATE_DIR/" 2>/dev/null || true
+    rmdir "$tmp_applied" 2>/dev/null || true
+  else
+    find "$MIGRATION_STATE_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+  fi
+
+  # Restore skipped markers atomically
+  if [[ -d "$snapshot_dir/skipped" ]]; then
+    mkdir -p "$MIGRATION_SKIPPED_DIR"
+    local tmp_skipped
+    tmp_skipped="$(mktemp -d "$MIGRATION_SKIPPED_DIR/.skipped.XXXXXX")"
+    find "$snapshot_dir/skipped" -maxdepth 1 -type f -exec cp -a {} "$tmp_skipped/" \; 2>/dev/null || true
+    find "$MIGRATION_SKIPPED_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+    mv -f "$tmp_skipped"/* "$MIGRATION_SKIPPED_DIR/" 2>/dev/null || true
+    rmdir "$tmp_skipped" 2>/dev/null || true
+  else
+    mkdir -p "$MIGRATION_SKIPPED_DIR"
+    find "$MIGRATION_SKIPPED_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+  fi
+
+  if ! command -v flock >/dev/null 2>&1; then
+    rmdir "$MIGRATION_STATE_DIR/.restore-migrate.lock" 2>/dev/null || true
+  fi
+}
+
+# Snapshot only namespace links owned by AHR. Never copy unrelated user files
+# from ~/.local/bin. Each line is link-name<TAB>target.
+snapshot_namespace_links() {
+  local output="$1"
+  local local_bin="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
+  : > "$output"
+  [[ -d "$local_bin" ]] || return 0
+  local link target
+  while IFS= read -r -d '' link; do
+    target="$(readlink "$link" 2>/dev/null || true)"
+    case "$target" in
+      "$FRAMEWORK_ROOT/bin/"*|"$local_bin/ahr-"*|"$local_bin/omarchy-"*)
+        printf '%s\t%s\n' "$(basename "$link")" "$target" >> "$output"
+        ;;
+    esac
+  done < <(find "$local_bin" -maxdepth 1 -type l -print0 2>/dev/null || true)
+}
+
+restore_namespace_links() {
+  local manifest="$1"
+  local local_bin="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
+  [[ -f "$manifest" ]] || return 1
+  mkdir -p "$local_bin"
+  local name target
+  while IFS=$'\t' read -r name target; do
+    [[ "$name" =~ ^(ahr|omarchy)-[a-zA-Z0-9_.-]+$|^ahr$|^omarchy$ ]] || return 1
+    case "$target" in
+      "$FRAMEWORK_ROOT/bin/"*|"$local_bin/ahr-"*|"$local_bin/omarchy-"*) ;;
+      *) return 1 ;;
+    esac
+    rm -f "$local_bin/$name"
+    ln -s "$target" "$local_bin/$name"
+  done < "$manifest"
+}
+
+# ── Authoritative staged checkout ──────────────────────────────────
+# One clone per dry-run/apply operation. The commit is resolved from this
+# single clone and is the authoritative commit for the entire operation.
+
+# Create a staging directory with an authoritative checkout of the update source.
+# Prints: "staging_dir<TAB>commit_sha<TAB>staged_version<TAB>staged_channel"
+# Returns: 0 on success, 1 on failure.
+create_staging_checkout() {
+  local update_source="$1"
+  local staging_dir
+  staging_dir="$(mktemp -d "/tmp/ahr-staging-XXXXXXXX")"
+
+  export GIT_TERMINAL_PROMPT=0
+  local git_timeout=30
+  command -v timeout >/dev/null 2>&1 || git_timeout=0
+
+  local clone_exit=0
+  if (( git_timeout > 0 )); then
+    timeout "$git_timeout" git clone --quiet "$update_source" "$staging_dir" 2>/dev/null || clone_exit=$?
+  else
+    git clone --quiet "$update_source" "$staging_dir" 2>/dev/null || clone_exit=$?
   fi
 
   if (( clone_exit != 0 )); then
-    rm -rf "$tmpdir"
-    if (( clone_exit == 124 )); then
-      # Timed out — remote unreachable, no point retrying.
-      return 1
-    fi
-    # Fallback: standard shallow clone for unsupported options.
-    tmpdir="$(mktemp -d "/tmp/ahr-framework-check-XXXXXXXX")"
-    git_cmd=(git clone --depth 1 --quiet "$update_source" "$tmpdir")
-    if (( git_timeout > 0 )); then
-      timeout "$git_timeout" "${git_cmd[@]}" 2>/dev/null || { rm -rf "$tmpdir"; return 1; }
-    else
-      "${git_cmd[@]}" 2>/dev/null || { rm -rf "$tmpdir"; return 1; }
-    fi
-  fi
-
-  # Read framework.json directly from git tree (no checkout needed).
-  local remote_raw
-  remote_raw="$(git -C "$tmpdir" cat-file -p HEAD:artix-hypr-remix/config/artix-hypr-remix/framework.json 2>/dev/null)" || remote_raw=""
-
-  # Fallback to filesystem path if cat-file failed (e.g. full checkout path).
-  if [[ -z "$remote_raw" ]]; then
-    if [[ -f "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json" ]]; then
-      remote_raw="$(cat "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json")"
-    fi
-  fi
-
-  rm -rf "$tmpdir"
-
-  if [[ -z "$remote_raw" ]]; then
+    rm -rf "$staging_dir"
     return 1
   fi
 
-  # Extract version from raw JSON using jq, with sed fallback.
-  if command -v jq >/dev/null 2>&1; then
-    remote_version="$(printf '%s' "$remote_raw" | jq -r '.version // ""' 2>/dev/null || true)"
-  else
-    remote_version="$(printf '%s' "$remote_raw" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
-  fi
+  local commit_sha
+  commit_sha="$(git -C "$staging_dir" rev-parse HEAD 2>/dev/null)" || {
+    rm -rf "$staging_dir"
+    return 1
+  }
 
-  if [[ -z "$remote_version" ]]; then
+  local staged_version staged_channel
+  local fw_json="$staging_dir/artix-hypr-remix/config/artix-hypr-remix/framework.json"
+  if [[ ! -f "$fw_json" ]]; then
+    rm -rf "$staging_dir"
     return 1
   fi
 
-  # Write cache
-  mkdir -p "$(dirname "$FRAMEWORK_CACHE")"
-  {
-    printf '%s\n' "$(date +%s 2>/dev/null || printf '0')"
-    printf '%s\n' "$remote_version"
-    printf '%s\n' "$update_source"
-  } > "$FRAMEWORK_CACHE"
+  staged_version="$(read_json_value "$fw_json" "version")" || staged_version=""
+  staged_channel="$(read_json_value "$fw_json" "channel")" || staged_channel=""
 
-  printf '%s\n' "$remote_version"
+  if [[ -z "$staged_version" || -z "$staged_channel" ]]; then
+    rm -rf "$staging_dir"
+    return 1
+  fi
+
+  printf '%s\t%s\t%s\t%s\n' "$staging_dir" "$commit_sha" "$staged_version" "$staged_channel"
+}
+
+# ── Recursive staged validation ───────────────────────────────────
+
+validate_staged_framework() {
+  local staged_dir="$1"
+  local expected_version="$2"
+  local expected_commit="$3"
+  local expected_channel="$4"
+
+  local errors=0
+  _vf_err() {
+    echo "STAGED VALIDATION: $1" >&2
+    errors=$((errors + 1))
+  }
+
+  # ── Metadata validation ──
+  local fw_json="$staged_dir/framework.json"
+  [[ -f "$fw_json" ]] || { _vf_err "Missing framework.json"; return 1; }
+
+  local s_version s_channel s_revision s_source
+  s_version="$(read_json_value "$fw_json" "version")" || s_version=""
+  s_channel="$(read_json_value "$fw_json" "channel")" || s_channel=""
+  s_source="$(read_json_value "$fw_json" "update_source")" || s_source=""
+  s_revision="$(read_json_value "$fw_json" "revision")" || s_revision=""
+
+  [[ -n "$s_version" ]] || { _vf_err "Missing required field: version"; }
+  [[ -n "$s_channel" ]] || { _vf_err "Missing required field: channel"; }
+
+  if [[ -n "$s_version" ]] && ! ahr_version_validate "$s_version"; then
+    _vf_err "Invalid version format: $s_version"
+  fi
+  if [[ -n "$s_channel" ]] && ! ahr_version_channel "$s_channel"; then
+    _vf_err "Unsupported channel: $s_channel (supported: $(ahr_version_supported_channels))"
+  fi
+  if [[ -n "$s_version" ]] && [[ "$s_version" != "$expected_version" ]]; then
+    _vf_err "Version mismatch: expected $expected_version, got $s_version"
+  fi
+  if [[ -n "$s_channel" ]] && [[ "$s_channel" != "$expected_channel" ]]; then
+    _vf_err "Channel mismatch: expected $expected_channel, got $s_channel"
+  fi
+  if [[ -n "$s_revision" ]] && [[ "$s_revision" != "null" ]] && [[ "$s_revision" != "$expected_commit" ]]; then
+    _vf_err "Revision mismatch: declared $s_revision, commit $expected_commit"
+  fi
+
+  # ── Required target directories ──
+  local target
+  for target in "${FRAMEWORK_TARGETS[@]}"; do
+    if [[ ! -d "$staged_dir/$target" ]]; then
+      _vf_err "Missing required directory: $target/"
+    fi
+  done
+
+  # ── Required scripts ──
+  local script
+  for script in "${REQUIRED_STAGED_SCRIPTS[@]}"; do
+    local script_path="$staged_dir/$script"
+    if [[ ! -e "$script_path" ]]; then
+      _vf_err "Missing required script: $script"
+      continue
+    fi
+    if [[ -d "$script_path" ]] && [[ ! -L "$script_path" ]]; then
+      _vf_err "Required script is a directory: $script"
+      continue
+    fi
+    if [[ -L "$script_path" ]]; then
+      local link_target
+      link_target="$(readlink -f "$script_path" 2>/dev/null)" || {
+        _vf_err "Broken symlink for required script: $script"
+        continue
+      }
+      case "$link_target" in
+        "$staged_dir"/*) ;;
+        *) _vf_err "Symlink for required script escapes staging: $script" ;;
+      esac
+    elif [[ ! -x "$script_path" ]]; then
+      _vf_err "Required script not executable: $script"
+    fi
+  done
+
+  # ── Recursive full-tree validation ──
+  # Use null-delimited traversal. Reject special files, symlink escapes,
+  # and syntax-check all shell scripts recursively.
+  local entry
+  while IFS= read -r -d '' entry; do
+    [[ -e "$entry" ]] || continue
+    local rel="${entry#$staged_dir/}"
+    local etype
+    etype="$(stat -c %F "$entry" 2>/dev/null || echo unknown)"
+
+    case "$etype" in
+      "symbolic link")
+        local link_target
+        link_target="$(readlink -f "$entry" 2>/dev/null)" || {
+          _vf_err "Broken symlink: $rel"
+          continue
+        }
+        case "$link_target" in
+          "$staged_dir"/*) ;;
+          *) _vf_err "Symlink escapes staging: $rel -> $link_target" ;;
+        esac
+        ;;
+      fifo) _vf_err "FIFO in staged tree: $rel" ;;
+      socket) _vf_err "Socket in staged tree: $rel" ;;
+      "block special") _vf_err "Block device in staged tree: $rel" ;;
+      "character special") _vf_err "Character device in staged tree: $rel" ;;
+    esac
+  done < <(find "$staged_dir" \( -path "*/.git" -prune -o \
+    -type l -o -type p -o -type s -o -type b -o -type c \) \
+    -not -path "*/.git/*" -print0 2>/dev/null || true)
+
+  # Shell syntax check on all .sh files recursively
+  while IFS= read -r -d '' shfile; do
+    if ! bash -n "$shfile" 2>/dev/null; then
+      _vf_err "Shell syntax error: ${shfile#$staged_dir/}"
+    fi
+  done < <(find "$staged_dir" \( -path "*/.git" -prune -o -type f -name '*.sh' \) \
+    -not -path "*/.git/*" -print0 2>/dev/null || true)
+
+  # Syntax check extensionless executables with shell shebang in bin/
+  while IFS= read -r -d '' cmdfile; do
+    [[ "$cmdfile" == *.sh ]] && continue
+    [[ -L "$cmdfile" ]] && continue
+    [[ ! -x "$cmdfile" ]] && continue
+    local shebang
+    shebang="$(head -n1 "$cmdfile" 2>/dev/null || true)"
+    case "$shebang" in
+      '#!'*'bash'|'#!'*'sh')
+        if ! bash -n "$cmdfile" 2>/dev/null; then
+          _vf_err "Shell syntax error in extensionless command: ${cmdfile#$staged_dir/}"
+        fi
+        ;;
+    esac
+  done < <(find "$staged_dir/bin" -maxdepth 1 -type f -print0 2>/dev/null || true)
+
+  if (( errors > 0 )); then
+    return 1
+  fi
   return 0
+}
+
+# ── Transaction-based activation ──────────────────────────────────
+
+# Prepare a target for activation: copy to a transaction-scoped temp path.
+# Temp paths live INSIDE the transaction directory, never in the framework root.
+prepare_target_tx() {
+  local txdir="$1" target="$2" src="$3"
+  local prepared_dir="$txdir/prepared/$target"
+  mkdir -p "$txdir/prepared"
+  cp -a "$src" "$prepared_dir" || return 1
+  write_transaction_state "$txdir" "prepared_${target}=$prepared_dir" "current_target=$target"
+  echo "$prepared_dir"
+}
+
+# Archive the current installed target to the transaction directory.
+archive_target_tx() {
+  local txdir="$1" target="$2" dst="$3"
+  local archived_dir="$txdir/archived/$target"
+  mkdir -p "$txdir/archived"
+  if [[ -e "$dst" ]]; then
+    cp -a "$dst" "$archived_dir" || return 1
+  fi
+  write_transaction_state "$txdir" "archived_${target}=$archived_dir" "current_target=$target"
+  echo "$archived_dir"
+}
+
+# Atomically activate a prepared target into the installed location.
+activate_prepared_tx() {
+  local prepared="$1" dst="$2" txdir="${3:-}" target="${4:-}"
+  rm -rf "$dst"
+  mv -f "$prepared" "$dst"
+  if [[ -n "$txdir" && -n "$target" ]]; then
+    write_transaction_state "$txdir" "activated_${target}=true" "current_target=$target"
+  fi
+}
+
+# Rollback all targets in reverse order using the transaction archives.
+rollback_transaction() {
+  local txdir="$1"
+  [[ -d "$txdir/archived" ]] || return 0
+  local target
+  for target in "${FRAMEWORK_TARGETS[@]}"; do
+    local archived="$txdir/archived/$target"
+    local dst="$FRAMEWORK_ROOT/$target"
+    if [[ -d "$archived" ]]; then
+      rm -rf "$dst"
+      mv -f "$archived" "$dst" 2>/dev/null || true
+    elif [[ -e "$dst" ]]; then
+      rm -rf "$dst"
+    fi
+  done
+
+  # Restore managed files
+  local mf
+  for mf in "${FRAMEWORK_MANAGED_FILES[@]}"; do
+    local archived_mf="$txdir/archived/$mf"
+    local dst_mf="$FRAMEWORK_ROOT/$mf"
+    if [[ -f "$archived_mf" ]]; then
+      cp -a "$archived_mf" "$dst_mf"
+    fi
+  done
+}
+
+# ── Signal handler for transaction safety ─────────────────────────
+
+current_txdir=""
+original_exit=0
+
+# Signal-aware handler: triggered by EXIT, INT, TERM, HUP during apply/rollback.
+# Performs reverse-order restoration from transaction archives.
+signal_handler() {
+  local sig="${1:-EXIT}"
+  local exit_code=$?
+
+  if [[ "$sig" == "INT" || "$sig" == "TERM" || "$sig" == "HUP" ]]; then
+    signal_received="$sig"
+  fi
+
+  if [[ -n "$current_txdir" && -d "$current_txdir" ]]; then
+    # Only auto-restore if activation was in progress
+    local phase
+    phase="$(read_tx_field "$current_txdir" "phase" 2>/dev/null || true)"
+    if [[ "$phase" == "activation_in_progress" ]]; then
+      echo "Signal $sig received during activation; performing reverse-order restore" >&2
+      rollback_transaction "$current_txdir" 2>/dev/null || true
+      finalize_transaction "$current_txdir" "interrupted" "interrupted" 2>/dev/null || true
+    fi
+  fi
+
+  return $exit_code
 }
 
 # ── Status Mode ────────────────────────────────────────────────────
 
 cmd_status() {
   if [[ ! -f "$FRAMEWORK_JSON" ]]; then
-    if [[ "$quiet" == "false" ]]; then
-      printf 'Framework metadata not found at %s\n' "$FRAMEWORK_JSON"
-      printf 'Run the installer (phase 7) to deploy framework metadata.\n'
-    fi
+    [[ "$quiet" == "false" ]] && echo "Framework metadata not found at $FRAMEWORK_JSON"
     return 1
   fi
-
   local version revision channel update_source updated_at
   version="$(read_json_value "$FRAMEWORK_JSON" "version")" || version="unknown"
   revision="$(read_json_value "$FRAMEWORK_JSON" "revision")" || revision=""
@@ -181,119 +787,881 @@ cmd_status() {
   update_source="$(read_json_value "$FRAMEWORK_JSON" "update_source")" || update_source=""
   updated_at="$(read_json_value "$FRAMEWORK_JSON" "updated_at")" || updated_at="unknown"
 
-  if [[ "$quiet" == "true" ]]; then
-    printf 'version=%s\n' "$version"
-    [[ -n "$revision" ]] && printf 'revision=%s\n' "$revision"
-    printf 'channel=%s\n' "$channel"
-    printf 'update_source=%s\n' "$update_source"
-    printf 'updated_at=%s\n' "$updated_at"
-    return 0
-  fi
-
-  printf 'Framework: %s\n' "$version"
-  printf 'Channel:   %s\n' "$channel"
-  [[ -n "$revision" ]] && printf 'Revision:  %s\n' "$revision"
-  [[ -n "$update_source" ]] && printf 'Source:    %s\n' "$update_source"
-  printf 'Updated:   %s\n' "$updated_at"
+  echo "Framework: $version"
+  echo "Channel:   $channel"
+  [[ -n "$revision" ]] && echo "Revision:  $revision"
+  [[ -n "$update_source" ]] && echo "Source:    $update_source"
+  echo "Updated:   $updated_at"
+  return 0
 }
 
 # ── Check Mode ─────────────────────────────────────────────────────
 
 cmd_check() {
-  if [[ ! -f "$FRAMEWORK_JSON" ]]; then
-    printf 'Framework metadata not found. Nothing to compare.\n' >&2
-    return 1
-  fi
+  [[ -f "$FRAMEWORK_JSON" ]] || { echo "Framework metadata not found." >&2; return 1; }
+  ahr_has_cmd git || { echo "git is required." >&2; return 1; }
+  [[ "$quiet" == "false" ]] && echo "Checking framework update..."
 
-  local local_version update_source remote_version vercmp_result
-
+  local local_version update_source
   local_version="$(read_json_value "$FRAMEWORK_JSON" "version")" || local_version=""
   update_source="$(read_json_value "$FRAMEWORK_JSON" "update_source")" || update_source=""
+  [[ -z "$local_version" ]] && { echo "Could not read local version." >&2; return 1; }
+  [[ -z "$update_source" ]] && { echo "No update source configured." >&2; return 1; }
 
-  if [[ -z "$local_version" ]]; then
-    printf 'Could not read local framework version from %s\n' "$FRAMEWORK_JSON" >&2
+  # Single authoritative checkout
+  local checkout_info
+  checkout_info="$(create_staging_checkout "$update_source")" || {
+    echo "Failed to fetch update source: $update_source" >&2
+    return 1
+  }
+  local staging_dir remote_commit remote_version remote_channel
+  staging_dir="$(echo "$checkout_info" | cut -f1)"
+  remote_commit="$(echo "$checkout_info" | cut -f2)"
+  remote_version="$(echo "$checkout_info" | cut -f3)"
+  remote_channel="$(echo "$checkout_info" | cut -f4)"
+
+  # Verify the commit is still the HEAD (no moving branch)
+  local verify_commit
+  verify_commit="$(git -C "$staging_dir" rev-parse HEAD 2>/dev/null)"
+  if [[ "$verify_commit" != "$remote_commit" ]]; then
+    rm -rf "$staging_dir"
+    echo "Commit changed during check." >&2
     return 1
   fi
 
-  if [[ -z "$update_source" ]]; then
-    printf 'No update source configured in %s\n' "$FRAMEWORK_JSON" >&2
-    printf 'Set "update_source" to a git URL to enable remote checks.\n' >&2
-    return 1
-  fi
+  rm -rf "$staging_dir"
 
-  if ! ahr_has_cmd git; then
-    printf 'git is required to check for framework updates.\n' >&2
-    printf 'Install with: sudo pacman -S git\n' >&2
-    return 1
-  fi
+  [[ "$quiet" == "false" ]] && echo "Remote version: $remote_version (commit $remote_commit)"
 
-  if [[ "$quiet" == "false" ]]; then
-    printf 'Checking framework update source: %s\n' "$update_source"
-  fi
-
-  remote_version="$(fetch_remote_version "$update_source")" || {
-    if [[ "$quiet" == "false" ]]; then
-      printf 'Failed to fetch framework version from remote source: %s\n' "$update_source" >&2
-      printf 'Check network connectivity or run manually: git ls-remote %s\n' "$update_source" >&2
-    fi
+  local cmp
+  cmp="$(ahr_version_compare "$remote_version" "$local_version")" || {
+    echo "Version comparison failed (malformed version)." >&2
     return 1
   }
 
-  if [[ -z "$remote_version" ]]; then
-    printf 'Could not determine remote framework version.\n' >&2
-    return 1
-  fi
-
-  # Use vercmp from pacman for proper version comparison.
-  # vercmp A B prints a number to stdout and exits 0:
-  #   negative if A < B  (A is older)
-  #   0         if A == B
-  #   positive if A > B  (A is newer)
-  vercmp_result=0
-  if command -v vercmp >/dev/null 2>&1; then
-    vercmp_result="$(vercmp "$remote_version" "$local_version" 2>/dev/null || echo '')"
-    # Validate output is numeric; if vercmp produced garbage, report unavailable.
-    if [[ ! "$vercmp_result" =~ ^-?[0-9]+$ ]]; then
-      if [[ "$quiet" == "false" ]]; then
-        printf 'vercmp produced non-numeric output: %s\n' "$vercmp_result" >&2
-      fi
-      return 1
-    fi
-  else
-    # Fallback: string comparison (ordered so "0.1.9" < "0.1.10" if plain
-    # string doesn't work, but this is imprecise; vercmp is strongly preferred).
-    if [[ "$remote_version" == "$local_version" ]]; then
-      vercmp_result=0
-    elif [[ "$remote_version" > "$local_version" ]]; then
-      vercmp_result=1
-    else
-      vercmp_result=-1
-    fi
-  fi
-
-  if (( vercmp_result > 0 )); then
-    if [[ "$quiet" == "false" ]]; then
-      printf 'Framework update available: %s → %s\n' "$local_version" "$remote_version"
-      printf 'Run \`ahr update-framework\` with --apply (in a future release) to update.\n'
-    fi
+  if (( cmp > 0 )); then
+    [[ "$quiet" == "false" ]] && echo "Framework update available: $local_version → $remote_version"
     return 0
-  elif (( vercmp_result == 0 )); then
-    if [[ "$quiet" == "false" ]]; then
-      printf 'Framework is up to date: %s\n' "$local_version"
+  elif (( cmp == 0 )); then
+    # Same version: check commit
+    local local_commit
+    local_commit="$(read_json_value "$FRAMEWORK_JSON" "revision")" || local_commit=""
+    if [[ -n "$local_commit" && "$local_commit" != "null" && "$local_commit" != "$remote_commit" ]]; then
+      [[ "$quiet" == "false" ]] && echo "Same version $local_version but installed commit differs from remote. Run --apply to update."
+      return 0
     fi
+    [[ "$quiet" == "false" ]] && echo "Framework is up to date: $local_version"
     return 1
   else
-    if [[ "$quiet" == "false" ]]; then
-      printf 'Local framework (%s) is newer than remote (%s). No update needed.\n' \
-        "$local_version" "$remote_version"
-    fi
+    [[ "$quiet" == "false" ]] && echo "Local framework ($local_version) is newer than remote ($remote_version)."
     return 1
+  fi
+}
+
+# ── Dry-Run Mode ───────────────────────────────────────────────────
+
+cmd_dry_run() {
+  [[ -f "$FRAMEWORK_JSON" ]] || die "Framework metadata not found at $FRAMEWORK_JSON"
+  ahr_has_cmd git || die "git is required"
+
+  local local_version update_source
+  local_version="$(read_json_value "$FRAMEWORK_JSON" "version")" || local_version=""
+  update_source="$(read_json_value "$FRAMEWORK_JSON" "update_source")" || update_source=""
+  [[ -z "$local_version" ]] && die "Could not read local framework version"
+  [[ -z "$update_source" ]] && die "No update source configured"
+
+  log "Cloning update source and pinning commit..."
+  local checkout_info
+  checkout_info="$(create_staging_checkout "$update_source")" || die "Failed to clone update source"
+
+  local staging_dir pinned_commit staged_version staged_channel
+  staging_dir="$(echo "$checkout_info" | cut -f1)"
+  pinned_commit="$(echo "$checkout_info" | cut -f2)"
+  staged_version="$(echo "$checkout_info" | cut -f3)"
+  staged_channel="$(echo "$checkout_info" | cut -f4)"
+
+  local staged_framework="$staging_dir/artix-hypr-remix/config/artix-hypr-remix"
+
+  # Verify the commit is still HEAD
+  local verify_commit
+  verify_commit="$(git -C "$staging_dir" rev-parse HEAD 2>/dev/null)"
+  if [[ "$verify_commit" != "$pinned_commit" ]]; then
+    rm -rf "$staging_dir"
+    die "Commit changed during staging. Aborting."
+  fi
+
+  log "  Pinned commit: $pinned_commit"
+  log "  Staged version: $staged_version"
+  log "  Channel: $staged_channel"
+
+  # Compare versions
+  local cmp
+  cmp="$(ahr_version_compare "$staged_version" "$local_version")" || {
+    rm -rf "$staging_dir"
+    die "Version comparison failed"
+  }
+
+  if (( cmp < 0 )); then
+    log "Local framework ($local_version) is newer than remote ($staged_version). No update needed."
+    rm -rf "$staging_dir"
+    return 1
+  fi
+
+  # Validate staged framework
+  if ! validate_staged_framework "$staged_framework" "$staged_version" "$pinned_commit" "$staged_channel"; then
+    rm -rf "$staging_dir"
+    die "Staged framework validation failed"
+  fi
+
+  log ""
+  log "Actions that --apply would perform:"
+  log "  1. Create backup at $FRAMEWORK_BACKUPS_DIR/<timestamp>-<id>/"
+  log "  2. Archive installed framework targets to transaction directory"
+  log "  3. Activate staged targets transactionally"
+  log "  4. Restore framework.json with revision=$pinned_commit"
+  log "  5. Reinstall command namespace"
+  log "  6. Run new migrations"
+  log "  7. Run ahr-doctor health check"
+
+  # Show pending migrations only in the new framework
+  local new_only_migrations=()
+  if [[ -d "$staged_framework/migrations" ]]; then
+    while IFS= read -r -d '' f; do
+      local mname
+      mname="$(basename "$f")"
+      if [[ ! -f "$MIGRATION_DIR/$mname" ]] && [[ ! -f "$MIGRATION_STATE_DIR/$mname" ]]; then
+        new_only_migrations+=("$mname")
+      fi
+    done < <(find "$staged_framework/migrations" -maxdepth 1 -type f -name '*.sh' -print0 2>/dev/null || true)
+  fi
+  if (( ${#new_only_migrations[@]} > 0 )); then
+    log ""
+    log "  Migrations only in the new framework:"
+    for m in "${new_only_migrations[@]}"; do log "    + $m"; done
+  fi
+
+  rm -rf "$staging_dir"
+  return 0
+}
+
+# ── Apply Mode ─────────────────────────────────────────────────────
+
+cmd_apply() {
+  mkdir -p "$STATE_ROOT" "$FRAMEWORK_BACKUPS_DIR" "$FRAMEWORK_TRANSACTIONS_DIR"
+  touch "$FRAMEWORK_LOG"
+  acquire_framework_lock
+
+  # Check for incomplete transactions before starting
+  check_incomplete_transactions apply || die "Incomplete transaction detected. Use --recover to handle it."
+
+  trap 'signal_handler EXIT' EXIT
+  trap 'signal_handler INT' INT
+  trap 'signal_handler TERM' TERM
+  trap 'signal_handler HUP' HUP
+
+  log_line "apply: starting"
+
+  [[ -f "$FRAMEWORK_JSON" ]] || die "Framework metadata not found at $FRAMEWORK_JSON"
+  local local_version local_revision update_source
+  local_version="$(read_json_value "$FRAMEWORK_JSON" "version")" || local_version=""
+  local_revision="$(read_json_value "$FRAMEWORK_JSON" "revision")" || local_revision=""
+  update_source="$(read_json_value "$FRAMEWORK_JSON" "update_source")" || update_source=""
+
+  [[ -z "$local_version" ]] && die "Could not read local framework version"
+  [[ -z "$update_source" ]] && die "No update source configured"
+  ahr_has_cmd git || die "git is required"
+
+  log "Cloning and pinning update source..."
+  local checkout_info
+  checkout_info="$(create_staging_checkout "$update_source")" || die "Failed to clone update source"
+  local staging_dir pinned_commit staged_version staged_channel
+  staging_dir="$(echo "$checkout_info" | cut -f1)"
+  pinned_commit="$(echo "$checkout_info" | cut -f2)"
+  staged_version="$(echo "$checkout_info" | cut -f3)"
+  staged_channel="$(echo "$checkout_info" | cut -f4)"
+
+  # The staged framework root is inside the repo clone
+  local staged_framework="$staging_dir/artix-hypr-remix/config/artix-hypr-remix"
+
+  # Verify the commit is still HEAD
+  local verify_commit
+  verify_commit="$(git -C "$staging_dir" rev-parse HEAD 2>/dev/null)"
+  if [[ "$verify_commit" != "$pinned_commit" ]]; then
+    rm -rf "$staging_dir"
+    die "Commit changed during staging. Aborting."
+  fi
+
+  log "  Commit: $pinned_commit"
+  log "  Version: $staged_version"
+
+  # Compare versions
+  local cmp
+  cmp="$(ahr_version_compare "$staged_version" "$local_version")" || {
+    rm -rf "$staging_dir"
+    die "Version comparison failed"
+  }
+
+  if (( cmp < 0 )); then
+    log "Local framework is newer. Not downgrading."
+    rm -rf "$staging_dir"
+    return 1
+  fi
+
+  # Validate staged framework
+  if ! validate_staged_framework "$staged_framework" "$staged_version" "$pinned_commit" "$staged_channel"; then
+    rm -rf "$staging_dir"
+    die "Staged framework validation failed"
+  fi
+
+  # Create collision-proof backup directory with timestamp prefix
+  local backup_ts
+  backup_ts="$(date +%Y%m%d-%H%M%S)"
+  local backup_dir
+  backup_dir="$(mktemp -d "$FRAMEWORK_BACKUPS_DIR/${backup_ts}-XXXXXX")" || \
+    die "Failed to create backup directory"
+
+  # Create transaction
+  local txdir
+  txdir="$(create_transaction "apply" "$staged_version" "$local_version" "$pinned_commit" "$backup_dir")"
+  current_txdir="$txdir"
+  write_transaction_state "$txdir" "phase=backup_in_progress"
+
+  log "Backing up to: $backup_dir"
+
+  # Backup framework targets and managed files
+  local target
+  for target in "${FRAMEWORK_TARGETS[@]}"; do
+    if [[ -e "$FRAMEWORK_ROOT/$target" ]]; then
+      cp -a "$FRAMEWORK_ROOT/$target" "$backup_dir/$target"
+    fi
+  done
+  local mf
+  for mf in "${FRAMEWORK_MANAGED_FILES[@]}"; do
+    if [[ -f "$FRAMEWORK_ROOT/$mf" ]]; then
+      cp -a "$FRAMEWORK_ROOT/$mf" "$backup_dir/$mf"
+    fi
+  done
+
+  # Snapshot migration state
+  snapshot_migration_state "$backup_dir/migration-snapshot"
+
+  # Backup managed-derived components
+  local comp
+  for comp in "${FRAMEWORK_DERIVED_COMPONENTS[@]}"; do
+    local comp_name comp_subpath comp_shape
+    comp_name="$(echo "$comp" | cut -d'|' -f1)"
+    comp_subpath="$(echo "$comp" | cut -d'|' -f2)"
+    comp_shape="$(echo "$comp" | cut -d'|' -f3)"
+    case "$comp_shape" in
+      file)
+        [[ -f "$FRAMEWORK_ROOT/$comp_subpath" ]] && cp -a "$FRAMEWORK_ROOT/$comp_subpath" "$backup_dir/derived-$comp_name"
+        ;;
+      directory)
+        [[ -d "$FRAMEWORK_ROOT/$comp_subpath" ]] && cp -a "$FRAMEWORK_ROOT/$comp_subpath" "$backup_dir/derived-$comp_name"
+        ;;
+      manifest)
+        snapshot_namespace_links "$backup_dir/derived-$comp_name"
+        ;;
+      state)
+        # Migration state is already captured in migration-snapshot; record a
+        # pointer file rather than duplicating or confusing it with scripts.
+        printf '%s\n' "migration-snapshot" > "$backup_dir/derived-$comp_name"
+        ;;
+    esac
+  done
+
+  # Write manifest atomically
+  local manifest_tmp
+  manifest_tmp="$(mktemp "$backup_dir/.manifest.tmp.XXXXXX")"
+  {
+    echo "manifest_version=1"
+    echo "completed=true"
+    echo "previous_version=$local_version"
+    echo "previous_revision=$local_revision"
+    echo "new_version=$staged_version"
+    echo "staging_commit=$pinned_commit"
+    echo "channel=$staged_channel"
+    echo "update_source=$update_source"
+    echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+    echo "backup_dir=$backup_dir"
+    echo "targets=$(printf '%s\n' "${FRAMEWORK_TARGETS[@]}")"
+    echo "managed_files=$(printf '%s\n' "${FRAMEWORK_MANAGED_FILES[@]}")"
+    echo "derived_components=$(printf '%s\n' "${FRAMEWORK_DERIVED_COMPONENTS[@]}")"
+    echo "migration_snapshot=$backup_dir/migration-snapshot"
+  } > "$manifest_tmp"
+  mv -f "$manifest_tmp" "$backup_dir/manifest.txt"
+
+  write_transaction_state "$txdir" "phase=activation_in_progress"
+  log "Activating framework $staged_version..."
+
+  # Archive installed targets to transaction directory
+  for target in "${FRAMEWORK_TARGETS[@]}"; do
+    archive_target_tx "$txdir" "$target" "$FRAMEWORK_ROOT/$target" >/dev/null || {
+      rollback_transaction "$txdir"
+      finalize_transaction "$txdir" "failed" "failed"
+      rm -rf "$staging_dir"
+      die "Failed to archive $target/"
+    }
+  done
+
+  # Archive managed files
+  for mf in "${FRAMEWORK_MANAGED_FILES[@]}"; do
+    archive_target_tx "$txdir" "$mf" "$FRAMEWORK_ROOT/$mf" >/dev/null 2>&1 || true
+  done
+
+  # Prepare and activate each target
+  local activation_ok=true
+  for target in "${FRAMEWORK_TARGETS[@]}"; do
+    if [[ -d "$staged_framework/$target" ]]; then
+      local prepared
+      prepared="$(prepare_target_tx "$txdir" "$target" "$staged_framework/$target")" || {
+        activation_ok=false
+        break
+      }
+      activate_prepared_tx "$prepared" "$FRAMEWORK_ROOT/$target" "$txdir" "$target" || {
+        activation_ok=false
+        break
+      }
+    fi
+  done
+
+  if [[ "$activation_ok" == "false" ]]; then
+    rollback_transaction "$txdir"
+    finalize_transaction "$txdir" "failed" "activation_failed"
+    rm -rf "$staging_dir"
+    die "Activation failed. Original framework restored."
+  fi
+
+  # Activate managed files
+  for mf in "${FRAMEWORK_MANAGED_FILES[@]}"; do
+    if [[ -f "$staged_framework/$mf" ]]; then
+      cp -a "$staged_framework/$mf" "$FRAMEWORK_ROOT/$mf"
+    fi
+  done
+
+  # Update framework.json with new revision
+  if command -v jq >/dev/null 2>&1; then
+    local now_iso
+    now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
+    if [[ -n "$now_iso" ]]; then
+      local tmp_json
+      tmp_json="$(mktemp)"
+      if jq --arg ts "$now_iso" --arg rev "$pinned_commit" --arg ver "$staged_version" \
+        '.updated_at = $ts | .revision = $rev | .version = $ver' \
+        "$FRAMEWORK_JSON" > "$tmp_json" 2>/dev/null; then
+        mv -f "$tmp_json" "$FRAMEWORK_JSON"
+      else
+        rm -f "$tmp_json"
+      fi
+    fi
+  fi
+
+  rm -rf "$staging_dir"
+
+  # Record applied markers before migration
+  local pre_migrate_snapshot
+  pre_migrate_snapshot="$(mktemp -d)"
+  find "$MIGRATION_STATE_DIR" -maxdepth 1 -type f -name '*.sh' -exec cp {} "$pre_migrate_snapshot/" \; 2>/dev/null || true
+
+  write_transaction_state "$txdir" "phase=migration"
+  log "Running migrations..."
+
+  local migration_exit=0
+  local migration_runner="$FRAMEWORK_ROOT/bin/migrate.sh"
+  if [[ -f "$migration_runner" ]]; then
+    local migration_output
+    migration_output="$(bash "$migration_runner" --non-interactive 2>&1)" || migration_exit=$?
+    [[ "$quiet" == "false" && -n "$migration_output" ]] && echo "$migration_output" | sed 's/^/  /'
+  fi
+
+  if (( migration_exit != 0 )); then
+    # Determine which markers were introduced
+    local added_markers=""
+    while IFS= read -r -d '' f; do
+      local mname
+      mname="$(basename "$f")"
+      if [[ ! -f "$pre_migrate_snapshot/$mname" ]]; then
+        added_markers+="${added_markers:+$'\n'}${mname}"
+      fi
+    done < <(find "$MIGRATION_STATE_DIR" -maxdepth 1 -type f -name '*.sh' -print0 2>/dev/null || true)
+    rm -rf "$pre_migrate_snapshot"
+
+    # Record added markers in both transaction state and backup manifest
+    local added_markers_record
+    added_markers_record="$(printf '%s' "$added_markers" | tr '\n' '|')"
+    local _apply_backup _apply_commit
+    _apply_backup="$(read_tx_field "$txdir" "backup_dir" 2>/dev/null || true)"
+    _apply_commit="$(read_tx_field "$txdir" "staging_commit" 2>/dev/null || true)"
+    write_transaction_state "$txdir" \
+      "phase=migration_failed" \
+      "completion=migration_failed" \
+      "backup_dir=$_apply_backup" \
+      "staging_commit=$_apply_commit" \
+      "added_markers=$added_markers_record" \
+      "migration_exit=$migration_exit" \
+      "failure_reason=migration_exit_$migration_exit" \
+      "recovery_command=ahr update-framework --recover"
+    # Add added_markers to manifest (one per line)
+    local mf_tmp
+    mf_tmp="$(mktemp "$backup_dir/.manifest.tmp.XXXXXX")"
+    grep -v -F 'added_markers=' "$backup_dir/manifest.txt" > "$mf_tmp" || true
+    echo "added_markers=$added_markers_record" >> "$mf_tmp"
+    mv -f "$mf_tmp" "$backup_dir/manifest.txt"
+
+    log "Migration failed (exit $migration_exit). Framework activated but migrations incomplete."
+    log "Use --recover or --rollback to handle."
+    current_txdir=""
+    return 1
+  fi
+
+  # Compute added markers
+  local added_markers=""
+  while IFS= read -r -d '' f; do
+    local mname
+    mname="$(basename "$f")"
+    if [[ ! -f "$pre_migrate_snapshot/$mname" ]]; then
+      added_markers+="${added_markers:+$'\n'}${mname}"
+    fi
+  done < <(find "$MIGRATION_STATE_DIR" -maxdepth 1 -type f -name '*.sh' -print0 2>/dev/null || true)
+  rm -rf "$pre_migrate_snapshot"
+
+  local added_markers_record
+  added_markers_record="$(printf '%s' "$added_markers" | tr '\n' '|')"
+  local _hb _hc
+  _hb="$(read_tx_field "$txdir" "backup_dir" 2>/dev/null || true)"
+  _hc="$(read_tx_field "$txdir" "staging_commit" 2>/dev/null || true)"
+  write_transaction_state "$txdir" "phase=health_check" "backup_dir=$_hb" "staging_commit=$_hc" "added_markers=$added_markers_record"
+  # Update manifest with added_markers
+  local mf_tmp2
+  mf_tmp2="$(mktemp "$backup_dir/.manifest.tmp.XXXXXX")"
+  grep -v -F 'added_markers=' "$backup_dir/manifest.txt" > "$mf_tmp2" || true
+  echo "added_markers=$added_markers_record" >> "$mf_tmp2"
+  mv -f "$mf_tmp2" "$backup_dir/manifest.txt"
+
+  log "Running health checks..."
+  local doctor_exit=0
+  local doctor_cmd="$FRAMEWORK_ROOT/bin/ahr-doctor"
+  if [[ -f "$doctor_cmd" ]]; then
+    local doctor_output
+    doctor_output="$(bash "$doctor_cmd" 2>&1)" || doctor_exit=$?
+    [[ "$quiet" == "false" ]] && echo "$doctor_output"
+  else
+    doctor_exit=1
+  fi
+
+  local health_status="pass"
+  (( doctor_exit != 0 )) && health_status="activated_but_unhealthy"
+
+  local final_phase="complete"
+  (( doctor_exit != 0 )) && final_phase="health_check_failed"
+
+  if (( doctor_exit != 0 )); then
+    local _apply_backup _apply_commit
+    _apply_backup="$(read_tx_field "$txdir" "backup_dir" 2>/dev/null || true)"
+    _apply_commit="$(read_tx_field "$txdir" "staging_commit" 2>/dev/null || true)"
+    write_transaction_state "$txdir" \
+      "phase=health_check_failed" \
+      "completion=health_check_failed" \
+      "backup_dir=$_apply_backup" \
+      "staging_commit=$_apply_commit" \
+      "doctor_exit=$doctor_exit" \
+      "failure_reason=doctor_exit_$doctor_exit" \
+      "recovery_command=ahr update-framework --recover"
+  else
+    finalize_transaction "$txdir" "committed" "$final_phase"
+  fi
+
+  # Invalidate cache
+  invalidate_cache
+
+  if (( doctor_exit != 0 )); then
+    log ""
+    log "Framework updated but health checks reported issues."
+    log "Phase: $final_phase | Health: $health_status"
+    log "Use --recover or --rollback to handle."
+    current_txdir=""
+    return 1
+  fi
+
+  log ""
+  log "Framework successfully updated: $local_version → $staged_version"
+  current_txdir=""
+  return 0
+}
+
+# ── Rollback Mode ──────────────────────────────────────────────────
+
+cmd_rollback() {
+  mkdir -p "$STATE_ROOT" "$FRAMEWORK_TRANSACTIONS_DIR"
+  touch "$FRAMEWORK_LOG"
+  acquire_framework_lock
+
+  check_incomplete_transactions rollback || die "Incomplete transaction detected. Use --recover to handle it."
+
+  trap 'signal_handler EXIT' EXIT
+  trap 'signal_handler INT' INT
+  trap 'signal_handler TERM' TERM
+  trap 'signal_handler HUP' HUP
+
+  log_line "rollback: starting"
+
+  # Find the most recent valid backup
+  local latest_backup=""
+  local latest_ts=0
+  local bd
+  for bd in "$FRAMEWORK_BACKUPS_DIR"/*/; do
+    [[ -f "$bd/manifest.txt" ]] || continue
+    local mt
+    mt="$(grep -F 'completed=' "$bd/manifest.txt" 2>/dev/null | head -n1 | cut -d= -f2-)"
+    [[ "$mt" == "true" ]] || continue
+    local ts
+    ts="$(stat -c %Y "$bd" 2>/dev/null || echo 0)"
+    if (( ts > latest_ts )); then
+      latest_ts=$ts
+      latest_backup="${bd%/}"
+    fi
+  done
+
+  [[ -z "$latest_backup" ]] && die "No valid backup found. Cannot rollback."
+
+  # Validate backup path containment
+  if ! path_under "$latest_backup" "$FRAMEWORK_BACKUPS_DIR"; then
+    die "Backup path is outside expected backup root"
+  fi
+
+  log "Validating backup: $latest_backup"
+
+  # Prevalidate EVERYTHING before any mutation
+  local manifest="$latest_backup/manifest.txt"
+  [[ -f "$manifest" ]] || die "Backup manifest missing"
+
+  local mf_version
+  mf_version="$(grep -F 'manifest_version=' "$manifest" | head -n1 | cut -d= -f2-)"
+  [[ "$mf_version" == "1" ]] || die "Unsupported manifest version: $mf_version"
+
+  local mf_completed
+  mf_completed="$(grep -F 'completed=' "$manifest" | head -n1 | cut -d= -f2-)"
+  [[ "$mf_completed" == "true" ]] || die "Backup manifest incomplete"
+
+  # Verify all required targets exist in backup
+  local target
+  for target in "${FRAMEWORK_TARGETS[@]}"; do
+    [[ -d "$latest_backup/$target" ]] || die "Backup missing required target: $target/"
+  done
+  for mf in "${FRAMEWORK_MANAGED_FILES[@]}"; do
+    [[ -f "$latest_backup/$mf" ]] || die "Backup missing required file: $mf"
+  done
+
+  # Verify migration snapshots
+  [[ -d "$latest_backup/migration-snapshot" ]] || die "Backup missing migration snapshot"
+  [[ -d "$latest_backup/migration-snapshot/applied" ]] || die "Backup missing applied migration snapshot"
+  [[ -d "$latest_backup/migration-snapshot/skipped" ]] || die "Backup missing skipped migration snapshot"
+
+  # Read backup metadata
+  local prev_version prev_revision prev_channel prev_source
+  prev_version="$(grep -F 'previous_version=' "$manifest" | head -n1 | cut -d= -f2-)"
+  prev_revision="$(grep -F 'previous_revision=' "$manifest" | head -n1 | cut -d= -f2-)"
+  prev_channel="$(grep -F 'channel=' "$manifest" | head -n1 | cut -d= -f2-)"
+  prev_source="$(grep -F 'update_source=' "$manifest" | head -n1 | cut -d= -f2-)"
+
+  local current_version
+  current_version="$(read_json_value "$FRAMEWORK_JSON" "version")" || current_version="unknown"
+
+  log "Prevalidation passed. Restoring framework..."
+
+  # Find the failed apply transaction that created this backup
+  local failed_apply_tx=""
+  failed_apply_tx="$(find_resolved_apply_tx "$latest_backup")" || true
+
+  # If a failed apply exists, validate the tie
+  if [[ -n "$failed_apply_tx" ]]; then
+    local apply_backup apply_prev apply_commit
+    apply_backup="$(grep -F 'backup_dir=' "$failed_apply_tx/state" | head -n1 | cut -d= -f2-)"
+    apply_prev="$(grep -F 'previous_version=' "$failed_apply_tx/state" | head -n1 | cut -d= -f2-)"
+    apply_commit="$(grep -F 'staging_commit=' "$failed_apply_tx/state" | head -n1 | cut -d= -f2-)"
+
+    if [[ "$apply_backup" != "$latest_backup" ]]; then
+      die "Failed-apply transaction backup ($apply_backup) does not match rollback backup ($latest_backup)"
+    fi
+    if [[ "$apply_prev" != "$prev_version" ]]; then
+      die "Failed-apply previous version ($apply_prev) does not match manifest ($prev_version)"
+    fi
+    if [[ -n "$prev_revision" && "$prev_revision" != "null" && "$apply_commit" != "$prev_revision" ]]; then
+      die "Failed-apply commit ($apply_commit) does not match manifest revision ($prev_revision)"
+    fi
+    log "Rollback is resolving failed apply transaction: $(basename "$failed_apply_tx")"
+  fi
+
+  # Create transaction for the rollback
+  local txdir
+  txdir="$(create_transaction "rollback" "$prev_version" "$current_version" "$prev_revision" "$latest_backup")"
+  current_txdir="$txdir"
+  # Link the rollback to the failed apply if found
+  if [[ -n "$failed_apply_tx" ]]; then
+    write_transaction_state "$txdir" \
+      "phase=rollback_in_progress" \
+      "resolved_apply_txid=$(basename "$failed_apply_tx")" \
+      "resolved_apply_backup=$apply_backup"
+  else
+    write_transaction_state "$txdir" "phase=rollback_in_progress"
+  fi
+
+  # Archive current installed targets
+  for target in "${FRAMEWORK_TARGETS[@]}"; do
+    archive_target_tx "$txdir" "$target" "$FRAMEWORK_ROOT/$target" >/dev/null 2>&1 || true
+  done
+  for mf in "${FRAMEWORK_MANAGED_FILES[@]}"; do
+    archive_target_tx "$txdir" "$mf" "$FRAMEWORK_ROOT/$mf" >/dev/null 2>&1 || true
+  done
+
+  # Restore targets from backup
+  local rollback_ok=true
+  for target in "${FRAMEWORK_TARGETS[@]}"; do
+    if [[ -d "$latest_backup/$target" ]]; then
+      log "  Restoring: $target/"
+      rm -rf "$FRAMEWORK_ROOT/$target"
+      cp -a "$latest_backup/$target" "$FRAMEWORK_ROOT/$target" || {
+        log "  Failed to restore: $target/"
+        rollback_ok=false
+        break
+      }
+    fi
+  done
+
+  if [[ "$rollback_ok" == "false" ]]; then
+    rollback_transaction "$txdir"
+    finalize_transaction "$txdir" "failed" "rollback_failed"
+    die "Rollback failed during target restore. Original backup at: $latest_backup"
+  fi
+
+  # Restore managed files
+  for mf in "${FRAMEWORK_MANAGED_FILES[@]}"; do
+    if [[ -f "$latest_backup/$mf" ]]; then
+      log "  Restored: $mf"
+      cp -a "$latest_backup/$mf" "$FRAMEWORK_ROOT/$mf"
+    fi
+  done
+
+  # Restore migration state EXACTLY from snapshot
+  restore_migration_state "$latest_backup/migration-snapshot" || {
+    rollback_transaction "$txdir"
+    finalize_transaction "$txdir" "failed" "rollback_failed"
+    die "Failed to restore migration state"
+  }
+
+  log "Framework files and migration state restored"
+
+  # Restore managed-derived components
+  for comp in "${FRAMEWORK_DERIVED_COMPONENTS[@]}"; do
+    local comp_name comp_subpath comp_shape
+    comp_name="$(echo "$comp" | cut -d'|' -f1)"
+    comp_subpath="$(echo "$comp" | cut -d'|' -f2)"
+    comp_shape="$(echo "$comp" | cut -d'|' -f3)"
+    case "$comp_shape" in
+      file)
+        [[ -f "$latest_backup/derived-$comp_name" ]] || die "Backup missing component file: $comp_name"
+        cp -a "$latest_backup/derived-$comp_name" "$FRAMEWORK_ROOT/$comp_subpath"
+        ;;
+      directory)
+        [[ -d "$latest_backup/derived-$comp_name" ]] || continue
+        rm -rf "$FRAMEWORK_ROOT/$comp_subpath"
+        cp -a "$latest_backup/derived-$comp_name" "$FRAMEWORK_ROOT/$comp_subpath"
+        ;;
+      manifest)
+        [[ -f "$latest_backup/derived-$comp_name" ]] || die "Backup missing namespace manifest"
+        restore_namespace_links "$latest_backup/derived-$comp_name" || die "Failed to restore namespace links"
+        ;;
+      state)
+        : # Restored by restore_migration_state above.
+        ;;
+    esac
+  done
+
+  # Run post-rollback health check
+  write_transaction_state "$txdir" "phase=health_check"
+  log "Running health checks..."
+  local doctor_exit=0
+  local doctor_cmd="$FRAMEWORK_ROOT/bin/ahr-doctor"
+  if [[ -f "$doctor_cmd" ]]; then
+    local doctor_output
+    doctor_output="$(bash "$doctor_cmd" 2>&1)" || doctor_exit=$?
+    [[ "$quiet" == "false" ]] && echo "$doctor_output"
+  else
+    doctor_exit=1
+  fi
+
+  local health_status="pass"
+  (( doctor_exit != 0 )) && health_status="rollback_unhealthy"
+
+  local final_phase="rollback_complete"
+  (( doctor_exit != 0 )) && final_phase="rollback_failed"
+
+  if (( doctor_exit != 0 )); then
+    write_transaction_state "$txdir" \
+      "phase=health_check_failed" \
+      "completion=health_check_failed" \
+      "doctor_exit=$doctor_exit" \
+      "failure_reason=rollback_doctor_exit_$doctor_exit"
+  else
+    finalize_transaction "$txdir" "rolled_back" "$final_phase"
+  fi
+  invalidate_cache
+
+  if (( doctor_exit != 0 )); then
+    log "Rollback completed but health checks reported issues."
+    current_txdir=""
+    return 1
+  fi
+
+  # Mark the resolved apply transaction as terminal
+  if [[ -n "$failed_apply_tx" ]]; then
+    finalize_transaction "$failed_apply_tx" "resolved_by_rollback" "resolved_by_rollback"
+    log "Original failed apply resolved by rollback: $(basename "$failed_apply_tx")"
+  fi
+
+  log "Framework rolled back: → $prev_version"
+  current_txdir=""
+  return 0
+}
+
+# ── Recover Mode ───────────────────────────────────────────────────
+
+# Find the most recent failed apply transaction whose backup matches the given path.
+# Prints the txdir path if found, empty if not.
+find_resolved_apply_tx() {
+  local backup_dir="$1"
+  [[ -d "$FRAMEWORK_TRANSACTIONS_DIR" ]] || return 1
+  local latest_ts=0 found=""
+  local txdir
+  for txdir in "$FRAMEWORK_TRANSACTIONS_DIR"/*/; do
+    [[ -d "$txdir" ]] || continue
+    local state_file="$txdir/state"
+    [[ -f "$state_file" ]] || continue
+    local action completion tx_backup
+    action="$(grep -F 'action=' "$state_file" | head -n1 | cut -d= -f2-)"
+    completion="$(grep -F 'completion=' "$state_file" | head -n1 | cut -d= -f2-)"
+    tx_backup="$(grep -F 'backup_dir=' "$state_file" | head -n1 | cut -d= -f2-)"
+    [[ "$action" == "apply" ]] || continue
+    # Only resolve terminal failed states, not in-progress
+    case "$completion" in
+      in_progress|committed|rolled_back|recovered|abandoned|resolved_by_rollback) continue ;;
+      *) ;;
+    esac
+    [[ "$tx_backup" == "$backup_dir" ]] || continue
+    local ts
+    ts="$(stat -c %Y "$txdir/state" 2>/dev/null || echo 0)"
+    if (( ts > latest_ts )); then
+      latest_ts=$ts
+      found="$txdir"
+    fi
+  done
+  [[ -n "$found" ]] && echo "$found"
+}
+
+check_incomplete_transactions() {
+  local requested_action="${1:-apply}"
+  [[ -d "$FRAMEWORK_TRANSACTIONS_DIR" ]] || return 0
+  local txdir
+  for txdir in "$FRAMEWORK_TRANSACTIONS_DIR"/*/; do
+    [[ -d "$txdir" ]] || continue
+    local state_file="$txdir/state"
+    [[ -f "$state_file" ]] || continue
+
+    local completion phase action
+    completion="$(grep -F 'completion=' "$state_file" | head -n1 | cut -d= -f2-)"
+    phase="$(grep -F 'phase=' "$state_file" | head -n1 | cut -d= -f2-)"
+    action="$(grep -F 'action=' "$state_file" | head -n1 | cut -d= -f2-)"
+
+    case "$completion" in
+      committed|rolled_back|recovered|abandoned|resolved_by_rollback) continue ;;
+      in_progress|migration_failed|health_check_failed|recovery_failed|failed|*) ;;
+    esac
+    # Explicit rollback is the supported resolution path for a failed apply.
+    # It must not bypass an unresolved rollback transaction.
+    if [[ "$requested_action" == "rollback" ]] && [[ "$action" == "apply" ]]; then
+      continue
+    fi
+    echo "INCOMPLETE OR CORRUPT TRANSACTION FOUND:" >&2
+    echo "  Transaction: $txdir" >&2
+    echo "  Phase: $phase" >&2
+    echo "  Action: $action" >&2
+    echo "  Version: $(grep -F 'target_version=' "$state_file" | head -n1 | cut -d= -f2-)" >&2
+    echo "  Commit: $(grep -F 'staging_commit=' "$state_file" | head -n1 | cut -d= -f2-)" >&2
+    echo "  Target: $(grep -F 'current_target=' "$state_file" | head -n1 | cut -d= -f2-)" >&2
+    echo "  Backup: $(grep -F 'backup_dir=' "$state_file" | head -n1 | cut -d= -f2-)" >&2
+    echo "  Recovery: Run \`ahr update-framework --recover\` to complete or restore." >&2
+    return 1
+  done
+  return 0
+}
+
+cmd_recover() {
+  mkdir -p "$STATE_ROOT" "$FRAMEWORK_TRANSACTIONS_DIR"
+  acquire_framework_lock
+
+  log "Scanning for incomplete transactions..."
+
+  local found_tx=""
+  local txdir
+  for txdir in "$FRAMEWORK_TRANSACTIONS_DIR"/*/; do
+    [[ -d "$txdir" ]] || continue
+    local state_file="$txdir/state"
+    [[ -f "$state_file" ]] || continue
+    local completion
+    completion="$(grep -F 'completion=' "$state_file" | head -n1 | cut -d= -f2-)"
+    case "$completion" in
+      committed|rolled_back|recovered|abandoned) continue ;;
+      *) found_tx="$txdir"; break ;;
+    esac
+  done
+
+  if [[ -z "$found_tx" ]]; then
+    log "No incomplete transactions found."
+    return 0
+  fi
+
+  log "Recovering transaction: $found_tx"
+  current_txdir="$found_tx"
+
+  # Determine phase
+  local phase
+  phase="$(read_tx_field "$found_tx" "phase")"
+
+  if [[ "$phase" == "activation_in_progress" ]]; then
+    # Reverse-order restore from transaction archives
+    log "Restoring from transaction archives..."
+    rollback_transaction "$found_tx"
+    finalize_transaction "$found_tx" "recovered" "recovered"
+    log "Recovery complete. Framework restored to pre-update state."
+    current_txdir=""
+    return 0
+  elif [[ "$phase" == "backup_in_progress" ]]; then
+    # Backup was created but activation never started — just clean up
+    log "Incomplete backup detected. No activation to reverse."
+    finalize_transaction "$found_tx" "recovered" "recovered"
+    current_txdir=""
+    return 0
+  elif [[ "$phase" == "migration_failed" || "$phase" == "health_check_failed" ]]; then
+    log "Transaction reached framework activation but failed in $phase."
+    log "Recovery does not erase this failure. Run: ahr update-framework --rollback"
+    current_txdir=""
+    return 1
+  else
+    log "Transaction in phase '$phase'. Attempting recovery..."
+    rollback_transaction "$found_tx"
+    finalize_transaction "$found_tx" "recovered" "recovered"
+    current_txdir=""
+    return 0
   fi
 }
 
 # ── Main ───────────────────────────────────────────────────────────
 
 case "$mode" in
-  status) cmd_status ;;
-  check)  cmd_check  ;;
+  status)   cmd_status ;;
+  check)    cmd_check ;;
+  dry-run)  cmd_dry_run ;;
+  apply)    cmd_apply ;;
+  rollback) cmd_rollback ;;
+  recover)  cmd_recover ;;
 esac

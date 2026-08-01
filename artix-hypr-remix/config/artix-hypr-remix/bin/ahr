@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Use the canonical installed root. Namespace commands are symlinks under
+# ~/.local/bin, so dirname(BASH_SOURCE[0]) is not necessarily the framework.
+SCRIPT_DIR="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/bin"
 
 exec_ahr_command() {
   local command_name="$1"
@@ -42,7 +44,8 @@ Commands:
   list-backups        List config backups created by installer phase 4
   update              System + AUR update helper
   update-available    Check whether updates are available (for status bars)
-  update-framework    Check for framework version updates (apply not yet implemented)
+  update-framework    Check, stage, and apply framework version updates
+  restore-component   Restore a supported managed component from a backup
   repair              Check and apply safe framework repairs
   doctor              Run installed-framework health checks
   voxtype-model       Open voxtype model setup
@@ -94,6 +97,7 @@ dispatch() {
     update) exec_ahr_command ahr-update "$@" ;;
     update-available) exec_ahr_command ahr-update-available "$@" ;;
     update-framework) exec_ahr_command ahr-update-framework "$@" ;;
+    restore-component) exec_ahr_command ahr-restore-component "$@" ;;
     status) exec_ahr_command ahr-status "$@" ;;
     list-backups) exec_ahr_command ahr-list-backups "$@" ;;
     repair) exec_ahr_command ahr-repair "$@" ;;
@@ -139,6 +143,7 @@ dispatch() {
         "ahr-update" \
         "ahr-update-available" \
         "ahr-update-framework" \
+        "ahr-restore-component" \
         "ahr-status" \
         "ahr-list-backups" \
         "ahr-repair" \

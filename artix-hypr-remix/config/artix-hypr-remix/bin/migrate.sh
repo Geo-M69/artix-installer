@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FRAMEWORK_ROOT="$HOME/.config/artix-hypr-remix"
+FRAMEWORK_ROOT="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}"
 MIGRATION_DIR="$FRAMEWORK_ROOT/migrations"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/migrations"
 SKIPPED_DIR="$STATE_DIR/skipped"
