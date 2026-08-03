@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+LIB_PATH="${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "$LIB_PATH"
+backup_lib="${AHR_BACKUP_HELPER_PATH:-$(dirname "$LIB_PATH")/ahr-backup-helper.sh}"
+[[ -f "$backup_lib" ]] && source "$backup_lib"
 
 SHELL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/artix-hypr-remix/env"
 
@@ -39,6 +42,17 @@ if ! ahr_has_cmd "$editor_cmd"; then
 fi
 
 mkdir -p "$(dirname "$SHELL_CONFIG")"
+if [[ -f "$SHELL_CONFIG" ]]; then
+  declare -F ahr_backup_before_edit >/dev/null || {
+    echo "Error: Unable to back up $SHELL_CONFIG; refusing to modify it" >&2
+    exit 1
+  }
+  ahr_backup_before_edit "$SHELL_CONFIG" 2>/dev/null || {
+    echo "Error: Unable to back up $SHELL_CONFIG; refusing to modify it" >&2
+    exit 1
+  }
+fi
+
 if grep -qs '^export EDITOR=' "$SHELL_CONFIG" 2>/dev/null; then
   sed -i "s|^export EDITOR=.*|export EDITOR=$editor_cmd|" "$SHELL_CONFIG"
 else

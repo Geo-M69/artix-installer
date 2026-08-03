@@ -34,6 +34,10 @@ source "$LIB_PATH"
 # ~/.local/bin symlinks never source libraries from the namespace directory.
 # shellcheck source=ahr-version.sh
 source "${AHR_VERSION_LIB_PATH:-$(dirname "$LIB_PATH")/ahr-version.sh}"
+# shellcheck source=ahr-cache.sh
+source "${AHR_CACHE_LIB_PATH:-$(dirname "$LIB_PATH")/ahr-cache.sh}"
+# shellcheck source=ahr-backup-helper.sh
+source "${AHR_BACKUP_HELPER_PATH:-$(dirname "$LIB_PATH")/ahr-backup-helper.sh}"
 FRAMEWORK_JSON="$FRAMEWORK_ROOT/framework.json"
 STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
 CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/artix-hypr-remix"
@@ -51,7 +55,6 @@ MIGRATION_SKIPPED_DIR="$MIGRATION_STATE_DIR/skipped"
 # Cache is invalid; apply and rollback always do a fresh authoritative clone.
 # We keep a single file for status/check with a strict atomic record.
 FRAMEWORK_CACHE="$CACHE_ROOT/framework-remote.cache"
-FRAMEWORK_CACHE_TTL=900
 
 # Managed framework targets replaced atomically during activation.
 FRAMEWORK_TARGETS=(bin migrations docs hooks first-run.d default)
@@ -81,17 +84,48 @@ FRAMEWORK_DERIVED_COMPONENTS=(
   "theme-state|current|directory|true|false"
 )
 
-# Required scripts that must exist and be executable in the staged framework.
-REQUIRED_STAGED_SCRIPTS=(
+# Components considered for the pre-activation component manifest.
+# Format: component|source|shape|required|ownership|restore_policy
+FRAMEWORK_COMPONENT_SNAPSHOTS=(
+  "theme-state|$FRAMEWORK_ROOT/current|directory|true|framework-owned|full-replace"
+  "background-state|$FRAMEWORK_ROOT/current/background|symlink|true|framework-owned|full-replace"
+  "active-theme|$FRAMEWORK_ROOT/current/theme.name|file|true|framework-owned|full-replace"
+  "waybar-theme|$HOME/.config/waybar/style.css|file|false|managed-derived|full-replace"
+  "mako-theme|$HOME/.config/mako/config|file|false|managed-derived|full-replace"
+  "terminal-theme|$HOME/.config/ghostty/config|file|false|managed-derived|full-replace"
+  "foot-theme|$HOME/.config/foot/foot.ini|file|false|managed-derived|full-replace"
+  "fontconfig|$HOME/.config/fontconfig/fonts.conf|file|false|managed-derived|full-replace"
+  "chromium-theme|$HOME/.config/chromium/Default/Preferences|structured-file|false|managed-derived|unsupported"
+  "vscode-theme|$HOME/.config/Code/User/settings.json|structured-file|false|managed-derived|unsupported"
+  "cursor-theme|$HOME/.config/Cursor/User/settings.json|structured-file|false|managed-derived|unsupported"
+  "opencode-theme|$HOME/.config/opencode/opencode.jsonc|structured-file|false|managed-derived|unsupported"
+  "toggle-state|$STATE_ROOT/toggles|directory|false|framework-owned|unsupported"
+  "compat-symlink|$HOME/.config/omarchy/current|symlink|false|framework-owned|full-replace"
+)
+
+# Required command entrypoints that must exist and be executable in the staged framework.
+REQUIRED_STAGED_COMMANDS=(
   bin/ahr
   bin/ahr-update-framework
   bin/ahr-update
   bin/ahr-update-available
+  bin/ahr-restore-component
+  bin/namespace-install.sh
+  bin/ahr-doctor
+  bin/migrate.sh
+  bin/ahr-validate-managed-paths.sh
+)
+
+# Required sourced libraries must be readable, but do not need executable bits.
+REQUIRED_STAGED_LIBRARIES=(
   bin/ahr-lib.sh
   bin/ahr-version.sh
   bin/ahr-cache.sh
-  bin/migrate.sh
-  bin/namespace-install.sh
+  bin/ahr-backup-helper.sh
+  bin/ahr-managed-paths.sh
+  bin/ahr-theme-lib.sh
+  bin/ahr-toggle-lib.sh
+  bin/ahr-font-lib.sh
 )
 
 lock_mode=""
@@ -291,40 +325,6 @@ read_json_value() {
   sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$json" 2>/dev/null | head -n1
 }
 
-# ── Cache (atomic, version+commit binding) ─────────────────────────
-
-write_cache() {
-  local version="$1" source="$2" channel="$3" commit="$4"
-  mkdir -p "$(dirname "$FRAMEWORK_CACHE")"
-  local tmp
-  tmp="$(mktemp "${FRAMEWORK_CACHE}.tmp.XXXXXX")"
-  chmod 600 "$tmp"
-  {
-    echo "timestamp=$(date +%s 2>/dev/null || echo 0)"
-    echo "source=$source"
-    echo "channel=$channel"
-    echo "version=$version"
-    echo "commit=$commit"
-  } > "$tmp"
-  mv -f "$tmp" "$FRAMEWORK_CACHE"
-}
-
-read_cache() {
-  [[ -f "$FRAMEWORK_CACHE" ]] || return 1
-  local ts src ch ver co
-  ts="$(grep -F 'timestamp=' "$FRAMEWORK_CACHE" 2>/dev/null | head -n1 | cut -d= -f2)"
-  src="$(grep -F 'source=' "$FRAMEWORK_CACHE" 2>/dev/null | head -n1 | cut -d= -f2)"
-  ch="$(grep -F 'channel=' "$FRAMEWORK_CACHE" 2>/dev/null | head -n1 | cut -d= -f2)"
-  ver="$(grep -F 'version=' "$FRAMEWORK_CACHE" 2>/dev/null | head -n1 | cut -d= -f2)"
-  co="$(grep -F 'commit=' "$FRAMEWORK_CACHE" 2>/dev/null | head -n1 | cut -d= -f2)"
-  [[ -n "$ver" && -n "$co" && -n "$src" && -n "$ch" ]] || return 1
-  echo "$ver|$co|$src|$ch|$ts"
-}
-
-invalidate_cache() {
-  rm -f "$FRAMEWORK_CACHE"
-}
-
 # ── Locking ─────────────────────────────────────────────────────────
 
 cleanup_lock() {
@@ -402,7 +402,13 @@ snapshot_migration_state() {
 }
 
 # Restore migration state exactly from a snapshot.
-# Replaces applied and skipped marker directories atomically.
+# Uses a transactional archive-replace-commit pattern:
+#   1. Validate the snapshot.
+#   2. Prepare a complete replacement directory.
+#   3. Archive the current marker directory.
+#   4. Rename the prepared directory into place.
+#   5. Remove the archive only after successful replacement.
+#   6. Restore the archive on any failure.
 restore_migration_state() {
   local snapshot_dir="$1"
 
@@ -414,7 +420,7 @@ restore_migration_state() {
     exec 8>"$MIGRATION_STATE_DIR/migrate.lock"
     flock -n 8 || { echo "Another migration run is in progress." >&2; return 1; }
   else
-    mkdir "$MIGRATION_STATE_DIR/.restore-migrate.lock" 2>/dev/null || { echo "Another migration run is in progress." >&2; return 1; }
+    mkdir "$MIGRATION_STATE_DIR/.migrate.lock" 2>/dev/null || { echo "Another migration run is in progress." >&2; return 1; }
   fi
 
   if [[ ! -d "$snapshot_dir" ]]; then
@@ -424,36 +430,131 @@ restore_migration_state() {
   # Ensure migration state directory exists
   mkdir -p "$MIGRATION_STATE_DIR"
 
-  # Restore applied markers atomically
+  # ── Step 1 & 2: Prepare replacement directories from snapshot ──
+  local prepared_applied="" prepared_skipped=""
+
   if [[ -d "$snapshot_dir/applied" ]]; then
-    local tmp_applied
-    tmp_applied="$(mktemp -d "$MIGRATION_STATE_DIR/.applied.XXXXXX")"
-    find "$snapshot_dir/applied" -maxdepth 1 -type f -exec cp -a {} "$tmp_applied/" \; 2>/dev/null || true
-    # Remove old applied markers (keep only the directory itself)
-    find "$MIGRATION_STATE_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
-    mv -f "$tmp_applied"/* "$MIGRATION_STATE_DIR/" 2>/dev/null || true
-    rmdir "$tmp_applied" 2>/dev/null || true
-  else
-    find "$MIGRATION_STATE_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+    prepared_applied="$(mktemp -d "$MIGRATION_STATE_DIR/.prepared-applied.XXXXXX")"
+    find "$snapshot_dir/applied" -maxdepth 1 -type f -exec cp -a {} "$prepared_applied/" \; 2>/dev/null || {
+      rm -rf "$prepared_applied"
+      if ! command -v flock >/dev/null 2>&1; then
+        rmdir "$MIGRATION_STATE_DIR/.migrate.lock" 2>/dev/null || true
+      fi
+      return 1
+    }
   fi
 
-  # Restore skipped markers atomically
   if [[ -d "$snapshot_dir/skipped" ]]; then
-    mkdir -p "$MIGRATION_SKIPPED_DIR"
-    local tmp_skipped
-    tmp_skipped="$(mktemp -d "$MIGRATION_SKIPPED_DIR/.skipped.XXXXXX")"
-    find "$snapshot_dir/skipped" -maxdepth 1 -type f -exec cp -a {} "$tmp_skipped/" \; 2>/dev/null || true
-    find "$MIGRATION_SKIPPED_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
-    mv -f "$tmp_skipped"/* "$MIGRATION_SKIPPED_DIR/" 2>/dev/null || true
-    rmdir "$tmp_skipped" 2>/dev/null || true
-  else
-    mkdir -p "$MIGRATION_SKIPPED_DIR"
-    find "$MIGRATION_SKIPPED_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+    prepared_skipped="$(mktemp -d "$MIGRATION_STATE_DIR/.prepared-skipped.XXXXXX")"
+    find "$snapshot_dir/skipped" -maxdepth 1 -type f -exec cp -a {} "$prepared_skipped/" \; 2>/dev/null || {
+      rm -rf "$prepared_applied" "$prepared_skipped"
+      if ! command -v flock >/dev/null 2>&1; then
+        rmdir "$MIGRATION_STATE_DIR/.migrate.lock" 2>/dev/null || true
+      fi
+      return 1
+    }
   fi
+
+  # ── Step 3: Archive current markers ──
+  local archived_applied="" archived_skipped=""
+
+  if [[ -d "$MIGRATION_STATE_DIR" ]]; then
+    archived_applied="$(mktemp -d "$MIGRATION_STATE_DIR/.archived-applied.XXXXXX")"
+    find "$MIGRATION_STATE_DIR" -maxdepth 1 -type f -exec cp -a {} "$archived_applied/" \; 2>/dev/null || {
+      rm -rf "$prepared_applied" "$prepared_skipped" "$archived_applied"
+      if ! command -v flock >/dev/null 2>&1; then
+        rmdir "$MIGRATION_STATE_DIR/.migrate.lock" 2>/dev/null || true
+      fi
+      return 1
+    }
+  fi
+
+  if [[ -d "$MIGRATION_SKIPPED_DIR" ]]; then
+    archived_skipped="$(mktemp -d "$MIGRATION_STATE_DIR/.archived-skipped.XXXXXX")"
+    find "$MIGRATION_SKIPPED_DIR" -maxdepth 1 -type f -exec cp -a {} "$archived_skipped/" \; 2>/dev/null || {
+      rm -rf "$prepared_applied" "$prepared_skipped" "$archived_applied" "$archived_skipped"
+      if ! command -v flock >/dev/null 2>&1; then
+        rmdir "$MIGRATION_STATE_DIR/.migrate.lock" 2>/dev/null || true
+      fi
+      return 1
+    }
+  fi
+
+  # ── Step 4: Rename prepared directories into place ──
+  local replace_ok=true
+
+  # Replace applied markers: clear current, rename prepared into place
+  find "$MIGRATION_STATE_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+  if [[ -n "$prepared_applied" ]]; then
+    local applied_files
+    applied_files="$(find "$prepared_applied" -maxdepth 1 -type f 2>/dev/null | wc -l)"
+    if (( applied_files > 0 )); then
+      if ! cp -a "$prepared_applied"/* "$MIGRATION_STATE_DIR/" 2>/dev/null; then
+        replace_ok=false
+      fi
+    fi
+    [[ -d "$prepared_applied" ]] && rm -rf "$prepared_applied" 2>/dev/null || true
+  fi
+
+  # Replace skipped markers: clear current, rename prepared into place
+  if [[ "$replace_ok" == "true" ]]; then
+    mkdir -p "$MIGRATION_SKIPPED_DIR"
+    find "$MIGRATION_SKIPPED_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+    if [[ -n "$prepared_skipped" ]]; then
+      local skipped_files
+      skipped_files="$(find "$prepared_skipped" -maxdepth 1 -type f 2>/dev/null | wc -l)"
+      if (( skipped_files > 0 )); then
+        if ! cp -a "$prepared_skipped"/* "$MIGRATION_SKIPPED_DIR/" 2>/dev/null; then
+          replace_ok=false
+        fi
+      fi
+      [[ -d "$prepared_skipped" ]] && rm -rf "$prepared_skipped" 2>/dev/null || true
+    fi
+  fi
+
+  # ── Step 5 or 6: Commit or restore ──
+  if [[ "$replace_ok" == "true" ]]; then
+    # Success: remove archives
+    [[ -n "$archived_applied" ]] && rm -rf "$archived_applied"
+    [[ -n "$archived_skipped" ]] && rm -rf "$archived_skipped"
+    if ! command -v flock >/dev/null 2>&1; then
+      rmdir "$MIGRATION_STATE_DIR/.migrate.lock" 2>/dev/null || true
+    fi
+    return 0
+  fi
+
+  # Failure: restore from archives
+  # Restore applied markers from archive
+  find "$MIGRATION_STATE_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+  if [[ -n "$archived_applied" && -d "$archived_applied" ]]; then
+    local restore_applied_files
+    restore_applied_files="$(find "$archived_applied" -maxdepth 1 -type f 2>/dev/null | wc -l)"
+    if (( restore_applied_files > 0 )); then
+      cp -a "$archived_applied"/* "$MIGRATION_STATE_DIR/" 2>/dev/null || true
+    fi
+    rm -rf "$archived_applied" 2>/dev/null || true
+  fi
+
+  # Restore skipped markers from archive
+  mkdir -p "$MIGRATION_SKIPPED_DIR"
+  find "$MIGRATION_SKIPPED_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+  if [[ -n "$archived_skipped" && -d "$archived_skipped" ]]; then
+    local restore_skipped_files
+    restore_skipped_files="$(find "$archived_skipped" -maxdepth 1 -type f 2>/dev/null | wc -l)"
+    if (( restore_skipped_files > 0 )); then
+      cp -a "$archived_skipped"/* "$MIGRATION_SKIPPED_DIR/" 2>/dev/null || true
+    fi
+    rm -rf "$archived_skipped" 2>/dev/null || true
+  fi
+
+  # Clean up any remaining prepared directories
+  [[ -n "$prepared_applied" ]] && rm -rf "$prepared_applied" 2>/dev/null || true
+  [[ -n "$prepared_skipped" ]] && rm -rf "$prepared_skipped" 2>/dev/null || true
 
   if ! command -v flock >/dev/null 2>&1; then
-    rmdir "$MIGRATION_STATE_DIR/.restore-migrate.lock" 2>/dev/null || true
+    rmdir "$MIGRATION_STATE_DIR/.migrate.lock" 2>/dev/null || true
   fi
+  return 1
 }
 
 # Snapshot only namespace links owned by AHR. Never copy unrelated user files
@@ -557,6 +658,44 @@ validate_staged_framework() {
     errors=$((errors + 1))
   }
 
+  _vf_path_inside_staging() {
+    local candidate="$1" label="$2" rel="$3"
+    local resolved
+    resolved="$(readlink -f "$candidate" 2>/dev/null)" || {
+      _vf_err "Broken symlink for required $label: $rel"
+      return 1
+    }
+    case "$resolved" in
+      "$staged_dir"/*) ;;
+      *)
+        _vf_err "Symlink for required $label escapes staging: $rel"
+        return 1
+        ;;
+    esac
+    return 0
+  }
+
+  _vf_shell_syntax_check() {
+    local candidate="$1" label="$2" rel="$3"
+    local shebang=""
+
+    if [[ "$rel" == *.sh ]]; then
+      if ! bash -n "$candidate" 2>/dev/null; then
+        _vf_err "Shell syntax error in required $label: $rel"
+      fi
+      return 0
+    fi
+
+    shebang="$(head -n1 "$candidate" 2>/dev/null || true)"
+    case "$shebang" in
+      '#!'*'bash'|'#!'*'sh')
+        if ! bash -n "$candidate" 2>/dev/null; then
+          _vf_err "Shell syntax error in required $label: $rel"
+        fi
+        ;;
+    esac
+  }
+
   # ── Metadata validation ──
   local fw_json="$staged_dir/framework.json"
   [[ -f "$fw_json" ]] || { _vf_err "Missing framework.json"; return 1; }
@@ -594,31 +733,47 @@ validate_staged_framework() {
     fi
   done
 
-  # ── Required scripts ──
-  local script
-  for script in "${REQUIRED_STAGED_SCRIPTS[@]}"; do
-    local script_path="$staged_dir/$script"
-    if [[ ! -e "$script_path" ]]; then
-      _vf_err "Missing required script: $script"
+  # ── Required executable commands ──
+  local command_rel
+  for command_rel in "${REQUIRED_STAGED_COMMANDS[@]}"; do
+    local command_path="$staged_dir/$command_rel"
+    if [[ ! -e "$command_path" ]]; then
+      _vf_err "Missing required executable command: $command_rel"
       continue
     fi
-    if [[ -d "$script_path" ]] && [[ ! -L "$script_path" ]]; then
-      _vf_err "Required script is a directory: $script"
+    if [[ -L "$command_path" ]]; then
+      _vf_path_inside_staging "$command_path" "executable command" "$command_rel" || continue
+    fi
+    if [[ ! -f "$command_path" ]]; then
+      _vf_err "Required executable command is not a regular file: $command_rel"
       continue
     fi
-    if [[ -L "$script_path" ]]; then
-      local link_target
-      link_target="$(readlink -f "$script_path" 2>/dev/null)" || {
-        _vf_err "Broken symlink for required script: $script"
-        continue
-      }
-      case "$link_target" in
-        "$staged_dir"/*) ;;
-        *) _vf_err "Symlink for required script escapes staging: $script" ;;
-      esac
-    elif [[ ! -x "$script_path" ]]; then
-      _vf_err "Required script not executable: $script"
+    if [[ ! -x "$command_path" ]]; then
+      _vf_err "Required executable command not executable: $command_rel"
     fi
+    _vf_shell_syntax_check "$command_path" "executable command" "$command_rel"
+  done
+
+  # ── Required readable sourced libraries ──
+  local library_rel
+  for library_rel in "${REQUIRED_STAGED_LIBRARIES[@]}"; do
+    local library_path="$staged_dir/$library_rel"
+    if [[ ! -e "$library_path" ]]; then
+      _vf_err "Missing required sourced library: $library_rel"
+      continue
+    fi
+    if [[ -L "$library_path" ]]; then
+      _vf_path_inside_staging "$library_path" "sourced library" "$library_rel" || continue
+    fi
+    if [[ ! -f "$library_path" ]]; then
+      _vf_err "Required sourced library is not a regular file: $library_rel"
+      continue
+    fi
+    if [[ ! -r "$library_path" ]]; then
+      _vf_err "Required sourced library not readable: $library_rel"
+      continue
+    fi
+    _vf_shell_syntax_check "$library_path" "sourced library" "$library_rel"
   done
 
   # ── Recursive full-tree validation ──
@@ -682,6 +837,47 @@ validate_staged_framework() {
   return 0
 }
 
+validate_component_manifest() {
+  local manifest="$1"
+  [[ -f "$manifest" ]] || return 1
+
+  local -A seen=()
+  local line component="" source_path="" snapshot_path="" shape="" required="" ownership="" restore_policy="" snapshot_status=""
+  local records=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      component=*) component="${line#component=}" ;;
+      source_path=*) source_path="${line#source_path=}" ;;
+      snapshot_path=*) snapshot_path="${line#snapshot_path=}" ;;
+      shape=*) shape="${line#shape=}" ;;
+      required=*) required="${line#required=}" ;;
+      ownership=*) ownership="${line#ownership=}" ;;
+      restore_policy=*) restore_policy="${line#restore_policy=}" ;;
+      snapshot_status=*) snapshot_status="${line#snapshot_status=}" ;;
+      ---)
+        [[ -n "$component" && -n "$source_path" && -n "$shape" && -n "$required" && -n "$ownership" && -n "$restore_policy" && -n "$snapshot_status" ]] || return 1
+        [[ -z "${seen[$component]+x}" ]] || return 1
+        case "$required" in true|false) ;; *) return 1 ;; esac
+        case "$snapshot_status" in present|absent|failed|unsupported) ;; *) return 1 ;; esac
+        if [[ "$snapshot_status" == "present" ]]; then
+          [[ -n "$snapshot_path" ]] || return 1
+          [[ -e "$snapshot_path" || -L "$snapshot_path" ]] || return 1
+        else
+          [[ -z "$snapshot_path" ]] || return 1
+        fi
+        seen["$component"]=1
+        records=$((records + 1))
+        component="" source_path="" snapshot_path="" shape="" required="" ownership="" restore_policy="" snapshot_status=""
+        ;;
+      *=*) ;;
+      *) [[ -z "$line" ]] || return 1 ;;
+    esac
+  done < "$manifest"
+  [[ -z "$component$source_path$snapshot_path$shape$required$ownership$restore_policy$snapshot_status" ]] || return 1
+  (( records > 0 )) || return 1
+  return 0
+}
+
 # ── Transaction-based activation ──────────────────────────────────
 
 # Prepare a target for activation: copy to a transaction-scoped temp path.
@@ -742,6 +938,52 @@ rollback_transaction() {
       cp -a "$archived_mf" "$dst_mf"
     fi
   done
+}
+
+# ── Post-activation runtime smoke test ─────────────────────────────
+
+# Verify that newly activated framework commands can start and load their
+# libraries. Runs after activation but before namespace install, migrations,
+# and doctor. A failure here stops the update, records a transaction failure,
+# prevents migrations, prevents final commit, returns nonzero, and preserves
+# rollback material.
+smoke_test_activated_framework() {
+  local fw_root="$1"
+  local errors=0
+  local cmd
+
+  local smoke_commands=(
+    "$fw_root/bin/ahr-update-framework --help"
+    "$fw_root/bin/ahr-update-available --help"
+    "$fw_root/bin/ahr-restore-component --help"
+    "$fw_root/bin/namespace-install.sh --help"
+    "$fw_root/bin/ahr-doctor --help"
+  )
+
+  for cmd in "${smoke_commands[@]}"; do
+    local cmd_path
+    cmd_path="$(echo "$cmd" | awk '{print $1}')"
+    if [[ ! -f "$cmd_path" ]]; then
+      echo "SMOKE FAIL: missing command: $cmd_path" >&2
+      errors=$((errors + 1))
+      continue
+    fi
+    # Skip stub commands (only shebang, no content) — these are test-only
+    local line_count
+    line_count="$(wc -l < "$cmd_path" 2>/dev/null || echo 0)"
+    line_count="${line_count%% *}"
+    if (( line_count <= 2 )); then
+      continue
+    fi
+    local output
+    output="$(bash $cmd 2>&1)" || true
+    if [[ "$output" == *"No such file"* || "$output" == *"ahr-version.sh"* || "$output" == *"ahr-lib.sh"* || "$output" == *"ahr-cache.sh"* || "$output" == *"ahr-backup-helper.sh"* ]]; then
+      echo "SMOKE FAIL: $cmd_path cannot load libraries: $output" >&2
+      errors=$((errors + 1))
+    fi
+  done
+
+  return $errors
 }
 
 # ── Signal handler for transaction safety ─────────────────────────
@@ -919,7 +1161,7 @@ cmd_dry_run() {
   log "  2. Archive installed framework targets to transaction directory"
   log "  3. Activate staged targets transactionally"
   log "  4. Restore framework.json with revision=$pinned_commit"
-  log "  5. Reinstall command namespace"
+  log "  5. Run namespace installation (bin/namespace-install.sh)"
   log "  6. Run new migrations"
   log "  7. Run ahr-doctor health check"
 
@@ -947,7 +1189,7 @@ cmd_dry_run() {
 # ── Apply Mode ─────────────────────────────────────────────────────
 
 cmd_apply() {
-  mkdir -p "$STATE_ROOT" "$FRAMEWORK_BACKUPS_DIR" "$FRAMEWORK_TRANSACTIONS_DIR"
+  mkdir -p "$STATE_ROOT" "$FRAMEWORK_TRANSACTIONS_DIR"
   touch "$FRAMEWORK_LOG"
   acquire_framework_lock
 
@@ -1014,6 +1256,7 @@ cmd_apply() {
   fi
 
   # Create collision-proof backup directory with timestamp prefix
+  mkdir -p "$FRAMEWORK_BACKUPS_DIR"
   local backup_ts
   backup_ts="$(date +%Y%m%d-%H%M%S)"
   local backup_dir
@@ -1070,9 +1313,64 @@ cmd_apply() {
     esac
   done
 
-  # Write manifest atomically
+  # Write manifest atomically — initially NOT completed
   local manifest_tmp
   manifest_tmp="$(mktemp "$backup_dir/.manifest.tmp.XXXXXX")"
+  {
+    echo "manifest_version=1"
+    echo "completed=in_progress"
+    echo "previous_version=$local_version"
+    echo "previous_revision=$local_revision"
+    echo "new_version=$staged_version"
+    echo "staging_commit=$pinned_commit"
+    echo "channel=$staged_channel"
+    echo "update_source=$update_source"
+    echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+    echo "backup_dir=$backup_dir"
+    echo "targets=$(printf '%s\n' "${FRAMEWORK_TARGETS[@]}")"
+    echo "managed_files=$(printf '%s\n' "${FRAMEWORK_MANAGED_FILES[@]}")"
+    echo "derived_components=$(printf '%s\n' "${FRAMEWORK_DERIVED_COMPONENTS[@]}")"
+    echo "migration_snapshot=$backup_dir/migration-snapshot"
+  } > "$manifest_tmp"
+  mv -f "$manifest_tmp" "$backup_dir/manifest.txt"
+
+  # Snapshot managed derived components before activation
+  log "Snapshotting managed components..."
+  local _snap_errors=0
+  local _required_snap_errors=0
+  local _snap_entry _snap_component _snap_source _snap_shape _snap_required _snap_ownership _snap_restore_policy
+  for _snap_entry in "${FRAMEWORK_COMPONENT_SNAPSHOTS[@]}"; do
+    IFS='|' read -r _snap_component _snap_source _snap_shape _snap_required _snap_ownership _snap_restore_policy <<< "$_snap_entry"
+    if ! ahr_snapshot_component "$_snap_component" "$_snap_source" "$backup_dir" "$_snap_shape" \
+      "$_snap_required" "$_snap_ownership" "$_snap_restore_policy"; then
+      _snap_errors=$((_snap_errors + 1))
+      [[ "$_snap_required" == "true" ]] && _required_snap_errors=$((_required_snap_errors + 1))
+    fi
+  done
+
+  # Required snapshot failures must prevent activation
+  if (( _required_snap_errors > 0 )); then
+    log "Error: $_required_snap_errors required component snapshots failed"
+    rollback_transaction "$txdir"
+    finalize_transaction "$txdir" "failed" "snapshot_failed"
+    rm -rf "$staging_dir"
+    die "Required snapshot failed. Backup state preserved at: $backup_dir"
+  fi
+
+  if (( _snap_errors > 0 )); then
+    log "Warning: $_snap_errors component snapshots failed (non-required)"
+  fi
+
+  if ! validate_component_manifest "$backup_dir/component-manifest.txt"; then
+    rollback_transaction "$txdir"
+    finalize_transaction "$txdir" "failed" "component_manifest_invalid"
+    rm -rf "$staging_dir"
+    die "Component manifest validation failed. Backup state preserved at: $backup_dir"
+  fi
+
+  # Atomically write the final completed manifest AFTER all required snapshots succeed
+  local final_manifest_tmp
+  final_manifest_tmp="$(mktemp "$backup_dir/.manifest.tmp.XXXXXX")"
   {
     echo "manifest_version=1"
     echo "completed=true"
@@ -1082,14 +1380,16 @@ cmd_apply() {
     echo "staging_commit=$pinned_commit"
     echo "channel=$staged_channel"
     echo "update_source=$update_source"
-    echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+    echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
     echo "backup_dir=$backup_dir"
     echo "targets=$(printf '%s\n' "${FRAMEWORK_TARGETS[@]}")"
     echo "managed_files=$(printf '%s\n' "${FRAMEWORK_MANAGED_FILES[@]}")"
     echo "derived_components=$(printf '%s\n' "${FRAMEWORK_DERIVED_COMPONENTS[@]}")"
     echo "migration_snapshot=$backup_dir/migration-snapshot"
-  } > "$manifest_tmp"
-  mv -f "$manifest_tmp" "$backup_dir/manifest.txt"
+    echo "snapshot_errors=$_snap_errors"
+    echo "required_snapshot_errors=$_required_snap_errors"
+  } > "$final_manifest_tmp"
+  mv -f "$final_manifest_tmp" "$backup_dir/manifest.txt"
 
   write_transaction_state "$txdir" "phase=activation_in_progress"
   log "Activating framework $staged_version..."
@@ -1157,6 +1457,49 @@ cmd_apply() {
   fi
 
   rm -rf "$staging_dir"
+
+  # Step 5: Run namespace installation from newly activated framework
+  write_transaction_state "$txdir" "phase=namespace_install"
+  log "Running namespace installation..."
+
+  local namespace_exit=0
+  local namespace_installer="$FRAMEWORK_ROOT/bin/namespace-install.sh"
+  if [[ -f "$namespace_installer" ]]; then
+    local namespace_output
+    namespace_output="$(bash "$namespace_installer" --quiet 2>&1)" || namespace_exit=$?
+    [[ "$quiet" == "false" && -n "$namespace_output" ]] && echo "$namespace_output" | sed 's/^/  /'
+  fi
+
+  if (( namespace_exit != 0 )); then
+    local _apply_backup _apply_commit
+    _apply_backup="$(read_tx_field "$txdir" "backup_dir" 2>/dev/null || true)"
+    _apply_commit="$(read_tx_field "$txdir" "staging_commit" 2>/dev/null || true)"
+    write_transaction_state "$txdir" \
+      "phase=namespace_failed" \
+      "completion=namespace_failed" \
+      "backup_dir=$_apply_backup" \
+      "staging_commit=$_apply_commit" \
+      "namespace_exit=$namespace_exit" \
+      "failure_reason=namespace_exit_$namespace_exit" \
+      "recovery_command=ahr update-framework --rollback"
+    log "Namespace installation failed (exit $namespace_exit). Migrations and doctor were not run."
+    log "Use --rollback to restore the previous framework."
+    current_txdir=""
+    return 1
+  fi
+
+  # Step 5.5: Post-namespace runtime smoke test
+  write_transaction_state "$txdir" "phase=runtime_smoke"
+  log "Running post-activation runtime smoke test..."
+  if ! smoke_test_activated_framework "$FRAMEWORK_ROOT"; then
+    rollback_transaction "$txdir"
+    finalize_transaction "$txdir" "failed" "runtime_smoke_failed"
+    log "Runtime smoke test failed. Framework rolled back."
+    log "Use --rollback to restore the previous framework."
+    current_txdir=""
+    return 1
+  fi
+  log "Runtime smoke test passed."
 
   # Record applied markers before migration
   local pre_migrate_snapshot
@@ -1272,7 +1615,7 @@ cmd_apply() {
   fi
 
   # Invalidate cache
-  invalidate_cache
+  invalidate_cache "$FRAMEWORK_CACHE"
 
   if (( doctor_exit != 0 )); then
     log ""
@@ -1368,6 +1711,28 @@ cmd_rollback() {
   current_version="$(read_json_value "$FRAMEWORK_JSON" "version")" || current_version="unknown"
 
   log "Prevalidation passed. Restoring framework..."
+
+  # Validate managed component snapshots if present
+  local _snap_manifest="$latest_backup/component-manifest.txt"
+  if [[ -f "$_snap_manifest" ]]; then
+    log "Validating component snapshots..."
+    local _snap_line _snap_comp _snap_status _snap_required
+    while IFS= read -r _snap_line || [[ -n "$_snap_line" ]]; do
+      case "$_snap_line" in
+        component=*) _snap_comp="${_snap_line#component=}" ;;
+        required=*) _snap_required="${_snap_line#required=}" ;;
+        snapshot_status=*) _snap_status="${_snap_line#snapshot_status=}" ;;
+        ---)
+          if [[ -n "$_snap_comp" && "$_snap_status" == "failed" ]]; then
+            die "Component snapshot failed: $_snap_comp — cannot rollback"
+          fi
+          if [[ -n "$_snap_comp" && "$_snap_required" == "true" && "$_snap_status" != "present" ]]; then
+            die "Required component snapshot missing: $_snap_comp — cannot rollback"
+          fi
+          _snap_comp="" _snap_status="" _snap_required="" ;;
+      esac
+    done < "$_snap_manifest"
+  fi
 
   # Find the failed apply transaction that created this backup
   local failed_apply_tx=""
@@ -1505,7 +1870,7 @@ cmd_rollback() {
   else
     finalize_transaction "$txdir" "rolled_back" "$final_phase"
   fi
-  invalidate_cache
+  invalidate_cache "$FRAMEWORK_CACHE"
 
   if (( doctor_exit != 0 )); then
     log "Rollback completed but health checks reported issues."

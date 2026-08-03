@@ -7,8 +7,10 @@ set -euo pipefail
 
 AHR_THEME_LIB="${AHR_THEME_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-theme-lib.sh}"
 AHR_LIB="${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+AHR_BACKUP_LIB="${AHR_BACKUP_HELPER_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-backup-helper.sh}"
 [[ -f "$AHR_LIB" ]] && source "$AHR_LIB"
 [[ -f "$AHR_THEME_LIB" ]] && source "$AHR_THEME_LIB"
+[[ -f "$AHR_BACKUP_LIB" ]] && source "$AHR_BACKUP_LIB"
 
 command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1 || exit 0
 
@@ -19,6 +21,14 @@ PREFS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/chromium/Default"
 PREFS_FILE="$PREFS_DIR/Preferences"
 
 mkdir -p "$PREFS_DIR"
+
+# Backup before first write
+if [[ -f "$PREFS_FILE" ]]; then
+  ahr_backup_before_edit "$PREFS_FILE" 2>/dev/null || {
+    echo "Error: failed to backup $PREFS_FILE before theme edit" >&2
+    exit 1
+  }
+fi
 
 # Determine dark/light from background luminance
 COLOR_SCHEME=1  # 0 = No preference, 1 = Dark, 2 = Light

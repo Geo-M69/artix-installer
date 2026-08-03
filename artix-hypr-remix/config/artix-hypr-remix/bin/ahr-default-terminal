@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+LIB_PATH="${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "$LIB_PATH"
+backup_lib="${AHR_BACKUP_HELPER_PATH:-$(dirname "$LIB_PATH")/ahr-backup-helper.sh}"
+[[ -f "$backup_lib" ]] && source "$backup_lib"
 
 cfg_dir="$HOME/.config"
 term_file="$cfg_dir/xdg-terminals.list"
@@ -30,6 +33,17 @@ kitty) desktop_id="kitty.desktop"; name="Kitty" ;;
 esac
 
 mkdir -p "$cfg_dir"
+if [[ -f "$term_file" ]]; then
+  declare -F ahr_backup_before_edit >/dev/null || {
+    echo "Error: Unable to back up $term_file; refusing to modify it" >&2
+    exit 1
+  }
+  ahr_backup_before_edit "$term_file" 2>/dev/null || {
+    echo "Error: Unable to back up $term_file; refusing to modify it" >&2
+    exit 1
+  }
+fi
+
 cat >"$term_file" <<EOF
 # Terminal emulator preference order for xdg-terminal-exec
 # The first found and valid terminal will be used

@@ -7,8 +7,10 @@ set -euo pipefail
 
 AHR_THEME_LIB="${AHR_THEME_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-theme-lib.sh}"
 AHR_LIB="${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+AHR_BACKUP_LIB="${AHR_BACKUP_HELPER_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-backup-helper.sh}"
 [[ -f "$AHR_LIB" ]] && source "$AHR_LIB"
 [[ -f "$AHR_THEME_LIB" ]] && source "$AHR_THEME_LIB"
+[[ -f "$AHR_BACKUP_LIB" ]] && source "$AHR_BACKUP_LIB"
 
 # OpenCode uses .jsonc (JSON with comments).  Prefer .jsonc when it exists;
 # otherwise fall back to .json for backward compatibility with older installs.
@@ -152,6 +154,18 @@ for editor_entry in "${EDITORS[@]}"; do
   command -v "$editor_cmd" >/dev/null 2>&1 || continue
 
   mkdir -p "$(dirname "$settings_path")"
+
+  # Backup before first write
+  if [[ -f "$settings_path" ]]; then
+    ahr_backup_before_edit "$settings_path" 2>/dev/null || {
+      echo "Error: Unable to back up $settings_path; refusing to modify it" >&2
+      rm -f "${settings_path}.tmp"
+      exit 1
+    }
+    if [[ -n "${AHR_BACKUP_PATH:-}" ]]; then
+      echo "Backup saved: $AHR_BACKUP_PATH"
+    fi
+  fi
 
   if [[ -f "$settings_path" ]]; then
     # Try jq first (fast, strict JSON)

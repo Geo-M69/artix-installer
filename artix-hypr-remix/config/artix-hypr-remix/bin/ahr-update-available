@@ -117,83 +117,82 @@ else
   framework_channel="$(sed -n 's/.*"channel"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FRAMEWORK_JSON" 2>/dev/null | head -n1)"
 fi
 
-if [[ -n "$update_source" ]] && ! ahr_has_cmd git; then
+check_framework_availability() {
+  local update_source="$1"
+  local framework_channel="$2"
+
+  if ! ahr_has_cmd git; then
+    framework_state="unavailable"
+    return 0
+  fi
+
   framework_state="unavailable"
-elif [[ -n "$update_source" ]] && ahr_has_cmd git; then
-  framework_state="unavailable"
-  # Use cache if available
-  if [[ -f "$FRAMEWORK_CACHE" ]]; then
+
+  # Use cache if available and valid
+  if validate_cache_consistency "$FRAMEWORK_CACHE" "$update_source" "$framework_channel" "$FRAMEWORK_CACHE_TTL" 2>/dev/null; then
     local cache_record
     cache_record="$(read_cache_record "$FRAMEWORK_CACHE" 2>/dev/null)" || true
     if [[ -n "$cache_record" ]]; then
-      local cache_ver cache_co cache_src cache_ch cache_ts now age
+      local cache_ver
       cache_ver="$(printf '%s' "$cache_record" | cut -f1)"
-      cache_co="$(printf '%s' "$cache_record" | cut -f2)"
-      cache_src="$(printf '%s' "$cache_record" | cut -f3)"
-      cache_ch="$(printf '%s' "$cache_record" | cut -f4)"
-      cache_ts="$(printf '%s' "$cache_record" | cut -f5)"
-      now="$(date +%s 2>/dev/null || echo 0)"
-      if [[ "$now" =~ ^[0-9]+$ ]] && [[ "$cache_ts" =~ ^[0-9]+$ ]] \
-         && [[ "$cache_src" == "$update_source" ]] && [[ "$cache_ch" == "$framework_channel" ]]; then
-        age=$(( now - cache_ts ))
-        if (( age < FRAMEWORK_CACHE_TTL )); then
-          framework_remote_version="$cache_ver"
-          framework_state="current"
-        fi
-      fi
+      framework_remote_version="$cache_ver"
+      framework_state="current"
+      return 0
     fi
   fi
 
   # No fresh cache — do a lightweight remote fetch
-  if [[ "$framework_state" != "current" ]]; then
-    export GIT_TERMINAL_PROMPT=0
-    git_timeout=15
-    command -v timeout >/dev/null 2>&1 || git_timeout=0
+  export GIT_TERMINAL_PROMPT=0
+  local git_timeout=15
+  command -v timeout >/dev/null 2>&1 || git_timeout=0
 
-    tmpdir="$(mktemp -d "/tmp/ahr-update-check-XXXXXXXX" 2>/dev/null || true)"
-    if [[ -n "$tmpdir" ]]; then
+  local tmpdir="" clone_exit=0 remote_commit="" remote_raw=""
+  tmpdir="$(mktemp -d "/tmp/ahr-update-check-XXXXXXXX" 2>/dev/null || true)"
+  if [[ -n "$tmpdir" ]]; then
+    if (( git_timeout > 0 )); then
+      timeout "$git_timeout" git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
+    else
+      git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
+    fi
+
+    if (( clone_exit == 0 )); then
+      remote_commit="$(git -C "$tmpdir" rev-parse HEAD 2>/dev/null || true)"
+      remote_raw="$(git -C "$tmpdir" cat-file -p HEAD:artix-hypr-remix/config/artix-hypr-remix/framework.json 2>/dev/null || true)"
+    elif (( clone_exit != 124 )); then
+      rm -rf "$tmpdir"
+      tmpdir="$(mktemp -d "/tmp/ahr-update-check-XXXXXXXX" 2>/dev/null || true)"
       clone_exit=0
-      if (( git_timeout > 0 )); then
-        timeout "$git_timeout" git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
-      else
-        git clone --depth 1 --filter=blob:none --no-checkout --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
-      fi
-
-      if (( clone_exit == 0 )); then
-        remote_commit="$(git -C "$tmpdir" rev-parse HEAD 2>/dev/null || true)"
-        remote_raw="$(git -C "$tmpdir" cat-file -p HEAD:artix-hypr-remix/config/artix-hypr-remix/framework.json 2>/dev/null || true)"
-      elif (( clone_exit != 124 )); then
-        rm -rf "$tmpdir"
-        tmpdir="$(mktemp -d "/tmp/ahr-update-check-XXXXXXXX" 2>/dev/null || true)"
-        if [[ -n "$tmpdir" ]]; then
-          clone_exit=0
-          if (( git_timeout > 0 )); then
-            timeout "$git_timeout" git clone --depth 1 --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
-          else
-            git clone --depth 1 --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
-          fi
-          if (( clone_exit == 0 )) && [[ -f "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json" ]]; then
-            remote_commit="$(git -C "$tmpdir" rev-parse HEAD 2>/dev/null || true)"
-            remote_raw="$(cat "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json")"
-          fi
+      if [[ -n "$tmpdir" ]]; then
+        if (( git_timeout > 0 )); then
+          timeout "$git_timeout" git clone --depth 1 --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
+        else
+          git clone --depth 1 --quiet "$update_source" "$tmpdir" 2>/dev/null || clone_exit=$?
+        fi
+        if (( clone_exit == 0 )) && [[ -f "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json" ]]; then
+          remote_commit="$(git -C "$tmpdir" rev-parse HEAD 2>/dev/null || true)"
+          remote_raw="$(cat "$tmpdir/artix-hypr-remix/config/artix-hypr-remix/framework.json")"
         fi
       fi
-      rm -rf "$tmpdir"
+    fi
+    rm -rf "$tmpdir"
+  fi
+
+  if [[ -n "${remote_raw:-}" ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      framework_remote_version="$(printf '%s' "$remote_raw" | jq -r '.version // ""' 2>/dev/null || true)"
+    else
+      framework_remote_version="$(printf '%s' "$remote_raw" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
     fi
 
-    if [[ -n "${remote_raw:-}" ]]; then
-      if command -v jq >/dev/null 2>&1; then
-        framework_remote_version="$(printf '%s' "$remote_raw" | jq -r '.version // ""' 2>/dev/null || true)"
-      else
-        framework_remote_version="$(printf '%s' "$remote_raw" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
-      fi
-
-      if [[ -n "$framework_remote_version" && "$remote_commit" =~ ^[0-9a-fA-F]{40,64}$ ]]; then
-        write_cache_record "$FRAMEWORK_CACHE" "$framework_remote_version" "$update_source" "$framework_channel" "$remote_commit"
-        framework_state="current"
-      fi
+    if [[ -n "$framework_remote_version" && "$remote_commit" =~ ^[0-9a-fA-F]{40,64}$ ]]; then
+      write_cache_record "$FRAMEWORK_CACHE" "$framework_remote_version" "$update_source" "$framework_channel" "$remote_commit"
+      framework_state="current"
     fi
   fi
+}
+
+if [[ -n "$update_source" ]]; then
+  check_framework_availability "$update_source" "$framework_channel"
 
   # Compare versions using the shared library (no vercmp fallback, no arithmetic)
   if [[ -n "$framework_local_version" && -n "$framework_remote_version" ]]; then

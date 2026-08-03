@@ -534,8 +534,23 @@ XML
 # Deploy generated fontconfig to ~/.config/fontconfig/fonts.conf
 ahr_theme_deploy_fontconfig() {
   local target="$HOME/.config/fontconfig/fonts.conf"
+  local backup_lib="${AHR_BACKUP_HELPER_PATH:-$(dirname "${BASH_SOURCE[0]}")/ahr-backup-helper.sh}"
 
   install -d -m 0755 "$(dirname "$target")"
+
+  # Backup before write
+  if [[ -f "$target" ]]; then
+    [[ -f "$backup_lib" ]] || {
+      ahr_theme_warn "Unable to back up $target; refusing to modify it"
+      return 1
+    }
+    source "$backup_lib"
+    ahr_backup_before_edit "$target" 2>/dev/null || {
+      ahr_theme_warn "Unable to back up $target; refusing to modify it"
+      return 1
+    }
+  fi
+
   ahr_theme_generate_fontconfig > "$target"
   ahr_theme_log "Fontconfig deployed: $target"
 }

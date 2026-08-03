@@ -6,8 +6,10 @@ set -euo pipefail
 
 AHR_THEME_LIB="${AHR_THEME_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-theme-lib.sh}"
 AHR_LIB="${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+AHR_BACKUP_LIB="${AHR_BACKUP_HELPER_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-backup-helper.sh}"
 [[ -f "$AHR_LIB" ]] && source "$AHR_LIB"
 [[ -f "$AHR_THEME_LIB" ]] && source "$AHR_THEME_LIB"
+[[ -f "$AHR_BACKUP_LIB" ]] && source "$AHR_BACKUP_LIB"
 
 command -v foot >/dev/null 2>&1 || exit 0
 
@@ -49,6 +51,14 @@ strip_hash() {
 }
 
 mkdir -p "$(dirname "$FOOT_CONFIG_TARGET")"
+
+# Backup before first write
+if [[ -f "$FOOT_CONFIG_TARGET" ]]; then
+  ahr_backup_before_edit "$FOOT_CONFIG_TARGET" 2>/dev/null || {
+    echo "Error: failed to backup $FOOT_CONFIG_TARGET before theme edit" >&2
+    exit 1
+  }
+fi
 
 if [[ ! -f "$COLORS_FILE" ]]; then
   cat > "$FOOT_CONFIG_TARGET" <<FOOTEOF

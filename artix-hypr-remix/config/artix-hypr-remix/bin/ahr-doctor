@@ -252,6 +252,47 @@ else
   printf '  WARN: framework metadata not deployed (run installer phase 7)\n'
 fi
 
+printf '\n=== Namespace Links ===\n'
+ns_bin_dir="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
+if [[ -d "$ns_bin_dir" ]]; then
+  ns_ok=0
+  ns_warn=0
+  ns_total=0
+  for ns_cmd in ahr ahr-update ahr-update-framework ahr-update-available ahr-restore-component ahr-doctor; do
+    ns_total=$((ns_total + 1))
+    ns_path="$ns_bin_dir/$ns_cmd"
+    if [[ -L "$ns_path" ]]; then
+      ns_target_read="$(readlink "$ns_path" 2>/dev/null || true)"
+      case "$ns_target_read" in
+        "$HOME/.config/artix-hypr-remix/bin/"*)
+          if [[ -e "$ns_path" ]]; then
+            printf '  OK: %s -> %s\n' "$ns_cmd" "$ns_target_read"
+            ns_ok=$((ns_ok + 1))
+          else
+            printf '  WARN: %s symlink broken -> %s\n' "$ns_cmd" "$ns_target_read"
+            ns_warn=$((ns_warn + 1))
+          fi
+          ;;
+        *)
+          printf '  WARN: %s -> %s (not AHR-owned)\n' "$ns_cmd" "$ns_target_read"
+          ns_warn=$((ns_warn + 1))
+          ;;
+      esac
+    elif [[ -e "$ns_path" ]]; then
+      printf '  WARN: %s exists but is not a symlink\n' "$ns_cmd"
+      ns_warn=$((ns_warn + 1))
+    else
+      printf '  MISSING: %s\n' "$ns_cmd"
+      overall_status=1
+    fi
+  done
+  if (( ns_warn == 0 && ns_ok > 0 )); then
+    printf '  OK: %d/%d namespace links healthy\n' "$ns_ok" "$ns_total"
+  fi
+else
+  printf '  WARN: namespace directory not found: %s\n' "$ns_bin_dir"
+fi
+
 printf '\n=== Framework Commands ===\n'
 framework_cmd_check ahr-menu
 framework_cmd_check ahr-menu-keybindings
