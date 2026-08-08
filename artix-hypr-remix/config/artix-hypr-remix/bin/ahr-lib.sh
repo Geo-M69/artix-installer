@@ -66,6 +66,102 @@ ahr_fail() {
   exit 1
 }
 
+# Primary backup manifests are data, never shell input.  Keep the association
+# parser here because both the framework updater and component restore open
+# those manifests.  A legacy manifest may be used only when its caller has
+# already selected the exact backup directory; it may not be associated with a
+# transaction automatically.
+ahr_validate_backup_id() {
+  local id="$1"
+  [[ -n "$id" && "$id" != "." && "$id" != ".." ]] || return 1
+  [[ "$id" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  [[ "$id" != *".."* ]] || return 1
+}
+
+ahr_validate_transaction_id() {
+  local id="$1"
+  [[ "$id" =~ ^tx-[A-Za-z0-9._-]+$ ]] || return 1
+  [[ "$id" != *".."* ]] || return 1
+}
+
+# Sets AHR_PRIMARY_MANIFEST_{LEGACY,BACKUP_ID,TRANSACTION_ID}.  The third
+# argument is true for automatic transaction association and false for an
+# already-selected exact backup directory.
+ahr_parse_primary_manifest() {
+  local manifest="$1" selected_backup_id="$2" require_association="${3:-false}"
+  local backup_id="" transaction_id="" backup_count=0 transaction_count=0 line
+  [[ -f "$manifest" ]] || return 1
+  ahr_validate_backup_id "$selected_backup_id" || return 1
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      backup_id=*)
+        backup_count=$((backup_count + 1))
+        backup_id="${line#backup_id=}"
+        ;;
+      transaction_id=*)
+        transaction_count=$((transaction_count + 1))
+        transaction_id="${line#transaction_id=}"
+        ;;
+      backup_id*|transaction_id*)
+        printf 'Malformed primary manifest association key\n' >&2
+        return 1
+        ;;
+    esac
+  done < "$manifest"
+
+  (( backup_count <= 1 && transaction_count <= 1 )) || {
+    printf 'Duplicate primary manifest association metadata\n' >&2
+    return 1
+  }
+
+  # Any manifest missing either association field is legacy.  Do not infer the
+  # missing value from its directory, timestamps, or transaction state.
+  if (( backup_count == 0 || transaction_count == 0 )); then
+    [[ "$require_association" == "false" ]] || {
+      printf 'Legacy backup lacks transaction-association metadata\n' >&2
+      return 1
+    }
+    if (( backup_count == 1 )); then
+      ahr_validate_backup_id "$backup_id" || {
+        printf 'Invalid manifest backup_id\n' >&2
+        return 1
+      }
+      [[ "$backup_id" == "$selected_backup_id" ]] || {
+        printf 'Manifest backup_id does not match selected backup\n' >&2
+        return 1
+      }
+    fi
+    if (( transaction_count == 1 )); then
+      ahr_validate_transaction_id "$transaction_id" || {
+        printf 'Invalid manifest transaction_id\n' >&2
+        return 1
+      }
+    fi
+    AHR_PRIMARY_MANIFEST_LEGACY=true
+    AHR_PRIMARY_MANIFEST_BACKUP_ID="$backup_id"
+    AHR_PRIMARY_MANIFEST_TRANSACTION_ID="$transaction_id"
+    return 0
+  fi
+
+  ahr_validate_backup_id "$backup_id" || {
+    printf 'Invalid manifest backup_id\n' >&2
+    return 1
+  }
+  ahr_validate_transaction_id "$transaction_id" || {
+    printf 'Invalid manifest transaction_id\n' >&2
+    return 1
+  }
+  [[ "$backup_id" == "$selected_backup_id" ]] || {
+    printf 'Manifest backup_id does not match selected backup\n' >&2
+    return 1
+  }
+
+  AHR_PRIMARY_MANIFEST_LEGACY=false
+  AHR_PRIMARY_MANIFEST_BACKUP_ID="$backup_id"
+  AHR_PRIMARY_MANIFEST_TRANSACTION_ID="$transaction_id"
+}
+
 # Check that a command is available on PATH.  If missing, print a user-facing
 # message with an install hint and return 1 so the caller can choose how to
 # respond (show a dialog, skip a menu item, fall back, etc.).

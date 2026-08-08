@@ -40,9 +40,14 @@ make_fixture() {
     ahr-restore-idle ahr-restore-nightlight ahr-launch-wallpaper-session \
     ahr-capture-screenshot ahr-capture-picker ahr-theme ahr-status ahr-doctor \
     ahr-update ahr-update-available ahr-update-framework ahr-restore-component \
-    ahr-cache.sh ahr-migrate; do
+    ahr-migrate namespace-install.sh migrate.sh ahr-validate-managed-paths.sh; do
     printf '#!/usr/bin/env bash\nexit 0\n' > "$root/bin/$cmd"
     chmod +x "$root/bin/$cmd"
+  done
+  for cmd in ahr-lib.sh ahr-version.sh ahr-cache.sh ahr-backup-helper.sh \
+    ahr-managed-paths.sh ahr-theme-lib.sh ahr-toggle-lib.sh ahr-font-lib.sh; do
+    printf '#!/usr/bin/env bash\n# sourced test library\n' > "$root/bin/$cmd"
+    chmod 0644 "$root/bin/$cmd"
   done
   for service in dbus elogind bluetoothd; do
     : > "$dir/runlevels/default/$service"
@@ -103,6 +108,10 @@ run_case() {
     multiple-candidates) printf '[Desktop Entry]\nName=One\nMimeType=video/mp4;\n' > "$home/.local/share/applications/player-one.desktop"; printf '[Desktop Entry]\nName=Two\nMimeType=video/mp4;\n' > "$home/.local/share/applications/player-two.desktop" ;;
     webm-only) webm="browser.desktop"; printf '[Desktop Entry]\nName=Browser\nMimeType=video/webm;\n' > "$home/.local/share/applications/browser.desktop" ;;
     enabled-nm) : > "$dir/runlevels/default/NetworkManager" ;;
+    executable-cache-lib) chmod 0755 "$root/bin/ahr-cache.sh" ;;
+    missing-cache-lib) rm -f "$root/bin/ahr-cache.sh" ;;
+    unreadable-cache-lib) chmod 000 "$root/bin/ahr-cache.sh" ;;
+    nonexecutable-command) chmod 0644 "$root/bin/ahr-update" ;;
   esac
   local output rc=0
   output="$(PATH="$stub:$PATH" HOME="$home" AHR_FRAMEWORK_ROOT="$root" \
@@ -138,6 +147,11 @@ run_case mime-no-default-warning 0 'Default video player (video/mp4) — no defa
 run_case mime-several-candidates-warning 0 'Default video player (video/mp4) — no default handler set' multiple-candidates
 run_case mime-webm-only-warning 0 'Default video player (video/mp4) — no default handler set' webm-only
 run_case warnings-only 0 'All checks passed.' enabled-nm
+run_case cache-library-0644 0 'OK: ahr-cache.sh (library)' base
+run_case cache-library-0755 0 'OK: ahr-cache.sh (library)' executable-cache-lib
+run_case cache-library-missing 1 'MISSING: ahr-cache.sh' missing-cache-lib
+run_case cache-library-unreadable 1 'MISSING: ahr-cache.sh' unreadable-cache-lib
+run_case command-nonexecutable 1 'MISSING: ahr-update' nonexecutable-command
 
 printf '\nResults: %d passed, %d failed\n' "$PASS" "$FAIL"
 (( FAIL == 0 ))

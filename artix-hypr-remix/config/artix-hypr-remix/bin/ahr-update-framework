@@ -302,6 +302,19 @@ read_tx_field_all() {
   grep -F "${key}=" "$state_file" 2>/dev/null | sed -e "s/^${key}=//"
 }
 
+# Critical association fields must appear exactly once.  This is intentionally
+# separate from the permissive diagnostic reader above so transaction recovery
+# never selects a value from a duplicate record.
+read_tx_field_unique() {
+  local txdir="$1" key="$2"
+  local state_file="$txdir/state"
+  [[ -f "$state_file" ]] || return 1
+  awk -v key="$key" '
+    index($0, key "=") == 1 { count++; value=substr($0, length(key) + 2) }
+    END { if (count == 1) print value; else exit 1 }
+  ' "$state_file"
+}
+
 # Mark a transaction as completed (or abandoned).
 finalize_transaction() {
   local txdir="$1" status="$2" phase="$3"
@@ -1259,15 +1272,17 @@ cmd_apply() {
   mkdir -p "$FRAMEWORK_BACKUPS_DIR"
   local backup_ts
   backup_ts="$(date +%Y%m%d-%H%M%S)"
-  local backup_dir
+  local backup_dir backup_id
   backup_dir="$(mktemp -d "$FRAMEWORK_BACKUPS_DIR/${backup_ts}-XXXXXX")" || \
     die "Failed to create backup directory"
+  backup_id="$(basename "$backup_dir")"
 
   # Create transaction
-  local txdir
+  local txdir transaction_id
   txdir="$(create_transaction "apply" "$staged_version" "$local_version" "$pinned_commit" "$backup_dir")"
+  transaction_id="$(basename "$txdir")"
   current_txdir="$txdir"
-  write_transaction_state "$txdir" "phase=backup_in_progress"
+  write_transaction_state "$txdir" "phase=backup_in_progress" "backup_id=$backup_id" "transaction_id=$transaction_id"
 
   log "Backing up to: $backup_dir"
 
@@ -1319,6 +1334,8 @@ cmd_apply() {
   {
     echo "manifest_version=1"
     echo "completed=in_progress"
+    echo "backup_id=$backup_id"
+    echo "transaction_id=$transaction_id"
     echo "previous_version=$local_version"
     echo "previous_revision=$local_revision"
     echo "new_version=$staged_version"
@@ -1374,6 +1391,8 @@ cmd_apply() {
   {
     echo "manifest_version=1"
     echo "completed=true"
+    echo "backup_id=$backup_id"
+    echo "transaction_id=$transaction_id"
     echo "previous_version=$local_version"
     echo "previous_revision=$local_revision"
     echo "new_version=$staged_version"
@@ -1648,22 +1667,32 @@ cmd_rollback() {
 
   log_line "rollback: starting"
 
-  # Find the most recent valid backup
-  local latest_backup=""
+  # A failed apply has an explicit transaction→backup association.  Resolve
+  # that exact backup before considering a standalone completed backup.
+  local latest_backup="" explicit_apply_tx=""
+  explicit_apply_tx="$(find_unresolved_apply_tx)" || die "Unable to determine a unique failed apply transaction"
+  if [[ -n "$explicit_apply_tx" ]]; then
+    latest_backup="$(read_tx_field_unique "$explicit_apply_tx" "backup_dir")" || die "Failed apply transaction has ambiguous backup_dir"
+  fi
+
+  # Without an unresolved apply transaction, rollback remains a standalone
+  # explicit user operation over the completed backup inventory.
   local latest_ts=0
   local bd
-  for bd in "$FRAMEWORK_BACKUPS_DIR"/*/; do
-    [[ -f "$bd/manifest.txt" ]] || continue
-    local mt
-    mt="$(grep -F 'completed=' "$bd/manifest.txt" 2>/dev/null | head -n1 | cut -d= -f2-)"
-    [[ "$mt" == "true" ]] || continue
-    local ts
-    ts="$(stat -c %Y "$bd" 2>/dev/null || echo 0)"
-    if (( ts > latest_ts )); then
-      latest_ts=$ts
-      latest_backup="${bd%/}"
-    fi
-  done
+  if [[ -z "$latest_backup" ]]; then
+    for bd in "$FRAMEWORK_BACKUPS_DIR"/*/; do
+      [[ -f "$bd/manifest.txt" ]] || continue
+      local mt
+      mt="$(grep -F 'completed=' "$bd/manifest.txt" 2>/dev/null | head -n1 | cut -d= -f2-)"
+      [[ "$mt" == "true" ]] || continue
+      local ts
+      ts="$(stat -c %Y "$bd" 2>/dev/null || echo 0)"
+      if (( ts > latest_ts )); then
+        latest_ts=$ts
+        latest_backup="${bd%/}"
+      fi
+    done
+  fi
 
   [[ -z "$latest_backup" ]] && die "No valid backup found. Cannot rollback."
 
@@ -1677,6 +1706,7 @@ cmd_rollback() {
   # Prevalidate EVERYTHING before any mutation
   local manifest="$latest_backup/manifest.txt"
   [[ -f "$manifest" ]] || die "Backup manifest missing"
+  ahr_parse_primary_manifest "$manifest" "$(basename "$latest_backup")" true || die "Invalid backup manifest association metadata"
 
   local mf_version
   mf_version="$(grep -F 'manifest_version=' "$manifest" | head -n1 | cut -d= -f2-)"
@@ -1735,19 +1765,24 @@ cmd_rollback() {
   fi
 
   # Find the failed apply transaction that created this backup
-  local failed_apply_tx=""
-  failed_apply_tx="$(find_resolved_apply_tx "$latest_backup")" || true
+  local failed_apply_tx="$explicit_apply_tx"
+  if [[ -z "$failed_apply_tx" ]]; then
+    failed_apply_tx="$(find_resolved_apply_tx "$latest_backup" "$AHR_PRIMARY_MANIFEST_TRANSACTION_ID")" || die "Invalid failed-apply transaction association"
+  fi
 
   # If a failed apply exists, validate the tie
   if [[ -n "$failed_apply_tx" ]]; then
-    local apply_backup apply_prev apply_commit
-    apply_backup="$(grep -F 'backup_dir=' "$failed_apply_tx/state" | head -n1 | cut -d= -f2-)"
+    local apply_backup apply_prev apply_commit apply_txid
+    apply_backup="$(read_tx_field_unique "$failed_apply_tx" "backup_dir")" || die "Failed-apply transaction has ambiguous backup_dir"
     apply_prev="$(grep -F 'previous_version=' "$failed_apply_tx/state" | head -n1 | cut -d= -f2-)"
     apply_commit="$(grep -F 'staging_commit=' "$failed_apply_tx/state" | head -n1 | cut -d= -f2-)"
+    apply_txid="$(basename "$failed_apply_tx")"
 
     if [[ "$apply_backup" != "$latest_backup" ]]; then
       die "Failed-apply transaction backup ($apply_backup) does not match rollback backup ($latest_backup)"
     fi
+    ahr_parse_primary_manifest "$manifest" "$(basename "$latest_backup")" true || die "Invalid transaction backup association"
+    [[ "$AHR_PRIMARY_MANIFEST_TRANSACTION_ID" == "$apply_txid" ]] || die "Backup manifest transaction_id does not match failed apply transaction"
     if [[ "$apply_prev" != "$prev_version" ]]; then
       die "Failed-apply previous version ($apply_prev) does not match manifest ($prev_version)"
     fi
@@ -1891,36 +1926,65 @@ cmd_rollback() {
 
 # ── Recover Mode ───────────────────────────────────────────────────
 
-# Find the most recent failed apply transaction whose backup matches the given path.
-# Prints the txdir path if found, empty if not.
+# Resolve only the transaction explicitly named by a new-format primary
+# manifest.  There is deliberately no timestamp or directory-order fallback.
 find_resolved_apply_tx() {
-  local backup_dir="$1"
+  local backup_dir="$1" transaction_id="$2"
   [[ -d "$FRAMEWORK_TRANSACTIONS_DIR" ]] || return 1
-  local latest_ts=0 found=""
-  local txdir
+  ahr_validate_transaction_id "$transaction_id" || return 1
+  local txdir="$FRAMEWORK_TRANSACTIONS_DIR/$transaction_id"
+  [[ -d "$txdir" && -f "$txdir/state" ]] || return 0
+  local state_file="$txdir/state" action completion tx_backup state_backup_id state_transaction_id
+  action="$(read_tx_field_unique "$txdir" "action" 2>/dev/null || true)"
+  completion="$(read_tx_field_unique "$txdir" "completion" 2>/dev/null || true)"
+  tx_backup="$(read_tx_field_unique "$txdir" "backup_dir" 2>/dev/null || true)"
+  state_backup_id="$(read_tx_field_unique "$txdir" "backup_id" 2>/dev/null || true)"
+  state_transaction_id="$(read_tx_field_unique "$txdir" "transaction_id" 2>/dev/null || true)"
+  [[ "$action" == "apply" ]] || return 0
+  case "$completion" in
+    in_progress|committed|rolled_back|recovered|abandoned|resolved_by_rollback) return 0 ;;
+    *) ;;
+  esac
+  [[ "$tx_backup" == "$backup_dir" ]] || { echo "Transaction backup path does not match manifest backup" >&2; return 1; }
+  [[ "$state_backup_id" == "$(basename "$backup_dir")" ]] || { echo "Transaction backup_id does not match manifest backup" >&2; return 1; }
+  [[ "$state_transaction_id" == "$transaction_id" ]] || { echo "Transaction ID does not match manifest transaction" >&2; return 1; }
+  echo "$txdir"
+}
+
+# Return the one unresolved failed apply transaction, if any.  More than one
+# is ambiguous by design: recovery must not choose by timestamp or directory
+# order.  New-format transaction fields are validated before their backup is
+# opened.
+find_unresolved_apply_tx() {
+  [[ -d "$FRAMEWORK_TRANSACTIONS_DIR" ]] || return 0
+  local txdir action completion tx_backup state_backup_id state_transaction_id
+  local found="" count=0
   for txdir in "$FRAMEWORK_TRANSACTIONS_DIR"/*/; do
-    [[ -d "$txdir" ]] || continue
-    local state_file="$txdir/state"
-    [[ -f "$state_file" ]] || continue
-    local action completion tx_backup
-    action="$(grep -F 'action=' "$state_file" | head -n1 | cut -d= -f2-)"
-    completion="$(grep -F 'completion=' "$state_file" | head -n1 | cut -d= -f2-)"
-    tx_backup="$(grep -F 'backup_dir=' "$state_file" | head -n1 | cut -d= -f2-)"
+    [[ -f "$txdir/state" ]] || continue
+    action="$(read_tx_field_unique "$txdir" "action" 2>/dev/null || true)"
     [[ "$action" == "apply" ]] || continue
-    # Only resolve terminal failed states, not in-progress
+    completion="$(read_tx_field_unique "$txdir" "completion" 2>/dev/null || true)"
     case "$completion" in
       in_progress|committed|rolled_back|recovered|abandoned|resolved_by_rollback) continue ;;
       *) ;;
     esac
-    [[ "$tx_backup" == "$backup_dir" ]] || continue
-    local ts
-    ts="$(stat -c %Y "$txdir/state" 2>/dev/null || echo 0)"
-    if (( ts > latest_ts )); then
-      latest_ts=$ts
-      found="$txdir"
-    fi
+    tx_backup="$(read_tx_field_unique "$txdir" "backup_dir" 2>/dev/null || true)"
+    state_backup_id="$(read_tx_field_unique "$txdir" "backup_id" 2>/dev/null || true)"
+    state_transaction_id="$(read_tx_field_unique "$txdir" "transaction_id" 2>/dev/null || true)"
+    [[ "$state_transaction_id" == "$(basename "${txdir%/}")" ]] || {
+      echo "Failed apply transaction lacks valid transaction-association metadata" >&2
+      return 1
+    }
+    ahr_validate_backup_id "$state_backup_id" || return 1
+    [[ "$tx_backup" == "$FRAMEWORK_BACKUPS_DIR/$state_backup_id" ]] || {
+      echo "Failed apply transaction backup_id does not match backup_dir" >&2
+      return 1
+    }
+    found="${txdir%/}"
+    count=$((count + 1))
   done
-  [[ -n "$found" ]] && echo "$found"
+  (( count <= 1 )) || { echo "Multiple unresolved failed apply transactions; refusing ambiguous recovery" >&2; return 1; }
+  [[ -z "$found" ]] || printf '%s\n' "$found"
 }
 
 check_incomplete_transactions() {

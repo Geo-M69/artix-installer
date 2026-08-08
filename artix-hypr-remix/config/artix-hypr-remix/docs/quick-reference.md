@@ -49,6 +49,12 @@ Update and migration state lives under `~/.local/state/artix-hypr-remix`.
 Update logs live at `~/.local/state/artix-hypr-remix/update.log`.
 Skipped migrations can be reviewed with `ahr migrate --status` and retried with `ahr migrate --retry-skipped`.
 
+Framework backups created by current releases record both their backup ID and
+the creating transaction ID. Recovery uses that exact association and refuses
+to guess from timestamps or backup ordering. Older backups without association
+metadata remain available only through an exact `ahr restore-component --backup
+<id>` selection; they are not used for automatic transaction recovery.
+
 ## Health & Repair
 
 - Show install state, logs, and backup hints: `ahr status`
