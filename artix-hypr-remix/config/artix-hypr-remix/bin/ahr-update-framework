@@ -215,6 +215,22 @@ create_transaction() {
   local txname
   txname="$(basename "$txid")"
 
+  # Apply transactions get their immutable backup association at creation.
+  # The backup directory has already been allocated by cmd_apply, so these
+  # values do not need to be inferred from timestamps or directory ordering.
+  local -a association_fields=()
+  if [[ "$action" == "apply" ]]; then
+    local backup_id
+    backup_id="$(basename "$backup_dir")"
+    ahr_validate_backup_id "$backup_id" || die "Invalid apply backup ID"
+    ahr_validate_transaction_id "$txname" || die "Invalid apply transaction ID"
+    association_fields=(
+      "backup_id=$backup_id"
+      "backup_path=$backup_dir"
+      "transaction_id=$txname"
+    )
+  fi
+
   write_transaction_state "$txid" \
     "format_version=1" \
     "txid=$txname" \
@@ -226,7 +242,8 @@ create_transaction() {
     "backup_dir=$backup_dir" \
     "phase=created" \
     "targets=$(IFS=,; echo "${FRAMEWORK_TARGETS[*]}")" \
-    "completion=in_progress"
+    "completion=in_progress" \
+    "${association_fields[@]}"
 
   echo "$txid"
 }
@@ -267,23 +284,75 @@ write_transaction_state() {
   fi
 
   for key in "${!updates[@]}"; do
+    # Once present, identity fields are immutable.  Terminal transitions may
+    # update status fields only; they cannot silently redirect a transaction
+    # to a different backup or transaction record.
+    case "$key" in
+      backup_id|backup_path|transaction_id)
+        if [[ -n "${existing[$key]+x}" && "${existing[$key]}" != "${updates[$key]}" ]]; then
+          echo "Immutable transaction association changed: $key" >&2
+          return 1
+        fi
+        ;;
+    esac
     existing["$key"]="${updates[$key]}"
   done
+
+  # A new-format apply state either has its complete immutable association or
+  # is an older legacy record.  Do not accept partially written association
+  # metadata, and never infer a value from directory ordering.
+  if [[ "${existing[action]:-}" == "apply" ]] && \
+     { [[ -n "${existing[backup_id]+x}" ]] || [[ -n "${existing[backup_path]+x}" ]] || [[ -n "${existing[transaction_id]+x}" ]]; }; then
+    [[ -n "${existing[backup_id]+x}" && -n "${existing[backup_path]+x}" && -n "${existing[transaction_id]+x}" ]] || {
+      echo "Incomplete transaction association metadata" >&2
+      return 1
+    }
+    ahr_validate_backup_id "${existing[backup_id]}" || { echo "Invalid transaction backup_id" >&2; return 1; }
+    ahr_validate_transaction_id "${existing[transaction_id]}" || { echo "Invalid transaction_id" >&2; return 1; }
+    [[ "${existing[transaction_id]}" == "${existing[txid]:-}" ]] || { echo "transaction_id does not match txid" >&2; return 1; }
+    [[ "${existing[backup_path]}" == "${existing[backup_dir]:-}" ]] || { echo "backup_path does not match backup_dir" >&2; return 1; }
+    [[ "${existing[backup_id]}" == "$(basename "${existing[backup_path]}")" ]] || { echo "backup_id does not match backup_path" >&2; return 1; }
+  fi
 
   tmp="$(mktemp "${state_file}.tmp.XXXXXX")"
   chmod 600 "$tmp"
   # Deterministic order aids diagnostics and tests.
-  for key in format_version txid action pid target_version staging_commit backup_dir phase completion \
+  for key in format_version txid action pid target_version staging_commit backup_dir backup_id backup_path transaction_id phase completion \
     failure_reason current_target migration_exit doctor_exit log_path recovery_command targets; do
     [[ -n "${existing[$key]+x}" ]] && echo "$key=${existing[$key]}" >> "$tmp"
   done
   for key in "${!existing[@]}"; do
     case "$key" in
-      format_version|txid|action|pid|target_version|staging_commit|backup_dir|phase|completion|failure_reason|current_target|migration_exit|doctor_exit|log_path|recovery_command|targets) ;;
+      format_version|txid|action|pid|target_version|staging_commit|backup_dir|backup_id|backup_path|transaction_id|phase|completion|failure_reason|current_target|migration_exit|doctor_exit|log_path|recovery_command|targets) ;;
       *) echo "$key=${existing[$key]}" >> "$tmp" ;;
     esac
   done
   mv -f "$tmp" "$state_file"
+}
+
+# Terminal successful applies must retain the exact association written at
+# transaction creation and agree with the primary manifest.  This is called
+# before the terminal state write so a corrupt record is never marked committed.
+validate_terminal_apply_association() {
+  local txdir="$1"
+  local action txid backup_id backup_path backup_dir transaction_id manifest
+  action="$(read_tx_field_unique "$txdir" "action" 2>/dev/null || true)"
+  [[ "$action" == "apply" ]] || return 0
+  txid="$(read_tx_field_unique "$txdir" "txid" 2>/dev/null || true)"
+  backup_id="$(read_tx_field_unique "$txdir" "backup_id" 2>/dev/null || true)"
+  backup_path="$(read_tx_field_unique "$txdir" "backup_path" 2>/dev/null || true)"
+  backup_dir="$(read_tx_field_unique "$txdir" "backup_dir" 2>/dev/null || true)"
+  transaction_id="$(read_tx_field_unique "$txdir" "transaction_id" 2>/dev/null || true)"
+  ahr_validate_backup_id "$backup_id" || { echo "Committed apply lacks a valid backup_id" >&2; return 1; }
+  ahr_validate_transaction_id "$transaction_id" || { echo "Committed apply lacks a valid transaction_id" >&2; return 1; }
+  [[ "$transaction_id" == "$txid" && "$transaction_id" == "$(basename "$txdir")" ]] || { echo "Committed apply transaction ID mismatch" >&2; return 1; }
+  [[ "$backup_path" == "$backup_dir" && "$backup_id" == "$(basename "$backup_path")" ]] || { echo "Committed apply backup association mismatch" >&2; return 1; }
+  manifest="$backup_path/manifest.txt"
+  ahr_parse_primary_manifest "$manifest" "$backup_id" true || { echo "Committed apply primary manifest association is invalid" >&2; return 1; }
+  [[ "$AHR_PRIMARY_MANIFEST_BACKUP_ID" == "$backup_id" && "$AHR_PRIMARY_MANIFEST_TRANSACTION_ID" == "$transaction_id" ]] || {
+    echo "Committed apply transaction and primary manifest associations differ" >&2
+    return 1
+  }
 }
 
 # Read a single key from a transaction state file.
@@ -320,6 +389,9 @@ finalize_transaction() {
   local txdir="$1" status="$2" phase="$3"
   local state_file="$txdir/state"
   [[ -f "$state_file" ]] || return 0
+  if [[ "$status" == "committed" ]]; then
+    validate_terminal_apply_association "$txdir" || return 1
+  fi
   write_transaction_state "$txdir" \
     "completion=$status" \
     "phase=$phase" \
@@ -1282,7 +1354,7 @@ cmd_apply() {
   txdir="$(create_transaction "apply" "$staged_version" "$local_version" "$pinned_commit" "$backup_dir")"
   transaction_id="$(basename "$txdir")"
   current_txdir="$txdir"
-  write_transaction_state "$txdir" "phase=backup_in_progress" "backup_id=$backup_id" "transaction_id=$transaction_id"
+  write_transaction_state "$txdir" "phase=backup_in_progress"
 
   log "Backing up to: $backup_dir"
 

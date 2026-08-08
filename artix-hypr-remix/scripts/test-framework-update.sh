@@ -1888,6 +1888,11 @@ manifest_exact_field() {
   awk -v key="$key" 'index($0, key "=") == 1 { count++; value=substr($0, length(key) + 2) } END { if (count == 1) print value; else exit 1 }' "$manifest"
 }
 
+transaction_exact_field() {
+  local state_file="$1" key="$2"
+  awk -v key="$key" 'index($0, key "=") == 1 { count++; value=substr($0, length(key) + 2) } END { if (count == 1) print value; else exit 1 }' "$state_file"
+}
+
 tc52_home="$tmp_root/tc52"
 tc52_repo="$(create_test_repo "$tmp_root/tc52_repo" "0.2.0")"
 setup_installed_framework "$tc52_home" "file://$tc52_repo"
@@ -1902,6 +1907,100 @@ tc52_transaction_id="$(manifest_exact_field "$tc52_manifest" transaction_id 2>/d
 [[ -n "$tc52_transaction_id" ]] && pass "successful backup has exactly one transaction_id" || fail "successful backup transaction_id is missing or duplicated"
 [[ "$tc52_backup_id" == "$(basename "$tc52_backup")" ]] && pass "manifest backup_id matches backup directory" || fail "manifest backup_id does not match backup directory"
 [[ -d "$tc52_home/.local/state/artix-hypr-remix/framework-transactions/$tc52_transaction_id" ]] && pass "manifest transaction_id matches transaction directory" || fail "manifest transaction_id does not match transaction directory"
+tc52_txdir="$tc52_home/.local/state/artix-hypr-remix/framework-transactions/$tc52_transaction_id"
+tc52_state="$tc52_txdir/state"
+tc52_state_backup_id="$(transaction_exact_field "$tc52_state" backup_id 2>/dev/null || true)"
+tc52_state_backup_path="$(transaction_exact_field "$tc52_state" backup_path 2>/dev/null || true)"
+tc52_state_transaction_id="$(transaction_exact_field "$tc52_state" transaction_id 2>/dev/null || true)"
+[[ "$tc52_state_backup_id" == "$tc52_backup_id" ]] && pass "terminal transaction retains exact backup_id" || fail "terminal transaction backup_id differs from manifest"
+[[ "$tc52_state_backup_path" == "$tc52_backup" ]] && pass "terminal transaction retains exact backup_path" || fail "terminal transaction backup_path differs from backup"
+[[ "$tc52_state_transaction_id" == "$tc52_transaction_id" ]] && pass "terminal transaction retains exact transaction_id" || fail "terminal transaction ID differs from manifest"
+[[ "$(transaction_exact_field "$tc52_state" completion 2>/dev/null || true)" == "committed" && "$(transaction_exact_field "$tc52_state" phase 2>/dev/null || true)" == "complete" ]] && pass "terminal transaction is committed with association intact" || fail "terminal transaction was not committed with complete phase"
+
+# Re-finalizing an already successful fixture may update only terminal timing;
+# the immutable association must remain byte-for-byte equivalent.
+tc52_refinalize_exit=0
+HOME="$tc52_home" XDG_STATE_HOME="$tc52_home/.local/state" XDG_CACHE_HOME="$tc52_home/.cache" \
+  AHR_FRAMEWORK_ROOT="$tc52_home/.config/artix-hypr-remix" \
+  AHR_LIB_PATH="$tc52_home/.config/artix-hypr-remix/bin/ahr-lib.sh" \
+  bash -s -- "$UPDATE_FRAMEWORK" "$tc52_txdir" <<'EOF' >/dev/null 2>&1 || tc52_refinalize_exit=$?
+update_framework="$1"
+txdir="$2"
+set --
+source <(sed -n '1,/^# ── JSON helpers/p' "$update_framework")
+finalize_transaction "$txdir" committed complete
+EOF
+(( tc52_refinalize_exit == 0 )) && pass "terminal finalization accepts matching manifest association" || fail "terminal finalization rejected matching manifest association"
+[[ "$(transaction_exact_field "$tc52_state" backup_id 2>/dev/null || true)" == "$tc52_state_backup_id" && "$(transaction_exact_field "$tc52_state" backup_path 2>/dev/null || true)" == "$tc52_state_backup_path" && "$(transaction_exact_field "$tc52_state" transaction_id 2>/dev/null || true)" == "$tc52_state_transaction_id" ]] && pass "terminal finalization cannot delete or change association" || fail "terminal finalization changed association"
+
+# The reader must use the recorded association rather than a newer or
+# unrelated backup directory. No timestamp or directory ordering is involved.
+mkdir -p "$tc52_home/.local/state/artix-hypr-remix/framework-backups/unrelated-backup"
+printf 'manifest_version=1\nbackup_id=unrelated-backup\ntransaction_id=tx-unrelated\n' > "$tc52_home/.local/state/artix-hypr-remix/framework-backups/unrelated-backup/manifest.txt"
+[[ "$(transaction_exact_field "$tc52_state" backup_id 2>/dev/null || true)" == "$tc52_backup_id" && "$(transaction_exact_field "$tc52_state" transaction_id 2>/dev/null || true)" == "$tc52_transaction_id" ]] && pass "unrelated backup does not alter terminal transaction readback" || fail "unrelated backup changed terminal transaction readback"
+
+# Validation evidence must capture the exact two artifacts before a caller's
+# restoration handler removes Batch-created state.
+tc52_evidence="$tmp_root/tc52-evidence"
+tc52_evidence_exit=0
+tc52_evidence_output="$(bash "$REPO_ROOT/scripts/preserve-framework-transaction-evidence.sh" \
+  --state-root "$tc52_home/.local/state/artix-hypr-remix" \
+  --transaction-id "$tc52_transaction_id" \
+  --backup-id "$tc52_backup_id" \
+  --apply-log "$tc52_home/.local/state/artix-hypr-remix/framework-update.log" \
+  --output "$tc52_evidence" 2>&1)" || tc52_evidence_exit=$?
+(( tc52_evidence_exit == 0 )) && pass "validation helper preserves exact transaction evidence" || fail "validation helper failed to preserve transaction evidence" "$tc52_evidence_output"
+cmp -s "$tc52_state" "$tc52_evidence/transaction.state" && cmp -s "$tc52_manifest" "$tc52_evidence/manifest.txt" && grep -qx "transaction_id=$tc52_transaction_id" "$tc52_evidence/identity.txt" && grep -qx "backup_id=$tc52_backup_id" "$tc52_evidence/identity.txt" && pass "preserved evidence matches terminal transaction and manifest" || fail "preserved evidence did not match exact association"
+
+# The structured writer rejects duplicate and malformed association fields;
+# neither condition can be hidden by a terminal serialization pass.
+tc52_duplicate_tx="$tmp_root/tc52-duplicate-tx"
+cp -a "$tc52_txdir" "$tc52_duplicate_tx"
+printf 'backup_id=%s\n' "$tc52_backup_id" >> "$tc52_duplicate_tx/state"
+tc52_duplicate_exit=0
+HOME="$tc52_home" XDG_STATE_HOME="$tc52_home/.local/state" XDG_CACHE_HOME="$tc52_home/.cache" \
+  AHR_FRAMEWORK_ROOT="$tc52_home/.config/artix-hypr-remix" \
+  AHR_LIB_PATH="$tc52_home/.config/artix-hypr-remix/bin/ahr-lib.sh" \
+  bash -s -- "$UPDATE_FRAMEWORK" "$tc52_duplicate_tx" <<'EOF' >/dev/null 2>&1 || tc52_duplicate_exit=$?
+update_framework="$1"
+txdir="$2"
+set --
+source <(sed -n '1,/^# ── JSON helpers/p' "$update_framework")
+write_transaction_state "$txdir" "phase=complete"
+EOF
+(( tc52_duplicate_exit != 0 )) && pass "duplicate transaction backup_id is rejected" || fail "duplicate transaction backup_id was accepted"
+tc52_malformed_tx="$tmp_root/tc52-malformed-tx"
+cp -a "$tc52_txdir" "$tc52_malformed_tx"
+sed -i 's/^backup_id=.*/backup_id=bad\/path/' "$tc52_malformed_tx/state"
+tc52_malformed_exit=0
+HOME="$tc52_home" XDG_STATE_HOME="$tc52_home/.local/state" XDG_CACHE_HOME="$tc52_home/.cache" \
+  AHR_FRAMEWORK_ROOT="$tc52_home/.config/artix-hypr-remix" \
+  AHR_LIB_PATH="$tc52_home/.config/artix-hypr-remix/bin/ahr-lib.sh" \
+  bash -s -- "$UPDATE_FRAMEWORK" "$tc52_malformed_tx" <<'EOF' >/dev/null 2>&1 || tc52_malformed_exit=$?
+update_framework="$1"
+txdir="$2"
+set --
+source <(sed -n '1,/^# ── JSON helpers/p' "$update_framework")
+write_transaction_state "$txdir" "phase=complete"
+EOF
+(( tc52_malformed_exit != 0 )) && pass "malformed transaction backup_id is rejected" || fail "malformed transaction backup_id was accepted"
+
+# Staged validation happens before backup/transaction creation. A failure at
+# that point must not fabricate an association record.
+tc52_prebackup_home="$tmp_root/tc52-prebackup"
+tc52_prebackup_repo="$(create_test_repo "$tmp_root/tc52-prebackup-repo" "0.2.0")"
+rm -f "$tc52_prebackup_repo/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-doctor"
+commit_test_repo "$tc52_prebackup_repo" "missing staged doctor"
+setup_installed_framework "$tc52_prebackup_home" "file://$tc52_prebackup_repo"
+tc52_prebackup_exit=0
+run_ahr "$tc52_prebackup_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc52_prebackup_exit=$?
+(( tc52_prebackup_exit != 0 )) && pass "pre-backup staged validation fails" || fail "pre-backup staged validation unexpectedly succeeded"
+if [[ -z "$(find "$tc52_prebackup_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null)" ]] && \
+   [[ -z "$(find "$tc52_prebackup_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null)" ]]; then
+  pass "failure before backup creates no fabricated association"
+else
+  fail "failure before backup created transaction or backup state"
+fi
 
 tc52_parser_dir="$tmp_root/tc52_parser"
 mkdir -p "$tc52_parser_dir"
@@ -1941,7 +2040,7 @@ for tc52_failure in migration:"$tx_state_file" health:"$tc19_state" namespace:"$
   tc52_manifest_backup="$(manifest_exact_field "$tc52_failure_manifest" backup_id 2>/dev/null || true)"
   tc52_manifest_tx="$(manifest_exact_field "$tc52_failure_manifest" transaction_id 2>/dev/null || true)"
   [[ "$tc52_manifest_backup" == "$(basename "$tc52_backup_path")" && "$tc52_manifest_tx" == "$(basename "$tc52_dir")" ]] && pass "$tc52_label failure preserves manifest association IDs" || fail "$tc52_label failure changed manifest association IDs"
-  [[ "$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc52_state")" == "$tc52_manifest_backup" && "$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc52_state")" == "$tc52_manifest_tx" ]] && pass "$tc52_label failure preserves transaction association IDs" || fail "$tc52_label failure changed transaction association IDs"
+  [[ "$(transaction_exact_field "$tc52_state" backup_id 2>/dev/null || true)" == "$tc52_manifest_backup" && "$(transaction_exact_field "$tc52_state" transaction_id 2>/dev/null || true)" == "$tc52_manifest_tx" && "$(transaction_exact_field "$tc52_state" backup_path 2>/dev/null || true)" == "$tc52_backup_path" ]] && pass "$tc52_label failure preserves transaction association IDs and path" || fail "$tc52_label failure changed transaction association IDs or path"
 done
 
 echo ""
