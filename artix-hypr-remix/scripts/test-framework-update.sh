@@ -2170,6 +2170,37 @@ else
   fail "rollback did not use exact failed-transaction backup"
 fi
 
+echo ""
+echo "=== TC55: Restore selector and target roots ==="
+tc55_home="$tmp_root/tc55"
+tc55_fw="$tc55_home/.config/artix-hypr-remix"
+tc55_backup="$tc55_home/.local/state/artix-hypr-remix/framework-backups/selector-fixture"
+mkdir -p "$tc55_fw/current/theme" "$tc55_home/.local/bin" "$tc55_backup/snapshots" "$tmp_root/tc55-unrelated"
+printf '{"version":"0.2.0"}\n' > "$tc55_fw/framework.json"
+printf 'saved\n' > "$tc55_backup/derived-framework-config"
+printf 'manifest_version=1\ncompleted=true\nbackup_id=selector-fixture\ntransaction_id=tx-selector-fixture\n' > "$tc55_backup/manifest.txt"
+printf 'format_version=1\nlink_name=ahr\nlink_target=%s/bin/ahr\n---\n' "$tc55_fw" > "$tc55_backup/derived-namespace-links"
+mkdir -p "$tc55_backup/snapshots/theme-state"
+printf 'saved\n' > "$tc55_backup/snapshots/theme-state/value"
+for tc55_component in active-theme waybar-theme mako-theme terminal-theme fontconfig; do printf 'saved\n' > "$tc55_backup/snapshots/$tc55_component"; done
+ln -s target "$tc55_backup/snapshots/background-state"
+printf 'component=theme-state\nsnapshot_path=%s/snapshots/theme-state\nsnapshot_status=present\n---\ncomponent=active-theme\nsnapshot_path=%s/snapshots/active-theme\nsnapshot_status=present\n---\ncomponent=background-state\nsnapshot_path=%s/snapshots/background-state\nsnapshot_status=present\n---\ncomponent=waybar-theme\nsnapshot_path=%s/snapshots/waybar-theme\nsnapshot_status=present\n---\ncomponent=mako-theme\nsnapshot_path=%s/snapshots/mako-theme\nsnapshot_status=present\n---\ncomponent=terminal-theme\nsnapshot_path=%s/snapshots/terminal-theme\nsnapshot_status=present\n---\ncomponent=fontconfig\nsnapshot_path=%s/snapshots/fontconfig\nsnapshot_status=present\n---\ncomponent=foot-theme\nsnapshot_path=\nsnapshot_status=absent\n---\ncomponent=chromium-theme\nsnapshot_path=\nsnapshot_status=unsupported\n---\n' "$tc55_backup" "$tc55_backup" "$tc55_backup" "$tc55_backup" "$tc55_backup" "$tc55_backup" "$tc55_backup" > "$tc55_backup/component-manifest.txt"
+tc55_run() { (cd "$tmp_root/tc55-unrelated" && HOME="$tc55_home" XDG_CONFIG_HOME="$tc55_home/.config" XDG_STATE_HOME="$tc55_home/.local/state" AHR_FRAMEWORK_ROOT="$tc55_fw" AHR_LOCAL_BIN="$tc55_home/.local/bin" AHR_LIB_PATH="$FRAMEWORK_BIN/ahr-lib.sh" bash "$RESTORE_COMPONENT" "$@"); }
+find "$tc55_fw" -xdev -printf '%y %m %s %p -> %l\n' | sort > "$tmp_root/tc55-before"
+for tc55_component in framework-config namespace-links theme-state active-theme background-state waybar-theme mako-theme terminal-theme fontconfig; do tc55_out="$(tc55_run "$tc55_component" --backup selector-fixture 2>&1)"; grep -q "canonical=$tc55_component" <<<"$tc55_out" && pass "$tc55_component selector maps canonically" || fail "$tc55_component selector mapping failed"; done
+tc55_waybar="$(tc55_run waybar-theme --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_home/.config/waybar/style.css" <<<"$tc55_waybar" && pass "Waybar target uses XDG config root" || fail "Waybar target root incorrect"
+tc55_mako="$(tc55_run mako-theme --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_home/.config/mako/config" <<<"$tc55_mako" && pass "Mako target uses XDG config root" || fail "Mako target root incorrect"
+tc55_terminal="$(tc55_run terminal-theme --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_home/.config/ghostty/config" <<<"$tc55_terminal" && pass "terminal target uses XDG config root" || fail "terminal target root incorrect"
+tc55_font="$(tc55_run fontconfig --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_home/.config/fontconfig/fonts.conf" <<<"$tc55_font" && pass "Fontconfig target uses XDG config root" || fail "Fontconfig target root incorrect"
+tc55_ns="$(tc55_run namespace-links --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_home/.local/bin" <<<"$tc55_ns" && pass "namespace target uses local-bin root" || fail "namespace target root incorrect"
+tc55_theme="$(tc55_run theme-state --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_fw/current" <<<"$tc55_theme" && pass "theme-state dry-run uses framework root" || fail "theme-state target root incorrect"
+find "$tc55_fw" -xdev -printf '%y %m %s %p -> %l\n' | sort > "$tmp_root/tc55-after"; diff -u "$tmp_root/tc55-before" "$tmp_root/tc55-after" && pass "dry-run from unrelated cwd is non-mutating" || fail "dry-run mutated framework"
+tc55_absent="$(tc55_run foot-theme --backup selector-fixture 2>&1 || true)"; grep -q 'was absent' <<<"$tc55_absent" && pass "absent status remains distinct" || fail "absent status not reported"
+tc55_unsupported="$(tc55_run chromium-theme --backup selector-fixture 2>&1 || true)"; grep -q 'automatic restoration is unsupported' <<<"$tc55_unsupported" && pass "unsupported status remains distinct" || fail "unsupported status not reported"
+tc55_unknown=0; tc55_run no-such-component --backup selector-fixture >/dev/null 2>&1 || tc55_unknown=$?; (( tc55_unknown != 0 )) && pass "unknown public component is rejected" || fail "unknown public component accepted"
+printf 'component=theme-state\nsnapshot_path=%s/snapshots/theme-state\nsnapshot_status=present\n---\n' "$tc55_backup" >> "$tc55_backup/component-manifest.txt"
+tc55_duplicate=0; tc55_run theme-state --backup selector-fixture >/dev/null 2>&1 || tc55_duplicate=$?; (( tc55_duplicate != 0 )) && pass "duplicate canonical manifest record is rejected" || fail "duplicate canonical record accepted"
+
 # ── Results ────────────────────────────────────────────────────────
 echo ""
 echo "========================================"
