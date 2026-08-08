@@ -55,7 +55,10 @@ All destructive operations use an exclusive transaction model with:
   `~/.local/state/artix-hypr-remix/framework-transactions/`. Never uses PID
   alone as the sole identifier.
 - **Durable transaction state**: Each transaction has a `state` file with
-  key=value records. No space-separated fields. Never sourced as shell.
+  key=value records. No space-separated fields. Never sourced as shell. New
+  apply transactions retain immutable `transaction_id`, `backup_id`, and
+  `backup_path` fields through terminal commit, which is cross-checked against
+  the primary backup manifest.
 - **Per-target progress tracking**: Prepared and archived paths are recorded
   with exact paths in the transaction state.
 - **Signal-aware restoration**: Traps on EXIT, INT, TERM, HUP perform
