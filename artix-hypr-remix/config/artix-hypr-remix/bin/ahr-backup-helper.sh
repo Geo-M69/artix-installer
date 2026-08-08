@@ -149,13 +149,6 @@ ahr_snapshot_component() {
 
   mkdir -p "$snap_dir"
 
-  if [[ ! -e "$src_path" && ! -L "$src_path" ]]; then
-    _ahr_component_manifest_record "$manifest" "$comp_name" "$src_path" "" "$shape" \
-      "$required" "$ownership" "$restore_policy" "absent" || return 1
-    [[ "$required" == "true" ]] && return 1
-    return 0
-  fi
-
   case "$shape" in
     structured-file|state|manifest)
       _ahr_component_manifest_record "$manifest" "$comp_name" "$src_path" "" "$shape" \
@@ -164,6 +157,13 @@ ahr_snapshot_component() {
       return 0
       ;;
   esac
+
+  if [[ ! -e "$src_path" && ! -L "$src_path" ]]; then
+    _ahr_component_manifest_record "$manifest" "$comp_name" "$src_path" "" "$shape" \
+      "$required" "$ownership" "$restore_policy" "absent" || return 1
+    [[ "$required" == "true" ]] && return 1
+    return 0
+  fi
 
   local snap_path="$snap_dir/$comp_name"
   case "$shape" in

@@ -192,16 +192,24 @@ network_stack_check() {
 }
 
 framework_cmd_check() {
-  local name="$1"
-  local path="$FRAMEWORK_ROOT/bin/$name"
-  if [[ -x "$path" ]]; then
-    printf '  OK: %s\n' "$name"
-  elif [[ -e "$path" ]]; then
-    printf '  MISSING: %s (not executable)\n' "$name"
+  local name="$1" path
+  path="$FRAMEWORK_ROOT/bin/$name"
+  if [[ ! -e "$path" || ! -r "$path" || ! -x "$path" ]]; then
+    printf '  MISSING: %s (not readable and executable)\n' "$name"
     overall_status=1
   else
-    printf '  MISSING: %s\n' "$name"
+    printf '  OK: %s\n' "$name"
+  fi
+}
+
+framework_library_check() {
+  local name="$1" path
+  path="$FRAMEWORK_ROOT/bin/$name"
+  if [[ ! -e "$path" || ! -r "$path" ]] || ! bash -n "$path" 2>/dev/null; then
+    printf '  MISSING: %s (not readable library)\n' "$name"
     overall_status=1
+  else
+    printf '  OK: %s (library)\n' "$name"
   fi
 }
 
@@ -442,7 +450,17 @@ framework_cmd_check ahr-update
 framework_cmd_check ahr-update-available
 framework_cmd_check ahr-update-framework
 framework_cmd_check ahr-restore-component
-framework_cmd_check ahr-cache.sh
+framework_cmd_check namespace-install.sh
+framework_cmd_check migrate.sh
+framework_cmd_check ahr-validate-managed-paths.sh
+framework_library_check ahr-lib.sh
+framework_library_check ahr-version.sh
+framework_library_check ahr-cache.sh
+framework_library_check ahr-backup-helper.sh
+framework_library_check ahr-managed-paths.sh
+framework_library_check ahr-theme-lib.sh
+framework_library_check ahr-toggle-lib.sh
+framework_library_check ahr-font-lib.sh
 framework_cmd_check ahr-migrate
 
 printf '\n'

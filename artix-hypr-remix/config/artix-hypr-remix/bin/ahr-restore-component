@@ -529,6 +529,39 @@ fi
 # Validate manifest
 [[ -f "$backup_dir/manifest.txt" ]] || { echo "Error: backup manifest missing" >&2; exit 1; }
 grep -q '^completed=true' "$backup_dir/manifest.txt" || { echo "Error: backup incomplete" >&2; exit 1; }
+# Explicit --backup selection is the documented legacy-compatible path.  A
+# new-format manifest still has to name this exact directory; --from-last-
+# update is automatic selection and therefore never accepts a legacy manifest.
+if [[ -n "$backup_id" ]]; then
+  ahr_parse_primary_manifest "$backup_dir/manifest.txt" "$backup_id" false || {
+    echo "Error: invalid primary backup manifest association" >&2; exit 1; }
+else
+  ahr_parse_primary_manifest "$backup_dir/manifest.txt" "$(basename "$backup_dir")" true || {
+    echo "Error: selected backup lacks valid transaction-association metadata" >&2; exit 1; }
+fi
+
+# A component manifest, when present, is authoritative about whether a
+# component is restorable.  Legacy backups without this manifest retain the
+# existing exact-backup restore behavior.
+if [[ -f "$backup_dir/component-manifest.txt" ]]; then
+  component_record="$(awk -v wanted="$comp_name" '
+    $0 == "component=" wanted { active=1; count++; next }
+    active && /^snapshot_path=/ { path=substr($0, 15) }
+    active && /^snapshot_status=/ { status=substr($0, 17) }
+    active && /^---$/ { active=0 }
+    END { if (count == 1) print status "\t" path; else exit 1 }
+  ' "$backup_dir/component-manifest.txt")" || {
+    echo "Error: component manifest has no unique record for $comp_name" >&2; exit 1; }
+  component_status="${component_record%%$'\t'*}"
+  component_snapshot="${component_record#*$'\t'}"
+  case "$component_status" in
+    present) [[ -n "$component_snapshot" ]] || { echo "Error: component manifest has empty snapshot for $comp_name" >&2; exit 1; } ;;
+    absent) [[ -z "$component_snapshot" ]] || { echo "Error: absent component has snapshot path: $comp_name" >&2; exit 1; }; echo "Component '$comp_name' was absent in the selected backup." >&2; exit 1 ;;
+    unsupported) [[ -z "$component_snapshot" ]] || { echo "Error: unsupported component has snapshot path: $comp_name" >&2; exit 1; }; echo "Component '$comp_name' is recorded in the backup, but automatic restoration is unsupported." >&2; exit 1 ;;
+    failed) echo "Error: component '$comp_name' has no valid restorable snapshot." >&2; exit 1 ;;
+    *) echo "Error: invalid component snapshot status for $comp_name" >&2; exit 1 ;;
+  esac
+fi
 
 # Resolve backup component path — check both derived- and snapshots/
 backup_component="$backup_dir/derived-$comp_name"

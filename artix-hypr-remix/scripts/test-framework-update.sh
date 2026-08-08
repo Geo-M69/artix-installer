@@ -605,12 +605,12 @@ new_version=0.2.0
 EOF
 
 tc16_exit=0
-run_restore_component "$tc16_home" chromium-theme --from-last-update >/dev/null 2>&1 || tc16_exit=$?
+run_restore_component "$tc16_home" chromium-theme --backup test-bk >/dev/null 2>&1 || tc16_exit=$?
 (( tc16_exit != 0 )) && pass "refuses structured-file component without --apply" || fail "accepted structured-file without --apply"
 
 # With --apply, should succeed
 tc16_apply_exit=0
-run_restore_component "$tc16_home" theme-state --from-last-update --apply >/dev/null 2>&1 || tc16_apply_exit=$?
+run_restore_component "$tc16_home" theme-state --backup test-bk --apply >/dev/null 2>&1 || tc16_apply_exit=$?
 (( tc16_apply_exit == 0 )) && pass "accepts unsafe component with --apply" || fail "rejected with --apply"
 
 echo ""
@@ -1303,7 +1303,7 @@ printf "manifest_version=1\ncompleted=true\nprevious_version=0.1.0\nnew_version=
 printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
   "$tc34_fw" "$tc34_home/.local/bin" "$tc34_fw" > "$tc34_backup/derived-namespace-links"
 tc34_exit=0
-run_restore_component "$tc34_home" namespace-links --from-last-update --apply 2>/dev/null || tc34_exit=$?
+run_restore_component "$tc34_home" namespace-links --backup test-ns-restore --apply 2>/dev/null || tc34_exit=$?
 (( tc34_exit == 0 )) && pass "namespace restore from manifest succeeds" || fail "namespace restore failed (exit $tc34_exit)"
 tc34_target="$(readlink "$tc34_home/.local/bin/ahr-doctor" 2>/dev/null || echo "MISSING")"
 [[ "$tc34_target" == "$tc34_fw/bin/ahr-doctor" ]] && pass "link restored to manifest target" || fail "link target wrong: $tc34_target"
@@ -1326,7 +1326,7 @@ tc35_fw="$tc35_home/.config/artix-hypr-remix"
 printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
   "$tc35_fw" "$tc35_home/.local/bin" "$tc35_fw" > "$tc35_backup/derived-namespace-links"
 tc35_exit=0
-tc35_output="$(run_restore_component "$tc35_home" namespace-links --from-last-update 2>&1 || true)"
+tc35_output="$(run_restore_component "$tc35_home" namespace-links --backup test-ns-dry 2>&1 || true)"
 tc35_after="$(readlink "$tc35_home/.local/bin/ahr-doctor" 2>/dev/null || echo "MISSING")"
 [[ "$tc35_before" == "$tc35_after" ]] && pass "dry-run does not modify links" || fail "dry-run modified links"
 echo "$tc35_output" | grep -q 'DRY RUN' && pass "dry-run reports DRY RUN" || fail "no DRY RUN output"
@@ -1516,7 +1516,7 @@ printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlo
 # Remove a link
 rm -f "$tc46_home/.local/bin/ahr-doctor"
 tc46_exit=0
-run_restore_component "$tc46_home" namespace-links --from-last-update --apply 2>/dev/null || tc46_exit=$?
+run_restore_component "$tc46_home" namespace-links --backup test-ns-removed --apply 2>/dev/null || tc46_exit=$?
 (( tc46_exit == 0 )) && pass "restores removed link" || fail "restore failed (exit $tc46_exit)"
 [[ -L "$tc46_home/.local/bin/ahr-doctor" ]] && pass "link recreated after restore" || fail "link not recreated"
 
@@ -1539,7 +1539,7 @@ printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlo
 # Add a link that wasn't in the snapshot
 ln -s "/usr/bin/true" "$tc47_home/.local/bin/custom-tool"
 tc47_exit=0
-run_restore_component "$tc47_home" namespace-links --from-last-update --apply 2>/dev/null || tc47_exit=$?
+run_restore_component "$tc47_home" namespace-links --backup test-ns-added --apply 2>/dev/null || tc47_exit=$?
 (( tc47_exit == 0 )) && pass "restore succeeds with extra link present" || fail "restore failed (exit $tc47_exit)"
 tc47_custom="$(readlink "$tc47_home/.local/bin/custom-tool" 2>/dev/null || echo "MISSING")"
 [[ "$tc47_custom" == "/usr/bin/true" ]] && pass "unrelated extra link preserved" || fail "extra link modified"
@@ -1877,6 +1877,199 @@ for tc51_case in active-theme theme-state background-state; do
   run_ahr "$tc51_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc51_missing_rb_exit=$?
   (( tc51_missing_rb_exit != 0 )) && pass "rollback rejects incomplete $tc51_case backup" || fail "rollback accepted incomplete $tc51_case backup"
 done
+
+# The focused association cases below use only deterministic fixture IDs and
+# exact paths; they never rely on backup ordering or timestamp selection.
+echo ""
+echo "=== TC52: Primary manifest association validation ==="
+
+manifest_exact_field() {
+  local manifest="$1" key="$2"
+  awk -v key="$key" 'index($0, key "=") == 1 { count++; value=substr($0, length(key) + 2) } END { if (count == 1) print value; else exit 1 }' "$manifest"
+}
+
+tc52_home="$tmp_root/tc52"
+tc52_repo="$(create_test_repo "$tmp_root/tc52_repo" "0.2.0")"
+setup_installed_framework "$tc52_home" "file://$tc52_repo"
+tc52_apply=0
+run_ahr "$tc52_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc52_apply=$?
+(( tc52_apply == 0 )) && pass "association fixture apply succeeds" || fail "association fixture apply failed (exit $tc52_apply)"
+tc52_backup="$(find "$tc52_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+tc52_manifest="$tc52_backup/manifest.txt"
+tc52_backup_id="$(manifest_exact_field "$tc52_manifest" backup_id 2>/dev/null || true)"
+tc52_transaction_id="$(manifest_exact_field "$tc52_manifest" transaction_id 2>/dev/null || true)"
+[[ -n "$tc52_backup_id" ]] && pass "successful backup has exactly one backup_id" || fail "successful backup backup_id is missing or duplicated"
+[[ -n "$tc52_transaction_id" ]] && pass "successful backup has exactly one transaction_id" || fail "successful backup transaction_id is missing or duplicated"
+[[ "$tc52_backup_id" == "$(basename "$tc52_backup")" ]] && pass "manifest backup_id matches backup directory" || fail "manifest backup_id does not match backup directory"
+[[ -d "$tc52_home/.local/state/artix-hypr-remix/framework-transactions/$tc52_transaction_id" ]] && pass "manifest transaction_id matches transaction directory" || fail "manifest transaction_id does not match transaction directory"
+
+tc52_parser_dir="$tmp_root/tc52_parser"
+mkdir -p "$tc52_parser_dir"
+cat > "$tc52_parser_dir/good" <<'EOF'
+manifest_version=1
+backup_id=backup-A
+transaction_id=tx-A
+EOF
+cat > "$tc52_parser_dir/legacy" <<'EOF'
+manifest_version=1
+EOF
+for tc52_case in duplicate_backup duplicate_transaction malformed_backup malformed_transaction directory_mismatch malformed_key; do
+  cp "$tc52_parser_dir/good" "$tc52_parser_dir/$tc52_case"
+done
+printf 'backup_id=backup-A\n' >> "$tc52_parser_dir/duplicate_backup"
+printf 'transaction_id=tx-A\n' >> "$tc52_parser_dir/duplicate_transaction"
+sed -i 's/^backup_id=.*/backup_id=bad\/path/' "$tc52_parser_dir/malformed_backup"
+sed -i 's/^transaction_id=.*/transaction_id=not-a-transaction/' "$tc52_parser_dir/malformed_transaction"
+sed -i 's/^backup_id=.*/backup_id=backup-B/' "$tc52_parser_dir/directory_mismatch"
+sed -i 's/^backup_id=.*/backup_id broken/' "$tc52_parser_dir/malformed_key"
+source "$FRAMEWORK_BIN/ahr-lib.sh"
+ahr_parse_primary_manifest "$tc52_parser_dir/good" backup-A true && pass "strict parser accepts exact new-format association" || fail "strict parser rejected valid association"
+ahr_parse_primary_manifest "$tc52_parser_dir/legacy" backup-A false && pass "legacy exact backup selection is accepted" || fail "legacy exact backup selection rejected"
+ahr_parse_primary_manifest "$tc52_parser_dir/legacy" backup-A true && fail "legacy automatic association accepted" || pass "legacy automatic association rejected"
+for tc52_case in duplicate_backup duplicate_transaction malformed_backup malformed_transaction directory_mismatch malformed_key; do
+  ahr_parse_primary_manifest "$tc52_parser_dir/$tc52_case" backup-A true && fail "$tc52_case accepted" || pass "$tc52_case rejected"
+done
+
+# Existing failure fixtures cover each post-backup terminal path.  Their
+# manifests and transaction states must retain the same two association IDs.
+for tc52_failure in migration:"$tx_state_file" health:"$tc19_state" namespace:"$tc21_tx"; do
+  tc52_label="${tc52_failure%%:*}"
+  tc52_state="${tc52_failure#*:}"
+  tc52_dir="$(dirname "$tc52_state")"
+  tc52_backup_path="$(awk -F= '$1 == "backup_dir" { print substr($0, 12); exit }' "$tc52_state")"
+  tc52_failure_manifest="$tc52_backup_path/manifest.txt"
+  tc52_manifest_backup="$(manifest_exact_field "$tc52_failure_manifest" backup_id 2>/dev/null || true)"
+  tc52_manifest_tx="$(manifest_exact_field "$tc52_failure_manifest" transaction_id 2>/dev/null || true)"
+  [[ "$tc52_manifest_backup" == "$(basename "$tc52_backup_path")" && "$tc52_manifest_tx" == "$(basename "$tc52_dir")" ]] && pass "$tc52_label failure preserves manifest association IDs" || fail "$tc52_label failure changed manifest association IDs"
+  [[ "$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc52_state")" == "$tc52_manifest_backup" && "$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc52_state")" == "$tc52_manifest_tx" ]] && pass "$tc52_label failure preserves transaction association IDs" || fail "$tc52_label failure changed transaction association IDs"
+done
+
+echo ""
+echo "=== TC53: Component status and required-unsupported behavior ==="
+
+tc53_helper_backup="$tmp_root/tc53_helper_backup"
+mkdir -p "$tc53_helper_backup"
+tc53_helper_exit=0
+bash -s -- "$FRAMEWORK_BIN/ahr-backup-helper.sh" "$tc53_helper_backup" <<'EOF' || tc53_helper_exit=$?
+set -euo pipefail
+source "$1"
+ahr_snapshot_component required-structured /does/not/matter "$2" structured-file true framework unsupported
+EOF
+(( tc53_helper_exit != 0 )) && pass "required unsupported component fails snapshot" || fail "required unsupported component snapshot succeeded"
+[[ "$(manifest_component_field "$tc53_helper_backup/component-manifest.txt" required-structured snapshot_status)" == "unsupported" ]] && pass "required unsupported component is recorded as unsupported" || fail "required unsupported component status wrong"
+
+tc53_make_backup() {
+  local home="$1" id="$2" status="$3"
+  local backup="$home/.local/state/artix-hypr-remix/framework-backups/$id"
+  mkdir -p "$home/.config/artix-hypr-remix/current/theme" "$backup/derived-theme-state/theme"
+  printf 'live\n' > "$home/.config/artix-hypr-remix/current/theme/marker"
+  printf 'saved\n' > "$backup/derived-theme-state/theme/marker"
+  printf 'manifest_version=1\ncompleted=true\nbackup_id=%s\ntransaction_id=tx-%s\n' "$id" "$id" > "$backup/manifest.txt"
+  if [[ "$status" == "present" ]]; then
+    printf 'component=theme-state\nsnapshot_path=%s/snapshots/theme-state\nsnapshot_status=%s\n---\n' "$backup" "$status" > "$backup/component-manifest.txt"
+  else
+    printf 'component=theme-state\nsnapshot_path=\nsnapshot_status=%s\n---\n' "$status" > "$backup/component-manifest.txt"
+  fi
+}
+
+tc53_present_home="$tmp_root/tc53_present"
+tc53_make_backup "$tc53_present_home" component-present present
+tc53_present_exit=0
+run_restore_component "$tc53_present_home" theme-state --backup component-present --apply >/dev/null 2>&1 || tc53_present_exit=$?
+if (( tc53_present_exit == 0 )) && [[ -f "$tc53_present_home/.config/artix-hypr-remix/current/theme/marker" ]] && [[ "$(cat "$tc53_present_home/.config/artix-hypr-remix/current/theme/marker")" == "saved" ]]; then
+  pass "present component follows normal restore path"
+else
+  fail "present component restore failed"
+fi
+
+for tc53_status in absent unsupported failed unknown; do
+  tc53_home="$tmp_root/tc53_$tc53_status"
+  tc53_id="component-$tc53_status"
+  tc53_make_backup "$tc53_home" "$tc53_id" "$tc53_status"
+  tc53_output="$(run_restore_component "$tc53_home" theme-state --backup "$tc53_id" --apply 2>&1 || true)"
+  [[ "$(cat "$tc53_home/.config/artix-hypr-remix/current/theme/marker")" == "live" ]] && pass "$tc53_status component is rejected before mutation" || fail "$tc53_status component mutated target"
+  case "$tc53_status" in
+    absent) grep -q 'was absent' <<<"$tc53_output" ;;
+    unsupported) grep -q 'automatic restoration is unsupported' <<<"$tc53_output" ;;
+    failed) grep -q 'no valid restorable snapshot' <<<"$tc53_output" ;;
+    unknown) grep -q 'invalid component snapshot status' <<<"$tc53_output" ;;
+  esac
+  [[ $? == 0 ]] && pass "$tc53_status component reports distinct status" || fail "$tc53_status component status message missing"
+done
+
+echo ""
+echo "=== TC54: Rollback uses exact failed-transaction backup ==="
+
+tc54_home="$tmp_root/tc54"
+tc54_repo="$(create_test_repo "$tmp_root/tc54_repo" "0.2.0")"
+setup_installed_framework "$tc54_home" "file://$tc54_repo"
+printf '#!/usr/bin/env bash\nexit 7\n' > "$tc54_repo/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-doctor"
+chmod +x "$tc54_repo/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-doctor"
+(cd "$tc54_repo" && git add -A && git commit -q -m "failing doctor for association" >/dev/null)
+run_ahr "$tc54_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || true
+tc54_backup="$(find "$tc54_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+tc54_manifest="$tc54_backup/manifest.txt"
+tc54_state="$(find "$tc54_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"
+cp "$tc54_manifest" "$tc54_manifest.saved"
+cp "$tc54_state" "$tc54_state.saved"
+
+# Each corrupt association must stop before rollback changes the installed
+# framework.  Restore the isolated fixture record after every assertion.
+sed -i 's/^transaction_id=.*/transaction_id=tx-other/' "$tc54_manifest"
+tc54_bad_tx=0
+run_ahr "$tc54_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc54_bad_tx=$?
+if (( tc54_bad_tx != 0 )) && [[ "$(json_get "$tc54_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then
+  pass "transaction/manifest transaction-ID mismatch rejected before mutation"
+else
+  fail "transaction-ID mismatch was not safely rejected"
+fi
+cp "$tc54_manifest.saved" "$tc54_manifest"
+
+sed -i 's/^backup_id=.*/backup_id=backup-other/' "$tc54_manifest"
+tc54_bad_backup=0
+run_ahr "$tc54_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc54_bad_backup=$?
+if (( tc54_bad_backup != 0 )) && [[ "$(json_get "$tc54_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then
+  pass "backup-directory/manifest-ID mismatch rejected before mutation"
+else
+  fail "backup-directory mismatch was not safely rejected"
+fi
+cp "$tc54_manifest.saved" "$tc54_manifest"
+
+sed -i 's/^backup_id=.*/backup_id=backup-other/' "$tc54_state"
+tc54_bad_state=0
+run_ahr "$tc54_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc54_bad_state=$?
+if (( tc54_bad_state != 0 )) && [[ "$(json_get "$tc54_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then
+  pass "transaction/manifest backup-ID mismatch rejected before mutation"
+else
+  fail "transaction backup-ID mismatch was not safely rejected"
+fi
+cp "$tc54_state.saved" "$tc54_state"
+
+# An unrelated complete backup exists alongside the explicitly associated
+# failed apply.  A test-only stat shim makes it appear newer without changing
+# filesystem timestamps; its invalid payload proves it was not selected.
+tc54_other="$tc54_home/.local/state/artix-hypr-remix/framework-backups/unrelated-backup"
+cp -a "$tc54_backup" "$tc54_other"
+sed -i 's/^backup_id=.*/backup_id=unrelated-backup/; s/^transaction_id=.*/transaction_id=tx-unrelated/' "$tc54_other/manifest.txt"
+rm -rf "$tc54_other/docs"
+tc54_fakebin="$tc54_home/fakebin"
+mkdir -p "$tc54_fakebin"
+cat > "$tc54_fakebin/stat" <<'EOF'
+#!/usr/bin/env bash
+for arg in "$@"; do path="$arg"; done
+case "$path" in
+  *unrelated-backup*) printf '200\n' ;;
+  *) printf '100\n' ;;
+esac
+EOF
+chmod +x "$tc54_fakebin/stat"
+tc54_rollback=0
+PATH="$tc54_fakebin:$PATH" run_ahr "$tc54_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc54_rollback=$?
+if (( tc54_rollback == 0 )) && [[ "$(json_get "$tc54_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" ]]; then
+  pass "exact recorded backup wins over unrelated backup"
+else
+  fail "rollback did not use exact failed-transaction backup"
+fi
 
 # ── Results ────────────────────────────────────────────────────────
 echo ""
