@@ -14,27 +14,34 @@ FRAMEWORK_BACKUPS_DIR="$STATE_ROOT/framework-backups"
 LIB_PATH="${AHR_LIB_PATH:-${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/bin/ahr-lib.sh}"
 source "$LIB_PATH"
 
-# Component inventory: component|shape|path|user_editable|safe|rollback_only
-FRAMEWORK_DERIVED_COMPONENTS=(
-  "framework-config|file|framework.json|false|true|false"
-  "namespace-links|manifest|__namespace_links__|false|true|false"
-  "migration-state|state|__migration_state__|true|true|true"
-  "theme-state|directory|current|true|false|false"
-  "waybar-theme|file|~/.config/waybar/style.css|true|true|false"
-  "mako-theme|file|~/.config/mako/config|true|true|false"
-  "terminal-theme|file|~/.config/ghostty/config|true|true|false"
-  "fontconfig|file|~/.config/fontconfig/fonts.conf|true|true|false"
-  "background-state|symlink|current/background|false|true|false"
-  "active-theme|file|current/theme.name|false|true|false"
-  "toggle-state|directory|~/.local/state/artix-hypr-remix/toggles|false|true|true"
-  "foot-theme|file|~/.config/foot/foot.ini|true|true|false"
-  "chromium-theme|structured-file|~/.config/chromium/Default/Preferences|true|false|false"
-  "vscode-theme|structured-file|~/.config/Code/User/settings.json|true|false|false"
-  "cursor-theme|structured-file|~/.config/Cursor/User/settings.json|true|false|false"
-  "opencode-theme|structured-file|~/.config/opencode/opencode.jsonc|true|false|false"
-  "hyprland-managed|file|~/.config/hypr/hyprland.conf|true|false|false"
-  "waybar-config|structured-file|~/.config/waybar/config.jsonc|true|false|false"
+# Public restore selector|canonical backup component|shape|declared path|
+# target root|safe-to-apply|rollback-only.  The target-root field is explicit:
+# a relative path is never implicitly rooted below FRAMEWORK_ROOT.
+RESTORE_COMPONENTS=(
+  "framework-config|framework-config|file|framework.json|framework|true|false"
+  "namespace-links|namespace-links|manifest|__namespace_links__|local-bin|true|false"
+  "migration-state|migration-state|state|__migration_state__|state|true|true"
+  "theme-state|theme-state|directory|current|framework|false|false"
+  "waybar-theme|waybar-theme|file|~/.config/waybar/style.css|config|true|false"
+  "mako-theme|mako-theme|file|~/.config/mako/config|config|true|false"
+  "terminal-theme|terminal-theme|file|~/.config/ghostty/config|config|true|false"
+  "fontconfig|fontconfig|file|~/.config/fontconfig/fonts.conf|config|true|false"
+  "background-state|background-state|symlink|current/background|framework|true|false"
+  "active-theme|active-theme|file|current/theme.name|framework|true|false"
+  "toggle-state|toggle-state|directory|~/.local/state/artix-hypr-remix/toggles|state|true|true"
+  "foot-theme|foot-theme|file|~/.config/foot/foot.ini|config|true|false"
+  "chromium-theme|chromium-theme|structured-file|~/.config/chromium/Default/Preferences|config|false|false"
+  "vscode-theme|vscode-theme|structured-file|~/.config/Code/User/settings.json|config|false|false"
+  "cursor-theme|cursor-theme|structured-file|~/.config/Cursor/User/settings.json|config|false|false"
+  "opencode-theme|opencode-theme|structured-file|~/.config/opencode/opencode.jsonc|config|false|false"
+  "hyprland-managed|hyprland-managed|file|~/.config/hypr/hyprland.conf|config|false|false"
+  "waybar-config|waybar-config|structured-file|~/.config/waybar/config.jsonc|config|false|false"
 )
+
+# Compatibility aliases use alias|canonical records.  Keep this empty until a
+# public compatibility name is deliberately introduced; resolution rejects
+# duplicate aliases and aliases to nonexistent canonical records.
+RESTORE_COMPONENT_ALIASES=()
 
 usage() {
   cat <<'EOF'
@@ -84,35 +91,36 @@ done
 
 # ── Helpers ────────────────────────────────────────────────────────
 
-# Resolve a component path to an absolute, canonicalized path.
-# Framework-relative components resolve below AHR_FRAMEWORK_ROOT.
-# XDG components (~/...) resolve to their declared absolute XDG paths.
-# Rejects symlink escapes outside the declared component boundary.
+# Resolve a declared inventory path beneath its explicit root without following
+# a final symlink (a symlink component must be replaced, not its target).
 resolve_component_target() {
-  local comp_path="$1"
-  local resolved="$comp_path"
-  case "$resolved" in
-    ~/*) resolved="${resolved/#\~/$HOME}" ;;
-    /*) ;;
-    *) resolved="$FRAMEWORK_ROOT/$resolved" ;;
+  local comp_path="$1" target_root="$2" root relative resolved parent real_parent real_root
+  [[ "$comp_path" != /* && "$comp_path" != *".."* ]] || {
+    echo "Error: unsafe declared component path: $comp_path" >&2; return 1; }
+  case "$target_root" in
+    framework) root="$FRAMEWORK_ROOT"; relative="$comp_path" ;;
+    config)
+      [[ "$comp_path" == "~/.config/"* ]] || { echo "Error: config component lacks ~/.config root" >&2; return 1; }
+      root="${XDG_CONFIG_HOME:-$HOME/.config}"; relative="${comp_path#\~/.config/}" ;;
+    state)
+      [[ "$comp_path" == "~/.local/state/"* ]] || { echo "Error: state component lacks ~/.local/state root" >&2; return 1; }
+      root="${XDG_STATE_HOME:-$HOME/.local/state}"; relative="${comp_path#\~/.local/state/}" ;;
+    local-bin)
+      root="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
+      [[ "$comp_path" == "__namespace_links__" ]] || { echo "Error: invalid local-bin component path" >&2; return 1; }
+      printf '%s' "${root%/}"
+      return 0
+      ;;
+    *) echo "Error: unknown component target root: $target_root" >&2; return 1 ;;
   esac
-  # Canonicalize if the file exists (follow symlinks)
-  if [[ -e "$resolved" || -L "$resolved" ]]; then
-    local real_resolved
-    real_resolved="$(realpath "$resolved" 2>/dev/null)" || real_resolved="$resolved"
-    # Reject if it escapes FRAMEWORK_ROOT for framework-relative components
-    case "$comp_path" in
-      ~/*|/*) ;; # XDG paths are allowed anywhere
-      *)
-        local real_root
-        real_root="$(realpath "$FRAMEWORK_ROOT" 2>/dev/null)" || real_root="$FRAMEWORK_ROOT"
-        case "$real_resolved" in
-          "$real_root"/*) ;;
-          *) echo "Error: resolved path escapes framework root: $real_resolved" >&2; return 1 ;;
-        esac
-        ;;
-    esac
-    resolved="$real_resolved"
+  [[ "$relative" != /* && "$relative" != *".."* ]] || { echo "Error: unsafe component relative path" >&2; return 1; }
+  root="${root%/}"
+  resolved="$root${relative:+/$relative}"
+  parent="$(dirname "$resolved")"
+  if [[ -e "$parent" || -L "$parent" ]]; then
+    real_parent="$(realpath "$parent" 2>/dev/null)" || { echo "Error: target parent cannot be resolved" >&2; return 1; }
+    real_root="$(realpath "$root" 2>/dev/null)" || real_root="$root"
+    case "$real_parent" in "$real_root"|"$real_root"/*) ;; *) echo "Error: target parent escapes declared root" >&2; return 1 ;; esac
   fi
   printf '%s' "$resolved"
 }
@@ -171,18 +179,26 @@ find_latest_backup() {
   echo "$found"
 }
 
-# Find a component in the inventory.
 find_component() {
-  local name="$1"
-  local entry
-  for entry in "${FRAMEWORK_DERIVED_COMPONENTS[@]}"; do
-    local cname
-    cname="$(echo "$entry" | cut -d'|' -f1)"
-    if [[ "$cname" == "$name" ]]; then
-      echo "$entry"
-      return 0
-    fi
+  local public_name="$1" canonical alias entry matches=0
+  canonical="$public_name"
+  for alias in "${RESTORE_COMPONENT_ALIASES[@]}"; do
+    [[ "${alias%%|*}" == "$public_name" ]] || continue
+    canonical="${alias#*|}"
+    matches=$((matches + 1))
   done
+  (( matches <= 1 )) || { echo "Error: ambiguous restore alias: $public_name" >&2; return 1; }
+  matches=0
+  for entry in "${RESTORE_COMPONENTS[@]}"; do
+    [[ "${entry%%|*}" == "$canonical" ]] || continue
+    printf '%s\n' "$entry"
+    matches=$((matches + 1))
+  done
+  (( matches == 1 )) || { echo "Error: unknown restore component: $public_name" >&2; return 1; }
+}
+
+component_uses_derived_snapshot() {
+  case "$1" in framework-config|namespace-links) return 0 ;; esac
   return 1
 }
 
@@ -350,9 +366,8 @@ restore_namespace_links() {
 restore_file_component() {
   local comp_name="$1" backup_component="$2" target="$3"
   [[ -f "$backup_component" ]] || { echo "Error: $comp_name backup is not a file" >&2; return 1; }
-  # Resolve to absolute path using the shared resolver
-  local abs_target
-  abs_target="$(resolve_component_target "$target")" || { echo "Error: failed to resolve target for $comp_name" >&2; return 1; }
+  local abs_target="$target"
+  [[ "$abs_target" == /* ]] || { echo "Error: non-absolute restore target for $comp_name" >&2; return 1; }
   # Validate destination parent exists and is writable
   local target_dir
   target_dir="$(dirname "$abs_target")"
@@ -401,9 +416,8 @@ restore_file_component() {
 restore_directory_component() {
   local comp_name="$1" backup_component="$2" target="$3"
   [[ -d "$backup_component" ]] || { echo "Error: $comp_name backup not found" >&2; return 1; }
-  # Resolve to absolute path using the shared resolver
-  local abs_target
-  abs_target="$(resolve_component_target "$target")" || { echo "Error: failed to resolve target for $comp_name" >&2; return 1; }
+  local abs_target="$target"
+  [[ "$abs_target" == /* ]] || { echo "Error: non-absolute restore target for $comp_name" >&2; return 1; }
   # Validate parent is writable
   local target_parent
   target_parent="$(dirname "$abs_target")"
@@ -455,20 +469,18 @@ restore_directory_component() {
 if [[ "$mode" == "list" ]]; then
   echo "Supported components:"
   _entry=""
-  for _entry in "${FRAMEWORK_DERIVED_COMPONENTS[@]}"; do
+  for _entry in "${RESTORE_COMPONENTS[@]}"; do
     _cname="$(echo "$_entry" | cut -d'|' -f1)"
-    _cshape="$(echo "$_entry" | cut -d'|' -f2)"
-    _cpath="$(echo "$_entry" | cut -d'|' -f3)"
-    _ceditable="$(echo "$_entry" | cut -d'|' -f4)"
-    _csafe="$(echo "$_entry" | cut -d'|' -f5)"
-    _crollback_only="$(echo "$_entry" | cut -d'|' -f6)"
-    _editable_label="user-editable"
-    [[ "$_ceditable" == "false" ]] && _editable_label="framework-owned"
+    _cshape="$(echo "$_entry" | cut -d'|' -f3)"
+    _cpath="$(echo "$_entry" | cut -d'|' -f4)"
+    _croot="$(echo "$_entry" | cut -d'|' -f5)"
+    _csafe="$(echo "$_entry" | cut -d'|' -f6)"
+    _crollback_only="$(echo "$_entry" | cut -d'|' -f7)"
     _safe_label="safe"
     [[ "$_csafe" == "false" ]] && _safe_label="requires --apply"
     _rb_label=""
     [[ "$_crollback_only" == "true" ]] && _rb_label=" [rollback-only]"
-    printf '  %s [%s] %s (%s, %s)%s\n' "$_cname" "$_cshape" "$_cpath" "$_editable_label" "$_safe_label" "$_rb_label"
+    printf '  %s [%s] %s (root=%s, %s)%s\n' "$_cname" "$_cshape" "$_cpath" "$_croot" "$_safe_label" "$_rb_label"
   done
   exit 0
 fi
@@ -483,17 +495,13 @@ fi
 component_entry="$(find_component "$component" 2>/dev/null || true)"
 [[ -z "$component_entry" ]] && { echo "Error: unsupported component: $component" >&2; echo "Use --list to see supported components." >&2; exit 1; }
 
-comp_name="$(echo "$component_entry" | cut -d'|' -f1)"
-comp_shape="$(echo "$component_entry" | cut -d'|' -f2)"
-comp_path="$(echo "$component_entry" | cut -d'|' -f3)"
-comp_safe="$(echo "$component_entry" | cut -d'|' -f5)"
-comp_rollback_only="$(echo "$component_entry" | cut -d'|' -f6)"
-
-# Check restore safety
-if [[ "$comp_safe" == "false" && "$apply" == "false" ]]; then
-  echo "Error: component '$comp_name' requires --apply for restoration" >&2
-  exit 1
-fi
+public_name="$(echo "$component_entry" | cut -d'|' -f1)"
+comp_name="$(echo "$component_entry" | cut -d'|' -f2)"
+comp_shape="$(echo "$component_entry" | cut -d'|' -f3)"
+comp_path="$(echo "$component_entry" | cut -d'|' -f4)"
+comp_root="$(echo "$component_entry" | cut -d'|' -f5)"
+comp_safe="$(echo "$component_entry" | cut -d'|' -f6)"
+comp_rollback_only="$(echo "$component_entry" | cut -d'|' -f7)"
 
 # Reject rollback-only components for standalone restoration
 if [[ "$comp_rollback_only" == "true" && "$comp_name" == "migration-state" ]]; then
@@ -543,7 +551,9 @@ fi
 # A component manifest, when present, is authoritative about whether a
 # component is restorable.  Legacy backups without this manifest retain the
 # existing exact-backup restore behavior.
-if [[ -f "$backup_dir/component-manifest.txt" ]]; then
+component_status="present"
+component_snapshot=""
+if [[ -f "$backup_dir/component-manifest.txt" ]] && ! component_uses_derived_snapshot "$comp_name"; then
   component_record="$(awk -v wanted="$comp_name" '
     $0 == "component=" wanted { active=1; count++; next }
     active && /^snapshot_path=/ { path=substr($0, 15) }
@@ -568,25 +578,28 @@ backup_component="$backup_dir/derived-$comp_name"
 if [[ ! -e "$backup_component" && -d "$backup_dir/snapshots" ]]; then
   backup_component="$backup_dir/snapshots/$comp_name"
 fi
+[[ -e "$backup_component" || -L "$backup_component" ]] || { echo "Error: component snapshot is unavailable: $comp_name" >&2; exit 1; }
+
+_resolved_path="$(resolve_component_target "$comp_path" "$comp_root")" || { echo "Error: failed to resolve target for $comp_name" >&2; exit 1; }
+if [[ "$apply" == "false" ]]; then
+  printf 'DRY RUN: public=%s canonical=%s backup_id=%s status=%s\n' "$public_name" "$comp_name" "$(basename "$backup_dir")" "$component_status"
+  printf '  Snapshot: %s\n  Target: %s\n  Shape: %s\n  Policy: %s\n' "$backup_component" "$_resolved_path" "$comp_shape" "$comp_safe"
+fi
 
 # Component restore
 case "$comp_shape" in
   file)
     [[ -f "$backup_component" ]] || { echo "Error: component file not in backup: $comp_name" >&2; exit 1; }
-    _resolved_path="$(resolve_component_target "$comp_path")" || { echo "Error: failed to resolve path for $comp_name" >&2; exit 1; }
     if [[ "$apply" == "false" ]]; then
-      echo "DRY RUN: Would restore $comp_name (file) -> $_resolved_path"
-      echo "  Backup: $backup_component"
       exit 0
     fi
-    restore_file_component "$comp_name" "$backup_component" "$comp_path" || exit 1
+    restore_file_component "$comp_name" "$backup_component" "$_resolved_path" || exit 1
     ;;
   symlink)
     [[ -L "$backup_component" ]] || { echo "Error: component symlink not in backup: $comp_name" >&2; exit 1; }
-    _resolved_path="$(resolve_component_target "$comp_path")" || { echo "Error: failed to resolve path for $comp_name" >&2; exit 1; }
     _snap_target="$(readlink "$backup_component")"
     if [[ "$apply" == "false" ]]; then
-      echo "DRY RUN: Would restore $comp_name (symlink) -> $_resolved_path -> $_snap_target"
+      echo "  Symlink target: $_snap_target"
       exit 0
     fi
     mkdir -p "$(dirname "$_resolved_path")"
@@ -596,13 +609,10 @@ case "$comp_shape" in
     ;;
   directory)
     [[ -d "$backup_component" ]] || { echo "Error: component directory not in backup: $comp_name" >&2; exit 1; }
-    _resolved_path="$(resolve_component_target "$comp_path")" || { echo "Error: failed to resolve path for $comp_name" >&2; exit 1; }
     if [[ "$apply" == "false" ]]; then
-      echo "DRY RUN: Would restore $comp_name (directory) -> $_resolved_path"
-      echo "  Backup: $backup_component"
       exit 0
     fi
-    restore_directory_component "$comp_name" "$backup_component" "$comp_path" || exit 1
+    restore_directory_component "$comp_name" "$backup_component" "$_resolved_path" || exit 1
     ;;
   structured-file)
     echo "Error: $comp_name is a structured file (partial ownership). Full restore is unsupported in Phase 1." >&2
@@ -613,8 +623,6 @@ case "$comp_shape" in
   manifest)
     [[ -f "$backup_component" ]] || { echo "Error: namespace manifest not in backup" >&2; exit 1; }
     if [[ "$apply" == "false" ]]; then
-      echo "DRY RUN: Would restore namespace links from manifest"
-      echo "  Backup: $backup_component"
       echo "  Links to create/change:"
       _dry_cur=""
       while IFS= read -r _dry_line || [[ -n "$_dry_line" ]]; do

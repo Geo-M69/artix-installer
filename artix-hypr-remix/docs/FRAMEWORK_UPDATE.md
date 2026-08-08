@@ -194,6 +194,16 @@ The command:
 - Reports every restored file
 - Rejects unsupported components and path traversal
 
+Each public selector maps to one explicit canonical backup component. The
+dry-run prints that canonical name, backup ID, snapshot, absolute target,
+shape, and policy. Targets are resolved from their declared ownership root:
+framework state under `AHR_FRAMEWORK_ROOT`, user configuration under
+`${XDG_CONFIG_HOME:-$HOME/.config}`, runtime state under
+`${XDG_STATE_HOME:-$HOME/.local/state}`, and namespace links under
+`AHR_LOCAL_BIN` (or `~/.local/bin`). Thus a restore command is independent of
+the current working directory and never treats user configuration paths as
+framework-relative.
+
 `framework-config` is restored as a file. `theme-state` is restored as a
 directory. `namespace-links` is a manifest of AHR-owned links, not a fictional
 directory under the framework root. Migration state is restored exactly by
