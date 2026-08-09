@@ -2214,16 +2214,28 @@ tc56_make_backup() {
 }
 
 # This uses the production schema and structurally matches the live 107-record
-# backup: three real commands plus 104 valid namespace entries.
+# backup using the same canonical inventory as namespace-install.sh.
+source "$FRAMEWORK_BIN/ahr-lib.sh"
 tc56_backup="$(tc56_make_backup live-tsv)"
-{
-  printf 'ahr\t%s/bin/ahr\n' "$tc56_fw"
-  printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc56_fw"
-  printf 'ahr-update-framework\t%s/bin/ahr-update-framework\n' "$tc56_fw"
-  for tc56_n in $(seq 1 104); do
-    printf 'ahr-many-%03d\t%s/bin/ahr\n' "$tc56_n" "$tc56_fw"
-  done
-} > "$tc56_backup/derived-namespace-links"
+tc56_records=0
+declare -a tc56_names=()
+: > "$tc56_backup/derived-namespace-links"
+for tc56_name in "${AHR_NAMESPACE_COMMANDS[@]}"; do
+  (( tc56_records < 107 )) || break
+  [[ -f "$tc56_fw/bin/$tc56_name" ]] || continue
+  printf '%s\t%s/bin/%s\n' "$tc56_name" "$tc56_fw" "$tc56_name" >> "$tc56_backup/derived-namespace-links"
+  tc56_names+=("$tc56_name")
+  ((tc56_records+=1))
+done
+for tc56_alias in "${AHR_NAMESPACE_ALIASES[@]}"; do
+  (( tc56_records < 107 )) || break
+  tc56_name="${tc56_alias%%:*}"
+  tc56_alias_target="${tc56_alias##*:}"
+  printf '%s\t%s/%s\n' "$tc56_name" "$tc56_local" "$tc56_alias_target" >> "$tc56_backup/derived-namespace-links"
+  tc56_names+=("$tc56_name")
+  ((tc56_records+=1))
+done
+(( tc56_records == 107 )) || fail "canonical inventory did not provide 107 records"
 ln -s "$tc56_fw/bin/ahr-doctor" "$tc56_local/ahr"
 printf 'user data\n' > "$tc56_local/unrelated-regular"
 ln -s /usr/bin/true "$tc56_local/unrelated-symlink"
@@ -2241,7 +2253,7 @@ else
   fail "production TSV apply did not restore exact targets"
 fi
 tc56_count=0
-for tc56_name in ahr ahr-doctor ahr-update-framework $(printf 'ahr-many-%03d ' $(seq 1 104)); do
+for tc56_name in "${tc56_names[@]}"; do
   [[ -L "$tc56_local/$tc56_name" ]] && ((tc56_count+=1))
 done
 (( tc56_count == 107 )) && pass "all 107 validated namespace records are restored" || fail "expected 107 restored links, got $tc56_count"
@@ -2292,14 +2304,87 @@ else
 fi
 
 tc56_conflict="$(tc56_make_backup user-conflict)"
-printf 'ahr-conflict\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_conflict/derived-namespace-links"
-printf 'do not replace\n' > "$tc56_local/ahr-conflict"
+printf 'ahr\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_conflict/derived-namespace-links"
+rm -f "$tc56_local/ahr"
+printf 'do not replace\n' > "$tc56_local/ahr"
 tc56_conflict_rc=0; run_restore_component "$tc56_home" namespace-links --backup user-conflict --apply >/dev/null 2>&1 || tc56_conflict_rc=$?
-if (( tc56_conflict_rc != 0 )) && [[ "$(cat "$tc56_local/ahr-conflict")" == "do not replace" ]]; then
+if (( tc56_conflict_rc != 0 )) && [[ "$(cat "$tc56_local/ahr")" == "do not replace" ]]; then
   pass "user-owned conflicting namespace entry is not overwritten"
 else
   fail "user-owned namespace conflict was not preserved"
 fi
+ln -sfn "$tc56_fw/bin/ahr" "$tc56_local/ahr-doctor"
+tc56_many_conflict_rc=0; run_restore_component "$tc56_home" namespace-links --backup live-tsv --apply >/dev/null 2>&1 || tc56_many_conflict_rc=$?
+if (( tc56_many_conflict_rc != 0 )) && [[ "$(readlink "$tc56_local/ahr-doctor")" == "$tc56_fw/bin/ahr" ]]; then
+  pass "one regular conflict among 107 valid records prevents all mutation"
+else
+  fail "107-record conflict allowed partial namespace restoration"
+fi
+
+echo ""
+echo "=== TC57: Stale canonical namespace slots are repairable ==="
+
+tc57_home="$tmp_root/tc57"
+tc57_fw="$tc57_home/.config/artix-hypr-remix"
+tc57_local="$tc57_home/.local/bin"
+mkdir -p "$tc57_home/.config" "$tc57_local"
+cp -a "$REPO_ROOT/config/artix-hypr-remix" "$tc57_home/.config/"
+tc57_make_backup() {
+  local id="$1" backup="$tc57_home/.local/state/artix-hypr-remix/framework-backups/$1"
+  mkdir -p "$backup"
+  printf 'manifest_version=1\ncompleted=true\nbackup_id=%s\ntransaction_id=tx-%s\n' "$id" "$id" > "$backup/manifest.txt"
+  printf '%s' "$backup"
+}
+tc57_backup="$(tc57_make_backup stale-link)"
+printf 'ahr\t%s/bin/ahr\nahr-doctor\t%s/bin/ahr-doctor\n' "$tc57_fw" "$tc57_fw" > "$tc57_backup/derived-namespace-links"
+ln -s /tmp/distinctive-non-ahr-target "$tc57_local/ahr"
+ln -s /usr/bin/true "$tc57_local/unrelated-symlink"
+printf 'unrelated\n' > "$tc57_local/unrelated-regular"
+tc57_plan_rc=0
+tc57_plan="$(run_restore_component "$tc57_home" namespace-links --backup stale-link 2>&1)" || tc57_plan_rc=$?
+if (( tc57_plan_rc == 0 )) && grep -q 'ahr -> .*\[repairable-stale-managed\]' <<<"$tc57_plan"; then
+  pass "dry-run classifies foreign-target managed slot as repairable"
+else
+  fail "dry-run did not classify foreign-target managed slot as repairable" "$tc57_plan"
+fi
+tc57_apply_rc=0; run_restore_component "$tc57_home" namespace-links --backup stale-link --apply >/dev/null 2>&1 || tc57_apply_rc=$?
+if (( tc57_apply_rc == 0 )) && [[ "$(readlink "$tc57_local/ahr")" == "$tc57_fw/bin/ahr" ]] && [[ "$(readlink "$tc57_local/unrelated-symlink")" == /usr/bin/true ]] && [[ "$(cat "$tc57_local/unrelated-regular")" == unrelated ]]; then
+  pass "foreign-target managed symlink restores exactly without touching neighbors"
+else
+  fail "foreign-target managed symlink restoration failed"
+fi
+
+ln -sfn "$tc57_fw/bin/ahr-doctor" "$tc57_local/ahr"
+tc57_stale_rc=0; run_restore_component "$tc57_home" namespace-links --backup stale-link --apply >/dev/null 2>&1 || tc57_stale_rc=$?
+if (( tc57_stale_rc == 0 )) && [[ "$(readlink "$tc57_local/ahr")" == "$tc57_fw/bin/ahr" ]]; then pass "stale AHR target restores successfully"; else fail "stale AHR target restore failed"; fi
+ln -sfn "$tc57_fw/bin/missing-command" "$tc57_local/ahr"
+tc57_broken_rc=0; run_restore_component "$tc57_home" namespace-links --backup stale-link --apply >/dev/null 2>&1 || tc57_broken_rc=$?
+if (( tc57_broken_rc == 0 )) && [[ "$(readlink "$tc57_local/ahr")" == "$tc57_fw/bin/ahr" ]]; then pass "broken managed target restores successfully"; else fail "broken managed target restore failed"; fi
+rm -f "$tc57_local/ahr-doctor"
+tc57_absent_rc=0; run_restore_component "$tc57_home" namespace-links --backup stale-link --apply >/dev/null 2>&1 || tc57_absent_rc=$?
+if (( tc57_absent_rc == 0 )) && [[ "$(readlink "$tc57_local/ahr-doctor")" == "$tc57_fw/bin/ahr-doctor" ]]; then pass "absent managed slot is recreated exactly"; else fail "absent managed slot was not recreated"; fi
+
+tc57_unknown="$(tc57_make_backup unknown-name)"
+printf 'ahr-not-inventory\t%s/bin/ahr\n' "$tc57_fw" > "$tc57_unknown/derived-namespace-links"
+tc57_unknown_plan=0; run_restore_component "$tc57_home" namespace-links --backup unknown-name >/dev/null 2>&1 || tc57_unknown_plan=$?
+tc57_unknown_apply=0; run_restore_component "$tc57_home" namespace-links --backup unknown-name --apply >/dev/null 2>&1 || tc57_unknown_apply=$?
+(( tc57_unknown_plan != 0 && tc57_unknown_apply != 0 )) && pass "snapshot name outside canonical inventory is rejected consistently" || fail "non-canonical snapshot name was accepted"
+
+tc57_conflict="$(tc57_make_backup managed-file-conflict)"
+printf 'ahr\t%s/bin/ahr\nahr-doctor\t%s/bin/ahr-doctor\n' "$tc57_fw" "$tc57_fw" > "$tc57_conflict/derived-namespace-links"
+rm -f "$tc57_local/ahr"
+printf 'user-owned\n' > "$tc57_local/ahr"
+ln -sfn "$tc57_fw/bin/ahr" "$tc57_local/ahr-doctor"
+tc57_conflict_rc=0; run_restore_component "$tc57_home" namespace-links --backup managed-file-conflict --apply >/dev/null 2>&1 || tc57_conflict_rc=$?
+if (( tc57_conflict_rc != 0 )) && [[ "$(cat "$tc57_local/ahr")" == user-owned ]] && [[ "$(readlink "$tc57_local/ahr-doctor")" == "$tc57_fw/bin/ahr" ]]; then
+  pass "managed regular-file conflict is preserved before all mutation"
+else
+  fail "managed regular-file conflict was not safely rejected"
+fi
+rm -f "$tc57_local/ahr"
+mkdir "$tc57_local/ahr"
+tc57_directory_rc=0; run_restore_component "$tc57_home" namespace-links --backup managed-file-conflict --apply >/dev/null 2>&1 || tc57_directory_rc=$?
+if (( tc57_directory_rc != 0 )) && [[ -d "$tc57_local/ahr" ]]; then pass "managed directory conflict is preserved"; else fail "managed directory conflict was not safely rejected"; fi
 
 # ── Results ────────────────────────────────────────────────────────
 echo ""
