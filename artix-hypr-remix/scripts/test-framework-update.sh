@@ -1300,8 +1300,7 @@ tc34_backup="$tc34_home/.local/state/artix-hypr-remix/framework-backups/test-ns-
 mkdir -p "$tc34_backup"
 printf "manifest_version=1\ncompleted=true\nprevious_version=0.1.0\nnew_version=0.2.0\n" > "$tc34_backup/manifest.txt"
 # Create namespace manifest with correct targets
-printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
-  "$tc34_fw" "$tc34_home/.local/bin" "$tc34_fw" > "$tc34_backup/derived-namespace-links"
+printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc34_fw" > "$tc34_backup/derived-namespace-links"
 tc34_exit=0
 run_restore_component "$tc34_home" namespace-links --backup test-ns-restore --apply 2>/dev/null || tc34_exit=$?
 (( tc34_exit == 0 )) && pass "namespace restore from manifest succeeds" || fail "namespace restore failed (exit $tc34_exit)"
@@ -1323,8 +1322,7 @@ tc35_backup="$tc35_home/.local/state/artix-hypr-remix/framework-backups/test-ns-
 mkdir -p "$tc35_backup"
 printf "manifest_version=1\ncompleted=true\nprevious_version=0.1.0\nnew_version=0.2.0\n" > "$tc35_backup/manifest.txt"
 tc35_fw="$tc35_home/.config/artix-hypr-remix"
-printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
-  "$tc35_fw" "$tc35_home/.local/bin" "$tc35_fw" > "$tc35_backup/derived-namespace-links"
+printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc35_fw" > "$tc35_backup/derived-namespace-links"
 tc35_exit=0
 tc35_output="$(run_restore_component "$tc35_home" namespace-links --backup test-ns-dry 2>&1 || true)"
 tc35_after="$(readlink "$tc35_home/.local/bin/ahr-doctor" 2>/dev/null || echo "MISSING")"
@@ -1347,8 +1345,7 @@ tc36_backup="$tc36_home/.local/state/artix-hypr-remix/framework-backups/test-ns-
 mkdir -p "$tc36_backup"
 printf "manifest_version=1\ncompleted=true\nprevious_version=0.1.0\nnew_version=0.2.0\n" > "$tc36_backup/manifest.txt"
 tc36_fw="$tc36_home/.config/artix-hypr-remix"
-printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
-  "$tc36_fw" "$tc36_home/.local/bin" "$tc36_fw" > "$tc36_backup/derived-namespace-links"
+printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc36_fw" > "$tc36_backup/derived-namespace-links"
 tc36_exit=0
 run_restore_component "$tc36_home" namespace-links --from-last-update --apply 2>/dev/null || tc36_exit=$?
 (( tc36_exit != 0 )) && pass "refuses restore with unrelated file conflict" || fail "restore succeeded despite conflict"
@@ -1511,8 +1508,7 @@ tc46_backup="$tc46_home/.local/state/artix-hypr-remix/framework-backups/test-ns-
 mkdir -p "$tc46_backup"
 printf "manifest_version=1\ncompleted=true\nprevious_version=0.1.0\nnew_version=0.2.0\n" > "$tc46_backup/manifest.txt"
 tc46_fw="$tc46_home/.config/artix-hypr-remix"
-printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
-  "$tc46_fw" "$tc46_home/.local/bin" "$tc46_fw" > "$tc46_backup/derived-namespace-links"
+printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc46_fw" > "$tc46_backup/derived-namespace-links"
 # Remove a link
 rm -f "$tc46_home/.local/bin/ahr-doctor"
 tc46_exit=0
@@ -1534,8 +1530,7 @@ tc47_backup="$tc47_home/.local/state/artix-hypr-remix/framework-backups/test-ns-
 mkdir -p "$tc47_backup"
 printf "manifest_version=1\ncompleted=true\nprevious_version=0.1.0\nnew_version=0.2.0\n" > "$tc47_backup/manifest.txt"
 tc47_fw="$tc47_home/.config/artix-hypr-remix"
-printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
-  "$tc47_fw" "$tc47_home/.local/bin" "$tc47_fw" > "$tc47_backup/derived-namespace-links"
+printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc47_fw" > "$tc47_backup/derived-namespace-links"
 # Add a link that wasn't in the snapshot
 ln -s "/usr/bin/true" "$tc47_home/.local/bin/custom-tool"
 tc47_exit=0
@@ -2179,7 +2174,7 @@ mkdir -p "$tc55_fw/current/theme" "$tc55_home/.local/bin" "$tc55_backup/snapshot
 printf '{"version":"0.2.0"}\n' > "$tc55_fw/framework.json"
 printf 'saved\n' > "$tc55_backup/derived-framework-config"
 printf 'manifest_version=1\ncompleted=true\nbackup_id=selector-fixture\ntransaction_id=tx-selector-fixture\n' > "$tc55_backup/manifest.txt"
-printf 'format_version=1\nlink_name=ahr\nlink_target=%s/bin/ahr\n---\n' "$tc55_fw" > "$tc55_backup/derived-namespace-links"
+printf 'ahr\t%s/bin/ahr\n' "$tc55_fw" > "$tc55_backup/derived-namespace-links"
 mkdir -p "$tc55_backup/snapshots/theme-state"
 printf 'saved\n' > "$tc55_backup/snapshots/theme-state/value"
 for tc55_component in active-theme waybar-theme mako-theme terminal-theme fontconfig; do printf 'saved\n' > "$tc55_backup/snapshots/$tc55_component"; done
@@ -2200,6 +2195,111 @@ tc55_unsupported="$(tc55_run chromium-theme --backup selector-fixture 2>&1 || tr
 tc55_unknown=0; tc55_run no-such-component --backup selector-fixture >/dev/null 2>&1 || tc55_unknown=$?; (( tc55_unknown != 0 )) && pass "unknown public component is rejected" || fail "unknown public component accepted"
 printf 'component=theme-state\nsnapshot_path=%s/snapshots/theme-state\nsnapshot_status=present\n---\n' "$tc55_backup" >> "$tc55_backup/component-manifest.txt"
 tc55_duplicate=0; tc55_run theme-state --backup selector-fixture >/dev/null 2>&1 || tc55_duplicate=$?; (( tc55_duplicate != 0 )) && pass "duplicate canonical manifest record is rejected" || fail "duplicate canonical record accepted"
+
+echo ""
+echo "=== TC56: Historical namespace TSV restore parser ==="
+
+tc56_home="$tmp_root/tc56"
+tc56_fw="$tc56_home/.config/artix-hypr-remix"
+tc56_local="$tc56_home/.local/bin"
+mkdir -p "$tc56_fw/bin" "$tc56_local"
+cp -a "$REPO_ROOT/config/artix-hypr-remix" "$tc56_home/.config/"
+
+tc56_make_backup() {
+  local id="$1"
+  local backup="$tc56_home/.local/state/artix-hypr-remix/framework-backups/$id"
+  mkdir -p "$backup"
+  printf 'manifest_version=1\ncompleted=true\nbackup_id=%s\ntransaction_id=tx-%s\n' "$id" "$id" > "$backup/manifest.txt"
+  printf '%s' "$backup"
+}
+
+# This uses the production schema and structurally matches the live 107-record
+# backup: three real commands plus 104 valid namespace entries.
+tc56_backup="$(tc56_make_backup live-tsv)"
+{
+  printf 'ahr\t%s/bin/ahr\n' "$tc56_fw"
+  printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc56_fw"
+  printf 'ahr-update-framework\t%s/bin/ahr-update-framework\n' "$tc56_fw"
+  for tc56_n in $(seq 1 104); do
+    printf 'ahr-many-%03d\t%s/bin/ahr\n' "$tc56_n" "$tc56_fw"
+  done
+} > "$tc56_backup/derived-namespace-links"
+ln -s "$tc56_fw/bin/ahr-doctor" "$tc56_local/ahr"
+printf 'user data\n' > "$tc56_local/unrelated-regular"
+ln -s /usr/bin/true "$tc56_local/unrelated-symlink"
+
+tc56_plan_rc=0
+tc56_plan_output="$(run_restore_component "$tc56_home" namespace-links --backup live-tsv 2>&1)" || tc56_plan_rc=$?
+(( tc56_plan_rc == 0 )) && grep -q "ahr-update-framework -> $tc56_fw/bin/ahr-update-framework" <<<"$tc56_plan_output" && pass "107-record production TSV is accepted by dry-run" || fail "production TSV dry-run rejected" "$tc56_plan_output"
+[[ "$(readlink "$tc56_local/ahr")" == "$tc56_fw/bin/ahr-doctor" ]] && pass "dry-run leaves changed managed link untouched" || fail "dry-run changed managed link"
+
+tc56_apply_rc=0
+run_restore_component "$tc56_home" namespace-links --backup live-tsv --apply >/dev/null 2>&1 || tc56_apply_rc=$?
+if (( tc56_apply_rc == 0 )) && [[ "$(readlink "$tc56_local/ahr")" == "$tc56_fw/bin/ahr" ]] && [[ "$(readlink "$tc56_local/ahr-doctor")" == "$tc56_fw/bin/ahr-doctor" ]]; then
+  pass "same production TSV is accepted by apply and restores exact targets"
+else
+  fail "production TSV apply did not restore exact targets"
+fi
+tc56_count=0
+for tc56_name in ahr ahr-doctor ahr-update-framework $(printf 'ahr-many-%03d ' $(seq 1 104)); do
+  [[ -L "$tc56_local/$tc56_name" ]] && ((tc56_count+=1))
+done
+(( tc56_count == 107 )) && pass "all 107 validated namespace records are restored" || fail "expected 107 restored links, got $tc56_count"
+[[ "$(cat "$tc56_local/unrelated-regular")" == "user data" ]] && pass "unrelated regular namespace entry is preserved" || fail "unrelated regular namespace entry changed"
+[[ "$(readlink "$tc56_local/unrelated-symlink")" == "/usr/bin/true" ]] && pass "unrelated symlink namespace entry is preserved" || fail "unrelated symlink namespace entry changed"
+
+# The existing namespace ownership policy accepts only framework/local-bin
+# absolute targets, so plan and apply must reject the same relative target.
+tc56_relative="$(tc56_make_backup relative-target)"
+printf 'ahr\tbin/ahr\n' > "$tc56_relative/derived-namespace-links"
+tc56_relative_plan=0; run_restore_component "$tc56_home" namespace-links --backup relative-target >/dev/null 2>&1 || tc56_relative_plan=$?
+tc56_relative_apply=0; run_restore_component "$tc56_home" namespace-links --backup relative-target --apply >/dev/null 2>&1 || tc56_relative_apply=$?
+(( tc56_relative_plan != 0 && tc56_relative_apply != 0 )) && pass "relative targets follow the existing rejection policy in plan and apply" || fail "relative target policy diverged"
+
+# Each invalid TSV form must be rejected by both entry points before the
+# existing managed link is touched.
+for tc56_case in empty-name empty-target extra-field duplicate slash dot dotdot malformed; do
+  tc56_bad="$(tc56_make_backup "bad-$tc56_case")"
+  case "$tc56_case" in
+    empty-name) printf '\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    empty-target) printf 'ahr\t\n' > "$tc56_bad/derived-namespace-links" ;;
+    extra-field) printf 'ahr\t%s/bin/ahr\textra\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    duplicate) printf 'ahr\t%s/bin/ahr\nahr\t%s/bin/ahr-doctor\n' "$tc56_fw" "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    slash) printf 'ahr/bad\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    dot) printf '.\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    dotdot) printf '..\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    malformed) printf 'ahr %s/bin/ahr\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+  esac
+  ln -sfn "$tc56_fw/bin/ahr-doctor" "$tc56_local/ahr"
+  tc56_bad_plan=0; run_restore_component "$tc56_home" namespace-links --backup "bad-$tc56_case" >/dev/null 2>&1 || tc56_bad_plan=$?
+  tc56_bad_apply=0; run_restore_component "$tc56_home" namespace-links --backup "bad-$tc56_case" --apply >/dev/null 2>&1 || tc56_bad_apply=$?
+  if (( tc56_bad_plan != 0 && tc56_bad_apply != 0 )) && [[ "$(readlink "$tc56_local/ahr")" == "$tc56_fw/bin/ahr-doctor" ]]; then
+    pass "$tc56_case TSV is rejected identically before mutation"
+  else
+    fail "$tc56_case TSV parser or atomicity failure"
+  fi
+done
+
+tc56_atomic="$(tc56_make_backup malformed-among-many)"
+printf 'ahr\t%s/bin/ahr\nahr-doctor\t%s/bin/ahr-doctor\nbad-record\nahr-update-framework\t%s/bin/ahr-update-framework\n' "$tc56_fw" "$tc56_fw" "$tc56_fw" > "$tc56_atomic/derived-namespace-links"
+ln -sfn "$tc56_fw/bin/ahr-doctor" "$tc56_local/ahr"
+ln -sfn "$tc56_fw/bin/ahr" "$tc56_local/ahr-doctor"
+tc56_atomic_rc=0; run_restore_component "$tc56_home" namespace-links --backup malformed-among-many --apply >/dev/null 2>&1 || tc56_atomic_rc=$?
+if (( tc56_atomic_rc != 0 )) && [[ "$(readlink "$tc56_local/ahr")" == "$tc56_fw/bin/ahr-doctor" ]] && [[ "$(readlink "$tc56_local/ahr-doctor")" == "$tc56_fw/bin/ahr" ]]; then
+  pass "one malformed record prevents every namespace mutation"
+else
+  fail "malformed record produced partial namespace restoration"
+fi
+
+tc56_conflict="$(tc56_make_backup user-conflict)"
+printf 'ahr-conflict\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_conflict/derived-namespace-links"
+printf 'do not replace\n' > "$tc56_local/ahr-conflict"
+tc56_conflict_rc=0; run_restore_component "$tc56_home" namespace-links --backup user-conflict --apply >/dev/null 2>&1 || tc56_conflict_rc=$?
+if (( tc56_conflict_rc != 0 )) && [[ "$(cat "$tc56_local/ahr-conflict")" == "do not replace" ]]; then
+  pass "user-owned conflicting namespace entry is not overwritten"
+else
+  fail "user-owned namespace conflict was not preserved"
+fi
 
 # ── Results ────────────────────────────────────────────────────────
 echo ""
