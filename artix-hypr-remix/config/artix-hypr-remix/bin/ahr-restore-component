@@ -204,65 +204,71 @@ component_uses_derived_snapshot() {
 
 # ── Namespace restore (historical) ─────────────────────────────────
 
-# Validate a namespace manifest format.
-validate_namespace_manifest() {
-  local manifest="$1"
-  [[ -f "$manifest" ]] || return 1
-  local format_ver
-  format_ver="$(grep -x '^format_version=.*' "$manifest" 2>/dev/null | head -n1 | cut -d= -f2)"
-  [[ "$format_ver" == "1" ]] || return 1
-  return 0
-}
+# Canonical historical namespace snapshot format: name<TAB>target, one record
+# per line.  This is written by ahr-update-framework and must be parsed the
+# same way for plan and apply.  Parsed records remain in these arrays until
+# the caller has either displayed or applied the fully validated plan.
+declare -a NAMESPACE_RESTORE_NAMES=()
+declare -a NAMESPACE_RESTORE_TARGETS=()
 
-# Restore namespace links from a historical snapshot manifest.
-# Validates the entire snapshot, then applies it transactionally.
-restore_namespace_links() {
-  local manifest="$1"
-  local local_bin="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
-  [[ -f "$manifest" ]] || return 1
-  mkdir -p "$local_bin"
+parse_namespace_snapshot() {
+  local snapshot="$1" line name target seen_tabs control_pattern
+  [[ -f "$snapshot" ]] || return 1
+  NAMESPACE_RESTORE_NAMES=()
+  NAMESPACE_RESTORE_TARGETS=()
+  declare -A seen_names=()
 
-  # Validate manifest format
-  if ! validate_namespace_manifest "$manifest"; then
-    echo "Error: invalid or unsupported namespace manifest" >&2
+  # Permit all non-control target text; reject every control byte except the
+  # field separator tab and the line terminator consumed by read.
+  control_pattern='[\x00-\x08\x0B-\x1F\x7F]'
+  if LC_ALL=C grep -aPq "$control_pattern" "$snapshot" 2>/dev/null; then
+    echo "Error: namespace snapshot contains control corruption" >&2
     return 1
   fi
 
-  # Build the restore plan from the manifest
-  local -a restore_names=()
-  local -a restore_targets=()
-  local cur_name="" _rl=""
-  while IFS= read -r _rl || [[ -n "$_rl" ]]; do
-    case "$_rl" in
-      link_name=*) cur_name="${_rl#link_name=}" ;;
-      link_target=*)
-        if [[ -n "$cur_name" ]]; then
-          restore_names+=("$cur_name")
-          restore_targets+=("${_rl#link_target=}")
-          cur_name=""
-        fi
-        ;;
-      ---) cur_name="" ;;
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -n "$line" && "$line" == *$'\t'* ]] || {
+      echo "Error: malformed namespace snapshot record" >&2; return 1; }
+    name="${line%%$'\t'*}"
+    target="${line#*$'\t'}"
+    [[ "$target" != *$'\t'* && -n "$name" && -n "$target" ]] || {
+      echo "Error: malformed namespace snapshot record" >&2; return 1; }
+    [[ "$name" != */* && "$name" != . && "$name" != .. ]] || {
+      echo "Error: invalid link name in snapshot: $name" >&2; return 1; }
+    case "$name" in
+      ahr|omarchy|ahr-[a-zA-Z0-9_.-]*|omarchy-[a-zA-Z0-9_.-]*) ;;
+      *) echo "Error: invalid link name in snapshot: $name" >&2; return 1 ;;
     esac
-  done < "$manifest"
+    case "$target" in
+      "$FRAMEWORK_ROOT/bin/"*|"${AHR_LOCAL_BIN:-$HOME/.local/bin}/ahr-"*|"${AHR_LOCAL_BIN:-$HOME/.local/bin}/omarchy-"*|"${AHR_LOCAL_BIN:-$HOME/.local/bin}/ahr"|"${AHR_LOCAL_BIN:-$HOME/.local/bin}/omarchy") ;;
+      *) echo "Error: target escapes expected paths: $target" >&2; return 1 ;;
+    esac
+    [[ -z "${seen_names[$name]+x}" ]] || {
+      echo "Error: duplicate link name in snapshot: $name" >&2; return 1; }
+    seen_names[$name]=1
+    NAMESPACE_RESTORE_NAMES+=("$name")
+    NAMESPACE_RESTORE_TARGETS+=("$target")
+  done < "$snapshot"
+}
+
+# Restore namespace links from a historical snapshot.
+# Validates the entire snapshot, then applies it transactionally.
+restore_namespace_links() {
+  local snapshot="$1"
+  local local_bin="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
+  if ! parse_namespace_snapshot "$snapshot"; then
+    echo "Error: invalid namespace snapshot" >&2
+    return 1
+  fi
+  mkdir -p "$local_bin"
 
   # Validate entire plan before changing anything
   local i
-  for (( i=0; i<${#restore_names[@]}; i++ )); do
-    name="${restore_names[$i]}"
-    target="${restore_targets[$i]}"
+  for (( i=0; i<${#NAMESPACE_RESTORE_NAMES[@]}; i++ )); do
+    name="${NAMESPACE_RESTORE_NAMES[$i]}"
+    target="${NAMESPACE_RESTORE_TARGETS[$i]}"
     dest_path="$local_bin/$name"
 
-    # Validate name pattern
-    case "$name" in
-      ahr|omarchy|ahr-[a-zA-Z0-9_.-]*|omarchy-[a-zA-Z0-9_.-]*) ;;
-      *) echo "Error: invalid link name in manifest: $name" >&2; return 1 ;;
-    esac
-    # Validate target path
-    case "$target" in
-      "$FRAMEWORK_ROOT/bin/"*|"$local_bin/ahr-"*|"$local_bin/omarchy-"*|"$local_bin/ahr"|"$local_bin/omarchy") ;;
-      *) echo "Error: target escapes expected paths: $target" >&2; return 1 ;;
-    esac
     # Check for conflicts with unrelated files
     if [[ -e "$dest_path" ]] && [[ ! -L "$dest_path" ]]; then
       echo "Error: unrelated file at destination: $dest_path" >&2
@@ -290,8 +296,8 @@ restore_namespace_links() {
   local -a prior_names=()
   local -a prior_types=()
   local -a prior_data=()
-  for (( i=0; i<${#restore_names[@]}; i++ )); do
-    name="${restore_names[$i]}"
+  for (( i=0; i<${#NAMESPACE_RESTORE_NAMES[@]}; i++ )); do
+    name="${NAMESPACE_RESTORE_NAMES[$i]}"
     dest_path="$local_bin/$name"
     prior_names+=("$name")
     if [[ ! -e "$dest_path" && ! -L "$dest_path" ]]; then
@@ -310,9 +316,9 @@ restore_namespace_links() {
 
   # Apply
   local changed_paths=()
-  for (( i=0; i<${#restore_names[@]}; i++ )); do
-    name="${restore_names[$i]}"
-    target="${restore_targets[$i]}"
+  for (( i=0; i<${#NAMESPACE_RESTORE_NAMES[@]}; i++ )); do
+    name="${NAMESPACE_RESTORE_NAMES[$i]}"
+    target="${NAMESPACE_RESTORE_TARGETS[$i]}"
     dest_path="$local_bin/$name"
     rm -f "$dest_path" 2>/dev/null || true
     if ! ln -s "$target" "$dest_path"; then
@@ -622,15 +628,15 @@ case "$comp_shape" in
     ;;
   manifest)
     [[ -f "$backup_component" ]] || { echo "Error: namespace manifest not in backup" >&2; exit 1; }
+    if ! parse_namespace_snapshot "$backup_component"; then
+      echo "Error: invalid namespace snapshot" >&2
+      exit 1
+    fi
     if [[ "$apply" == "false" ]]; then
       echo "  Links to create/change:"
-      _dry_cur=""
-      while IFS= read -r _dry_line || [[ -n "$_dry_line" ]]; do
-        case "$_dry_line" in
-          link_name=*) _dry_cur="${_dry_line#link_name=}" ;;
-          link_target=*) echo "    $_dry_cur -> ${_dry_line#link_target=}" ;;
-        esac
-      done < "$backup_component"
+      for (( _dry_idx=0; _dry_idx<${#NAMESPACE_RESTORE_NAMES[@]}; _dry_idx++ )); do
+        echo "    ${NAMESPACE_RESTORE_NAMES[$_dry_idx]} -> ${NAMESPACE_RESTORE_TARGETS[$_dry_idx]}"
+      done
       exit 0
     fi
     restore_namespace_links "$backup_component" || { echo "Error: namespace restore failed" >&2; exit 1; }

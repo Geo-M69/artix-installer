@@ -205,8 +205,11 @@ the current working directory and never treats user configuration paths as
 framework-relative.
 
 `framework-config` is restored as a file. `theme-state` is restored as a
-directory. `namespace-links` is a manifest of AHR-owned links, not a fictional
-directory under the framework root. Migration state is restored exactly by
+directory. `namespace-links` is a historical TSV snapshot of AHR-owned links,
+not a fictional directory under the framework root. Each
+`derived-namespace-links` record is exactly `name<TAB>target`; dry-run and
+`--apply` validate that same complete snapshot before any namespace link is
+changed. Migration state is restored exactly by
 framework rollback under the migration lock; it is intentionally not offered
 as a standalone component restore.
 
