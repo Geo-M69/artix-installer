@@ -210,6 +210,7 @@ component_uses_derived_snapshot() {
 # the caller has either displayed or applied the fully validated plan.
 declare -a NAMESPACE_RESTORE_NAMES=()
 declare -a NAMESPACE_RESTORE_TARGETS=()
+declare -a NAMESPACE_RESTORE_CLASSES=()
 
 parse_namespace_snapshot() {
   local snapshot="$1" line name target seen_tabs control_pattern
@@ -235,10 +236,10 @@ parse_namespace_snapshot() {
       echo "Error: malformed namespace snapshot record" >&2; return 1; }
     [[ "$name" != */* && "$name" != . && "$name" != .. ]] || {
       echo "Error: invalid link name in snapshot: $name" >&2; return 1; }
-    case "$name" in
-      ahr|omarchy|ahr-[a-zA-Z0-9_.-]*|omarchy-[a-zA-Z0-9_.-]*) ;;
-      *) echo "Error: invalid link name in snapshot: $name" >&2; return 1 ;;
-    esac
+    ahr_namespace_name_is_managed "$name" || {
+      echo "Error: namespace name is not canonically AHR-managed: $name" >&2
+      return 1
+    }
     case "$target" in
       "$FRAMEWORK_ROOT/bin/"*|"${AHR_LOCAL_BIN:-$HOME/.local/bin}/ahr-"*|"${AHR_LOCAL_BIN:-$HOME/.local/bin}/omarchy-"*|"${AHR_LOCAL_BIN:-$HOME/.local/bin}/ahr"|"${AHR_LOCAL_BIN:-$HOME/.local/bin}/omarchy") ;;
       *) echo "Error: target escapes expected paths: $target" >&2; return 1 ;;
@@ -251,48 +252,67 @@ parse_namespace_snapshot() {
   done < "$snapshot"
 }
 
+# A historical exact snapshot identifies the managed namespace slots.  A
+# symlink in one of those canonical slots remains repairable even when its
+# present target is stale, broken, or foreign; target health is not ownership.
+# Non-symlink shapes still require a pre-mutation conflict failure.
+validate_namespace_restore_plan() {
+  local snapshot="$1" local_bin name target dest_path current_target i
+  local_bin="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
+  parse_namespace_snapshot "$snapshot" || return 1
+  NAMESPACE_RESTORE_CLASSES=()
+
+  if [[ -e "$local_bin" || -L "$local_bin" ]]; then
+    [[ -d "$local_bin" && ! -L "$local_bin" ]] || {
+      echo "Error: namespace root is not a directory: $local_bin" >&2
+      return 1
+    }
+  fi
+
+  for (( i=0; i<${#NAMESPACE_RESTORE_NAMES[@]}; i++ )); do
+    name="${NAMESPACE_RESTORE_NAMES[$i]}"
+    target="${NAMESPACE_RESTORE_TARGETS[$i]}"
+    dest_path="$local_bin/$name"
+    if [[ ! -e "$dest_path" && ! -L "$dest_path" ]]; then
+      NAMESPACE_RESTORE_CLASSES+=("missing")
+      continue
+    fi
+    if [[ -L "$dest_path" ]]; then
+      current_target="$(readlink "$dest_path" 2>/dev/null)" || {
+        echo "Error: unreadable namespace symlink: $dest_path" >&2
+        return 1
+      }
+      if [[ "$current_target" == "$target" ]]; then
+        NAMESPACE_RESTORE_CLASSES+=("correct-managed")
+      else
+        NAMESPACE_RESTORE_CLASSES+=("repairable-stale-managed")
+      fi
+      continue
+    fi
+    if [[ -d "$dest_path" ]]; then
+      echo "Error: directory at managed namespace destination: $dest_path" >&2
+    elif [[ -f "$dest_path" ]]; then
+      echo "Error: unrelated file at managed namespace destination: $dest_path" >&2
+    else
+      echo "Error: unsupported namespace destination shape: $dest_path" >&2
+    fi
+    return 1
+  done
+}
+
 # Restore namespace links from a historical snapshot.
 # Validates the entire snapshot, then applies it transactionally.
 restore_namespace_links() {
   local snapshot="$1"
   local local_bin="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
-  if ! parse_namespace_snapshot "$snapshot"; then
+  if ! validate_namespace_restore_plan "$snapshot"; then
     echo "Error: invalid namespace snapshot" >&2
     return 1
   fi
   mkdir -p "$local_bin"
 
-  # Validate entire plan before changing anything
-  local i
-  for (( i=0; i<${#NAMESPACE_RESTORE_NAMES[@]}; i++ )); do
-    name="${NAMESPACE_RESTORE_NAMES[$i]}"
-    target="${NAMESPACE_RESTORE_TARGETS[$i]}"
-    dest_path="$local_bin/$name"
-
-    # Check for conflicts with unrelated files
-    if [[ -e "$dest_path" ]] && [[ ! -L "$dest_path" ]]; then
-      echo "Error: unrelated file at destination: $dest_path" >&2
-      return 1
-    fi
-    if [[ -L "$dest_path" ]]; then
-      local cur_target
-      cur_target="$(readlink "$dest_path" 2>/dev/null)" || true
-      if [[ "$cur_target" != "$target" ]]; then
-        # Check if it's AHR-owned — AHR-owned stale links are OK to update
-        local _is_ahr=false
-        case "$cur_target" in
-          "$FRAMEWORK_ROOT/bin/"*|"$local_bin/ahr-"*|"$local_bin/omarchy-"*|"$local_bin/ahr"|"$local_bin/omarchy")
-            _is_ahr=true ;;
-        esac
-        if [[ "$_is_ahr" == "false" ]]; then
-          echo "Error: unrelated symlink at destination: $dest_path -> $cur_target" >&2
-          return 1
-        fi
-      fi
-    fi
-  done
-
   # Record prior state for rollback using parallel arrays
+  local i name target dest_path
   local -a prior_names=()
   local -a prior_types=()
   local -a prior_data=()
@@ -628,14 +648,14 @@ case "$comp_shape" in
     ;;
   manifest)
     [[ -f "$backup_component" ]] || { echo "Error: namespace manifest not in backup" >&2; exit 1; }
-    if ! parse_namespace_snapshot "$backup_component"; then
+    if ! validate_namespace_restore_plan "$backup_component"; then
       echo "Error: invalid namespace snapshot" >&2
       exit 1
     fi
     if [[ "$apply" == "false" ]]; then
       echo "  Links to create/change:"
       for (( _dry_idx=0; _dry_idx<${#NAMESPACE_RESTORE_NAMES[@]}; _dry_idx++ )); do
-        echo "    ${NAMESPACE_RESTORE_NAMES[$_dry_idx]} -> ${NAMESPACE_RESTORE_TARGETS[$_dry_idx]}"
+        printf '    %s -> %s [%s]\n' "${NAMESPACE_RESTORE_NAMES[$_dry_idx]}" "${NAMESPACE_RESTORE_TARGETS[$_dry_idx]}" "${NAMESPACE_RESTORE_CLASSES[$_dry_idx]}"
       done
       exit 0
     fi

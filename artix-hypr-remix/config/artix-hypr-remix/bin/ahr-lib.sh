@@ -66,6 +66,66 @@ ahr_fail() {
   exit 1
 }
 
+# Canonical command-namespace inventory.  Namespace installation and
+# historical namespace restoration both use this single inventory so a
+# snapshot name is never trusted solely because it matches a filename pattern.
+declare -a AHR_NAMESPACE_COMMANDS=(
+  ahr ahr-toggle ahr-toggle-lib.sh ahr-menu ahr-menu-keybindings ahr-theme
+  ahr-theme-install-omarchy ahr-theme-list ahr-theme-current ahr-theme-set
+  ahr-theme-refresh ahr-theme-bg-next ahr-theme-bg-set ahr-theme-bg-switcher
+  ahr-theme-bg-install ahr-theme-bg-gallery ahr-theme-set-templates
+  ahr-theme-colors-from-alacritty ahr-launch-terminal ahr-launch-apps
+  ahr-launch-browser ahr-launch-files ahr-launch-audio ahr-launch-bluetooth
+  ahr-launch-wifi ahr-default-browser ahr-default-terminal ahr-update
+  ahr-update-available ahr-update-framework ahr-restore-component ahr-repair
+  ahr-status ahr-list-backups ahr-voxtype-model ahr-voxtype-config
+  ahr-toggle-idle ahr-toggle-nightlight ahr-toggle-notification-silencing
+  ahr-toggle-waybar ahr-toggle-waybar-position ahr-restore-nightlight
+  ahr-restore-idle ahr-notification-dismiss ahr-restart-mako
+  ahr-restart-waybar ahr-restart-walker ahr-migrate ahr-system-lock
+  ahr-system-reboot ahr-capture-screenrecording ahr-capture-screenshot
+  ahr-capture-picker ahr-edit-config ahr-system-suspend ahr-system-hibernate
+  ahr-doctor ahr-font ahr-font-list ahr-font-set
+)
+
+declare -a AHR_NAMESPACE_ALIASES=(
+  "omarchy:ahr" "omarchy-menu:ahr-menu" "omarchy-menu-keybindings:ahr-menu-keybindings"
+  "omarchy-theme:ahr-theme" "omarchy-theme-list:ahr-theme-list"
+  "omarchy-theme-current:ahr-theme-current" "omarchy-theme-set:ahr-theme-set"
+  "omarchy-theme-refresh:ahr-theme-refresh" "omarchy-theme-bg-next:ahr-theme-bg-next"
+  "omarchy-theme-bg-set:ahr-theme-bg-set" "omarchy-theme-set-templates:ahr-theme-set-templates"
+  "omarchy-theme-colors-from-alacritty:ahr-theme-colors-from-alacritty"
+  "omarchy-launch-terminal:ahr-launch-terminal" "omarchy-launch-walker:ahr-launch-apps"
+  "omarchy-launch-browser:ahr-launch-browser" "omarchy-launch-nautilus:ahr-launch-files"
+  "omarchy-launch-audio:ahr-launch-audio" "omarchy-launch-bluetooth:ahr-launch-bluetooth"
+  "omarchy-launch-wifi:ahr-launch-wifi" "omarchy-system-lock:ahr-system-lock"
+  "omarchy-system-reboot:ahr-system-reboot" "omarchy-capture-screenrecording:ahr-capture-screenrecording"
+  "omarchy-capture-screenshot:ahr-capture-screenshot" "omarchy-default-browser:ahr-default-browser"
+  "omarchy-default-terminal:ahr-default-terminal" "omarchy-update:ahr-update"
+  "omarchy-update-available:ahr-update-available" "omarchy-repair:ahr-repair"
+  "omarchy-status:ahr-status" "omarchy-list-backups:ahr-list-backups"
+  "omarchy-voxtype-model:ahr-voxtype-model" "omarchy-voxtype-config:ahr-voxtype-config"
+  "omarchy-toggle-idle:ahr-toggle-idle" "omarchy-toggle-nightlight:ahr-toggle-nightlight"
+  "omarchy-toggle-notification-silencing:ahr-toggle-notification-silencing"
+  "omarchy-toggle-waybar:ahr-toggle-waybar" "omarchy-restore-nightlight:ahr-restore-nightlight"
+  "omarchy-notification-dismiss:ahr-notification-dismiss" "omarchy-restart-mako:ahr-restart-mako"
+  "omarchy-restart-waybar:ahr-restart-waybar" "omarchy-restart-walker:ahr-restart-walker"
+  "omarchy-migrate:ahr-migrate" "omarchy-edit-config:ahr-edit-config"
+  "omarchy-system-suspend:ahr-system-suspend" "omarchy-system-hibernate:ahr-system-hibernate"
+  "omarchy-font:ahr-font" "omarchy-font-list:ahr-font-list" "omarchy-font-set:ahr-font-set"
+)
+
+ahr_namespace_name_is_managed() {
+  local wanted="$1" name alias
+  for name in "${AHR_NAMESPACE_COMMANDS[@]}"; do
+    [[ "$name" == "$wanted" ]] && return 0
+  done
+  for alias in "${AHR_NAMESPACE_ALIASES[@]}"; do
+    [[ "${alias%%:*}" == "$wanted" ]] && return 0
+  done
+  return 1
+}
+
 # Primary backup manifests are data, never shell input.  Keep the association
 # parser here because both the framework updater and component restore open
 # those manifests.  A legacy manifest may be used only when its caller has

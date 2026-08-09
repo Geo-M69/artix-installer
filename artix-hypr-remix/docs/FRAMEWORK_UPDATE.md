@@ -209,7 +209,10 @@ directory. `namespace-links` is a historical TSV snapshot of AHR-owned links,
 not a fictional directory under the framework root. Each
 `derived-namespace-links` record is exactly `name<TAB>target`; dry-run and
 `--apply` validate that same complete snapshot before any namespace link is
-changed. Migration state is restored exactly by
+changed. A snapshot name must also be in the canonical command/alias inventory.
+For such a managed namespace slot, a symlink with a stale, broken, or foreign
+current target is repairable; a regular file, directory, or special path still
+rejects the complete restore before mutation. Migration state is restored exactly by
 framework rollback under the migration lock; it is intentionally not offered
 as a standalone component restore.
 
