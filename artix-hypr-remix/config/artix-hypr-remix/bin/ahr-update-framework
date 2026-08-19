@@ -219,6 +219,16 @@ case "${AHR_TEST_FAIL_HEALTH_CHECK:-}" in
   *) die "Invalid AHR_TEST_FAIL_HEALTH_CHECK value: expected exactly '1' when set" ;;
 esac
 
+# This narrow, process-local hook exists solely for controlled pre-activation
+# backup/snapshot containment validation. It deliberately accepts no command,
+# path, component, or exit-code input.
+test_fail_backup=false
+case "${AHR_TEST_FAIL_BACKUP:-}" in
+  "") ;;
+  1) test_fail_backup=true ;;
+  *) die "Invalid AHR_TEST_FAIL_BACKUP value: expected exactly '1' when set" ;;
+esac
+
 # ── Structured state records ──────────────────────────────────────
 # State is written as key=value with strict validation of values.
 # No space-separated lists. No sourcing of state files.
@@ -1464,10 +1474,25 @@ cmd_apply() {
     fi
   done
 
+  # Exercise the ordinary required-snapshot failure finalizer only after the
+  # production backup machinery has created its in-progress evidence. This is
+  # validation-only: it is process-local, never selects a component or path,
+  # and runs before the completed primary manifest or activation.
+  local injected_backup_failure=false
+  if [[ "$test_fail_backup" == "true" ]]; then
+    injected_backup_failure=true
+    _required_snap_errors=$((_required_snap_errors + 1))
+    log "TEST FAULT: forcing backup failure"
+    log_line "TEST FAULT: forcing backup failure"
+  fi
+
   # Required snapshot failures must prevent activation
   if (( _required_snap_errors > 0 )); then
     log "Error: $_required_snap_errors required component snapshots failed"
     rollback_transaction "$txdir"
+    if [[ "$injected_backup_failure" == "true" ]]; then
+      write_transaction_state "$txdir" "failure_reason=test_fault_forced_backup_failure"
+    fi
     finalize_transaction "$txdir" "failed" "snapshot_failed"
     rm -rf "$staging_dir"
     die "Required snapshot failed. Backup state preserved at: $backup_dir"
