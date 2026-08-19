@@ -2689,6 +2689,51 @@ tc61_followup_exit=0
 AHR_TEST_FAIL_BACKUP= run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc61_followup_exit=$?
 (( tc61_followup_exit == 0 )) && pass "later unset invocation does not inherit backup fault" || fail "later unset invocation inherited backup fault"
 
+echo ""
+echo "=== TC62: Candidate-direct library bootstrap ==="
+
+tc62_run_direct() {
+  local home="$1"
+  shift
+  HOME="$home" XDG_STATE_HOME="$home/.local/state" XDG_CACHE_HOME="$home/.cache" AHR_FRAMEWORK_ROOT="$home/.config/artix-hypr-remix" bash "$UPDATE_FRAMEWORK" "$@"
+}
+
+tc62_installed_home="$tmp_root/tc62_installed"
+tc62_installed_repo="$(create_test_repo "$tmp_root/tc62_installed_repo" "0.2.0")"
+setup_installed_framework "$tc62_installed_home" "file://$tc62_installed_repo"
+cp "$UPDATE_FRAMEWORK" "$tc62_installed_home/.config/artix-hypr-remix/bin/ahr-update-framework"
+chmod +x "$tc62_installed_home/.config/artix-hypr-remix/bin/ahr-update-framework"
+tc62_installed_exit=0
+HOME="$tc62_installed_home" XDG_STATE_HOME="$tc62_installed_home/.local/state" XDG_CACHE_HOME="$tc62_installed_home/.cache" AHR_FRAMEWORK_ROOT="$tc62_installed_home/.config/artix-hypr-remix" bash "$tc62_installed_home/.config/artix-hypr-remix/bin/ahr-update-framework" --apply >/dev/null 2>&1 || tc62_installed_exit=$?
+if (( tc62_installed_exit == 0 )) && [[ "$(json_get "$tc62_installed_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then pass "installed updater remains self-contained with matching installed library"; else fail "installed updater lost matching-library compatibility"; fi
+
+tc62_home="$tmp_root/tc62_candidate"
+tc62_repo="$(create_test_repo "$tmp_root/tc62_candidate_repo" "0.2.0")"
+setup_installed_framework "$tc62_home" "file://$tc62_repo"
+mkdir -p "$tc62_home/.local/state/artix-hypr-remix/framework-transactions" "$tc62_home/.local/state/artix-hypr-remix/framework-backups"
+sed -i "/^ahr_validate_backup_id()/,/^}/d" "$tc62_home/.config/artix-hypr-remix/bin/ahr-lib.sh"
+! grep -q "^ahr_validate_backup_id()" "$tc62_home/.config/artix-hypr-remix/bin/ahr-lib.sh" && pass "mixed-version fixture installed library lacks candidate helper" || fail "mixed-version fixture did not remove installed helper"
+tc62_candidate_exit=0
+tc62_candidate_output="$(AHR_TEST_FAIL_BACKUP=1 tc62_run_direct "$tc62_home" --apply 2>&1)" || tc62_candidate_exit=$?
+(( tc62_candidate_exit != 0 )) && pass "candidate-direct backup fault exits nonzero" || fail "candidate-direct backup fault exited zero"
+grep -q "TEST FAULT: forcing backup failure" <<<"$tc62_candidate_output" && pass "candidate-direct updater uses its matching library through snapshot fault" || fail "candidate-direct updater sourced old installed library"
+tc62_state="$(find "$tc62_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"
+tc62_backup="$(grep "^backup_path=" "$tc62_state" | head -n1 | cut -d= -f2-)"
+tc62_manifest="$tc62_backup/manifest.txt"
+if grep -qx "phase=snapshot_failed" "$tc62_state" && grep -qx "completion=failed" "$tc62_state" && grep -qx "failure_reason=test_fault_forced_backup_failure" "$tc62_state" && [[ -f "$tc62_manifest" && -f "$tc62_backup/component-manifest.txt" ]] && grep -qx "completed=in_progress" "$tc62_manifest" && ! grep -qx "completed=true" "$tc62_manifest"; then pass "candidate-direct fault reaches retained TC61 snapshot failure evidence"; else fail "candidate-direct fault did not reach TC61 state"; fi
+if [[ "$(json_get "$tc62_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" ]] && ! grep -q "Activating framework" <<<"$tc62_candidate_output"; then pass "candidate-direct snapshot fault never activates installed framework"; else fail "candidate-direct snapshot fault activated framework"; fi
+
+tc62_residue_home="$tmp_root/tc62_residue"
+tc62_residue_repo="$(create_test_repo "$tmp_root/tc62_residue_repo" "0.2.0")"
+setup_installed_framework "$tc62_residue_home" "file://$tc62_residue_repo"
+mkdir -p "$tc62_residue_home/.local/state/artix-hypr-remix/framework-transactions" "$tc62_residue_home/.local/state/artix-hypr-remix/framework-backups"
+sed -i "/^ahr_validate_backup_id()/,/^}/d" "$tc62_residue_home/.config/artix-hypr-remix/bin/ahr-lib.sh"
+tc62_residue_exit=0
+tc62_residue_output="$(AHR_LIB_PATH="$tc62_residue_home/.config/artix-hypr-remix/bin/ahr-lib.sh" tc62_run_direct "$tc62_residue_home" --apply 2>&1)" || tc62_residue_exit=$?
+tc62_residue_tx="$(find "$tc62_residue_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc62_residue_backup="$(find "$tc62_residue_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+if (( tc62_residue_exit != 0 && tc62_residue_tx == 0 && tc62_residue_backup == 0 )) && grep -q "Required transaction helper missing from framework library" <<<"$tc62_residue_output"; then pass "incompatible explicit library fails before transaction and backup residue"; else fail "pre-initialization failure left residue or wrong error"; fi
+
 echo "========================================"
 echo "  Results: $PASS passed, $FAIL failed"
 echo "========================================"
