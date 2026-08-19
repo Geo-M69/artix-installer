@@ -192,6 +192,15 @@ die() {
   exit 1
 }
 
+# This narrow, process-local hook exists solely for controlled migration
+# recovery validation. It deliberately accepts no command, path, or exit-code input.
+test_fail_migration=false
+case "${AHR_TEST_FAIL_MIGRATION:-}" in
+  "") ;;
+  1) test_fail_migration=true ;;
+  *) die "Invalid AHR_TEST_FAIL_MIGRATION value: expected exactly '1' when set" ;;
+esac
+
 # This narrow, process-local hook exists solely for controlled recovery
 # validation. It deliberately accepts no command, path, or exit-code input.
 test_fail_health_check=false
@@ -1610,11 +1619,21 @@ cmd_apply() {
   log "Running migrations..."
 
   local migration_exit=0
+  local injected_migration_failure=false
   local migration_runner="$FRAMEWORK_ROOT/bin/migrate.sh"
   if [[ -f "$migration_runner" ]]; then
     local migration_output
     migration_output="$(bash "$migration_runner" --non-interactive 2>&1)" || migration_exit=$?
     [[ "$quiet" == "false" && -n "$migration_output" ]] && echo "$migration_output" | sed 's/^/  /'
+  fi
+
+  # Run the ordinary migration phase first, including its no-op result, then
+  # exercise the same production migration-failure finalizer used on error.
+  if [[ "$test_fail_migration" == "true" ]]; then
+    injected_migration_failure=true
+    log "TEST FAULT: forcing migration failure"
+    log_line "TEST FAULT: forcing migration failure"
+    migration_exit=1
   fi
 
   if (( migration_exit != 0 )); then
@@ -1633,6 +1652,8 @@ cmd_apply() {
     local added_markers_record
     added_markers_record="$(printf '%s' "$added_markers" | tr '\n' '|')"
     local _apply_backup _apply_commit
+    local failure_reason="migration_exit_$migration_exit"
+    [[ "$injected_migration_failure" == "true" ]] && failure_reason="test_fault_forced_migration_failure"
     _apply_backup="$(read_tx_field "$txdir" "backup_dir" 2>/dev/null || true)"
     _apply_commit="$(read_tx_field "$txdir" "staging_commit" 2>/dev/null || true)"
     write_transaction_state "$txdir" \
@@ -1642,7 +1663,7 @@ cmd_apply() {
       "staging_commit=$_apply_commit" \
       "added_markers=$added_markers_record" \
       "migration_exit=$migration_exit" \
-      "failure_reason=migration_exit_$migration_exit" \
+      "failure_reason=$failure_reason" \
       "recovery_command=ahr update-framework --recover"
     # Add added_markers to manifest (one per line)
     local mf_tmp

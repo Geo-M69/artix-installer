@@ -104,6 +104,25 @@ This is not a normal user feature. A resulting `health_check_failed` apply is
 intentionally preserved for inspection; `--recover` directs the documented
 exact-associated `--rollback` resolution path.
 
+### Controlled Validation Migration Fault
+
+For developer validation only, `AHR_TEST_FAIL_MIGRATION=1` makes an `--apply`
+run enter the ordinary post-activation `migration_failed` path. The updater
+first runs normal migration processing, including a no-op result when every
+migration is already marked applied. It then forces only the updater's
+migration decision to fail, logs `TEST FAULT: forcing migration failure`, and
+records `failure_reason=test_fault_forced_migration_failure` in the
+transaction.
+
+The setting is process-local and is not written to migration scripts, applied
+or skipped markers, framework configuration, backup manifests, or persistent
+defaults. It accepts only the exact value `1`; any other nonempty value is
+rejected before an operation begins. This is not a normal user feature.
+
+The resulting `migration_failed` apply is intentionally preserved for
+inspection. `--recover` remains a non-mutating direction check that exits
+nonzero and directs the exact-associated `--rollback` resolution path.
+
 ## Backup Contents
 
 Each backup directory contains:

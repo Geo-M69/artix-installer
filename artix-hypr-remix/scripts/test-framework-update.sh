@@ -2472,6 +2472,87 @@ tc58_followup_exit=0
 AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc58_followup_exit=$?
 (( tc58_followup_exit == 0 )) && pass "later unset invocation does not inherit health fault" || fail "later unset invocation inherited health fault"
 
+echo ""
+echo "=== TC59: Controlled post-activation migration fault ==="
+
+tc59_normal_home="$tmp_root/tc59_normal"
+tc59_normal_repo="$(create_test_repo "$tmp_root/tc59_normal_repo" "0.2.0")"
+setup_installed_framework "$tc59_normal_home" "file://$tc59_normal_repo"
+tc59_normal_exit=0
+AHR_TEST_FAIL_MIGRATION= run_ahr "$tc59_normal_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc59_normal_exit=$?
+(( tc59_normal_exit == 0 )) && pass "unset migration fault leaves successful apply unchanged" || fail "unset migration fault changed normal apply behavior"
+
+tc59_home="$tmp_root/tc59"
+tc59_repo="$(create_test_repo "$tmp_root/tc59_repo" "0.2.0")"
+setup_installed_framework "$tc59_home" "file://$tc59_repo"
+tc59_staged="$tc59_repo/artix-hypr-remix/config/artix-hypr-remix"
+
+# Use the real migration runner with its sole staged migration already marked
+# applied. This proves the runner reaches its normal no-op result before the
+# process-local updater fault is injected.
+cp "$FRAMEWORK_BIN/migrate.sh" "$tc59_staged/bin/migrate.sh"
+cat > "$tc59_staged/migrations/20260819-already-applied.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/unexpected-migration-script-ran"
+EOF
+cat > "$tc59_staged/bin/namespace-install.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "$HOME/namespace-before-migration.marker"
+EOF
+chmod +x "$tc59_staged/bin/migrate.sh" "$tc59_staged/migrations/20260819-already-applied.sh" "$tc59_staged/bin/namespace-install.sh"
+mkdir -p "$tc59_home/.local/state/artix-hypr-remix/migrations/skipped"
+touch "$tc59_home/.local/state/artix-hypr-remix/migrations/20260819-already-applied.sh"
+(cd "$tc59_repo" && git add -A && git commit -q -m "already-applied migration fixture" >/dev/null)
+
+tc59_marker_before="$(find "$tc59_home/.local/state/artix-hypr-remix/migrations" -type f -name '*.sh' -print0 | sort -z | xargs -0 -r sha256sum)"
+tc59_skipped_before="$(find "$tc59_home/.local/state/artix-hypr-remix/migrations/skipped" -type f -name '*.sh' -print0 | sort -z | xargs -0 -r sha256sum)"
+tc59_staged_migration_sum="$(sha256sum "$tc59_staged/migrations/20260819-already-applied.sh" | awk '{print $1}')"
+tc59_apply_exit=0
+tc59_apply_output="$(AHR_TEST_FAIL_MIGRATION=1 run_ahr "$tc59_home" "$UPDATE_FRAMEWORK" --apply 2>&1)" || tc59_apply_exit=$?
+(( tc59_apply_exit != 0 )) && pass "enabled migration fault exits nonzero" || fail "enabled migration fault exited zero"
+grep -q 'Migration status: total=1 applied=1 skipped=0 pending=0' <<<"$tc59_apply_output" && grep -q 'No pending migrations' <<<"$tc59_apply_output" && pass "already-applied migration runner completes no-op before fault" || fail "migration no-op was not observed before fault"
+grep -q 'TEST FAULT: forcing migration failure' <<<"$tc59_apply_output" && pass "injected migration fault is clearly logged" || fail "injected migration-fault log missing"
+grep -q 'Runtime smoke test passed.' <<<"$tc59_apply_output" && [[ -f "$tc59_home/namespace-before-migration.marker" ]] && pass "activation namespace and runtime smoke complete before migration fault" || fail "pre-migration lifecycle did not complete"
+[[ ! -e "$tc59_home/.config/artix-hypr-remix/unexpected-migration-script-ran" ]] && pass "already-applied migration script was not rerun" || fail "already-applied migration script ran"
+
+tc59_state="$(find "$tc59_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"
+tc59_txdir="$(dirname "$tc59_state")"
+tc59_backup="$(awk -F= '$1 == "backup_path" { print substr($0, 13); exit }' "$tc59_state")"
+tc59_manifest="$tc59_backup/manifest.txt"
+grep -q '^phase=migration_failed$' "$tc59_state" && grep -q '^completion=migration_failed$' "$tc59_state" && pass "injected migration uses migration_failed state" || fail "injected migration state was not migration_failed"
+grep -q '^failure_reason=test_fault_forced_migration_failure$' "$tc59_state" && pass "injected migration reason is distinguishable" || fail "injected migration reason was not distinguishable"
+! grep -q '^completion=committed$' "$tc59_state" && pass "injected migration transaction is not committed" || fail "injected migration transaction was committed"
+tc59_txid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc59_state")"
+tc59_bid="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc59_state")"
+tc59_mtxid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc59_manifest")"
+tc59_mbid="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc59_manifest")"
+if [[ "$tc59_txid" == "$(basename "$tc59_txdir")" && "$tc59_bid" == "$(basename "$tc59_backup")" && "$tc59_txid" == "$tc59_mtxid" && "$tc59_bid" == "$tc59_mbid" ]]; then pass "migration fault preserves exact transaction and backup provenance"; else fail "migration fault changed transaction or backup provenance"; fi
+tc59_marker_after="$(find "$tc59_home/.local/state/artix-hypr-remix/migrations" -type f -name '*.sh' -print0 | sort -z | xargs -0 -r sha256sum)"
+tc59_skipped_after="$(find "$tc59_home/.local/state/artix-hypr-remix/migrations/skipped" -type f -name '*.sh' -print0 | sort -z | xargs -0 -r sha256sum)"
+[[ "$tc59_marker_before" == "$tc59_marker_after" && "$tc59_skipped_before" == "$tc59_skipped_after" ]] && pass "injection preserves applied and skipped migration markers" || fail "injection changed migration markers"
+[[ "$(sha256sum "$tc59_home/.config/artix-hypr-remix/migrations/20260819-already-applied.sh" | awk '{print $1}')" == "$tc59_staged_migration_sum" ]] && pass "hook does not modify migration scripts" || fail "hook modified migration script"
+
+tc59_count_before_invalid="$(find "$tc59_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc59_invalid_exit=0
+tc59_invalid_output="$(AHR_TEST_FAIL_MIGRATION=true run_ahr "$tc59_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc59_invalid_exit=$?
+tc59_count_after_invalid="$(find "$tc59_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+if (( tc59_invalid_exit != 0 )) && grep -q "Invalid AHR_TEST_FAIL_MIGRATION value: expected exactly '1' when set" <<<"$tc59_invalid_output" && [[ "$tc59_count_before_invalid" == "$tc59_count_after_invalid" ]]; then pass "invalid migration-fault value is rejected before mutation"; else fail "invalid migration-fault value was not strictly rejected"; fi
+
+cp "$tc59_state" "$tc59_state.before-recover"
+tc59_unrelated="$tc59_home/.local/state/artix-hypr-remix/framework-backups/unrelated-newer"
+cp -a "$tc59_backup" "$tc59_unrelated"
+sed -i 's/^backup_id=.*/backup_id=unrelated-newer/; s/^transaction_id=.*/transaction_id=tx-unrelated-newer/' "$tc59_unrelated/manifest.txt"
+rm -rf "$tc59_unrelated/docs"
+tc59_recover_exit=0
+tc59_recover_output="$(AHR_TEST_FAIL_MIGRATION= run_ahr "$tc59_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc59_recover_exit=$?
+if (( tc59_recover_exit != 0 )) && grep -q 'Recovery does not erase this failure. Run: ahr update-framework --rollback' <<<"$tc59_recover_output" && cmp -s "$tc59_state.before-recover" "$tc59_state"; then pass "recover preserves and directs injected migration failure"; else fail "recover did not preserve migration failure"; fi
+tc59_rollback_exit=0
+AHR_TEST_FAIL_MIGRATION= run_ahr "$tc59_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc59_rollback_exit=$?
+if (( tc59_rollback_exit == 0 )) && [[ "$(json_get "$tc59_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" ]] && [[ "$(find "$tc59_home/.local/state/artix-hypr-remix/migrations" -type f -name '*.sh' -print0 | sort -z | xargs -0 -r sha256sum)" == "$tc59_marker_before" ]]; then pass "exact rollback restores baseline and migration markers over unrelated backup"; else fail "rollback did not restore exact migration-failure backup"; fi
+tc59_followup_exit=0
+AHR_TEST_FAIL_MIGRATION= run_ahr "$tc59_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc59_followup_exit=$?
+(( tc59_followup_exit == 0 )) && pass "later unset invocation does not inherit migration fault" || fail "later unset invocation inherited migration fault"
+
 # ── Results ────────────────────────────────────────────────────────
 echo ""
 echo "========================================"
