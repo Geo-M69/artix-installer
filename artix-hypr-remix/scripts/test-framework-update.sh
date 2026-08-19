@@ -2386,6 +2386,92 @@ mkdir "$tc57_local/ahr"
 tc57_directory_rc=0; run_restore_component "$tc57_home" namespace-links --backup managed-file-conflict --apply >/dev/null 2>&1 || tc57_directory_rc=$?
 if (( tc57_directory_rc != 0 )) && [[ -d "$tc57_local/ahr" ]]; then pass "managed directory conflict is preserved"; else fail "managed directory conflict was not safely rejected"; fi
 
+echo ""
+echo "=== TC58: Controlled post-activation health fault ==="
+
+tc58_normal_home="$tmp_root/tc58_normal"
+tc58_normal_repo="$(create_test_repo "$tmp_root/tc58_normal_repo" "0.2.0")"
+setup_installed_framework "$tc58_normal_home" "file://$tc58_normal_repo"
+tc58_normal_exit=0
+AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_normal_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc58_normal_exit=$?
+if (( tc58_normal_exit == 0 )) && [[ "$(json_get "$tc58_normal_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then pass "unset health fault leaves successful apply unchanged"; else fail "unset health fault changed normal apply behavior"; fi
+
+tc58_home="$tmp_root/tc58"
+tc58_repo="$(create_test_repo "$tmp_root/tc58_repo" "0.2.0")"
+setup_installed_framework "$tc58_home" "file://$tc58_repo"
+tc58_staged="$tc58_repo/artix-hypr-remix/config/artix-hypr-remix"
+cat > "$tc58_staged/bin/namespace-install.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/namespace-before-health.marker"
+EOF
+cat > "$tc58_staged/bin/migrate.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/migration-before-health.marker"
+EOF
+cat > "$tc58_staged/bin/ahr-doctor" <<'EOF'
+#!/usr/bin/env bash
+touch "${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/real-doctor-ran.marker"
+printf 'real doctor passed\n'
+exit 0
+EOF
+chmod +x "$tc58_staged/bin/namespace-install.sh" "$tc58_staged/bin/migrate.sh" "$tc58_staged/bin/ahr-doctor"
+(cd "$tc58_repo" && git add -A && git commit -q -m "health fault fixture" >/dev/null)
+tc58_staged_doctor_sum="$(sha256sum "$tc58_staged/bin/ahr-doctor" | awk '{print $1}')"
+
+tc58_apply_exit=0
+tc58_apply_output="$(AHR_TEST_FAIL_HEALTH_CHECK=1 run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --apply 2>&1)" || tc58_apply_exit=$?
+(( tc58_apply_exit != 0 )) && pass "enabled health fault exits nonzero" || fail "enabled health fault exited zero"
+grep -q 'real doctor passed' <<<"$tc58_apply_output" && pass "real doctor runs before injected failure" || fail "real doctor output missing before injected failure"
+grep -q 'TEST FAULT: forcing post-activation health-check failure' <<<"$tc58_apply_output" && pass "injected health fault is clearly logged" || fail "injected health-fault log missing"
+
+tc58_state="$(find "$tc58_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"
+tc58_txdir="$(dirname "$tc58_state")"
+tc58_backup="$(awk -F= '$1 == "backup_path" { print substr($0, 13); exit }' "$tc58_state")"
+tc58_manifest="$tc58_backup/manifest.txt"
+[[ -f "$tc58_state" && -d "$tc58_backup" && -f "$tc58_manifest" ]] && pass "backup and transaction exist before injected health failure" || fail "injected health failure did not retain backup and transaction"
+grep -q '^phase=health_check_failed$' "$tc58_state" && pass "injected failure uses health_check_failed phase" || fail "injected failure phase was not health_check_failed"
+grep -q '^completion=health_check_failed$' "$tc58_state" && pass "injected failure uses health_check_failed completion" || fail "injected failure completion was not health_check_failed"
+grep -q '^failure_reason=test_fault_forced_health_check_failure$' "$tc58_state" && pass "injected failure reason is distinguishable" || fail "injected failure reason was not distinguishable"
+! grep -q '^completion=committed$' "$tc58_state" && pass "injected transaction is not committed" || fail "injected transaction was committed"
+
+tc58_txid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc58_state")"
+tc58_backup_id="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc58_state")"
+tc58_manifest_txid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc58_manifest")"
+tc58_manifest_backup_id="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc58_manifest")"
+if [[ "$tc58_txid" == "$(basename "$tc58_txdir")" && "$tc58_backup_id" == "$(basename "$tc58_backup")" && "$tc58_txid" == "$tc58_manifest_txid" && "$tc58_backup_id" == "$tc58_manifest_backup_id" ]]; then pass "injected failure preserves exact transaction and backup provenance"; else fail "injected failure changed transaction or backup provenance"; fi
+
+[[ "$(json_get "$tc58_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]] && pass "activation completed before injected failure" || fail "activation did not complete before injected failure"
+[[ -f "$tc58_home/.config/artix-hypr-remix/namespace-before-health.marker" ]] && pass "namespace completed before injected failure" || fail "namespace did not complete before injected failure"
+[[ -f "$tc58_home/.config/artix-hypr-remix/migration-before-health.marker" ]] && pass "migration completed before injected failure" || fail "migration did not complete before injected failure"
+[[ -f "$tc58_home/.config/artix-hypr-remix/real-doctor-ran.marker" ]] && pass "real doctor succeeded before updater fault" || fail "real doctor marker missing"
+tc58_installed_doctor_sum="$(sha256sum "$tc58_home/.config/artix-hypr-remix/bin/ahr-doctor" | awk '{print $1}')"
+[[ "$tc58_installed_doctor_sum" == "$tc58_staged_doctor_sum" ]] && pass "hook does not modify doctor executable" || fail "hook modified doctor executable"
+
+tc58_tx_count_before_invalid="$(find "$tc58_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc58_backup_count_before_invalid="$(find "$tc58_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc58_invalid_exit=0
+tc58_invalid_output="$(AHR_TEST_FAIL_HEALTH_CHECK=true run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc58_invalid_exit=$?
+tc58_tx_count_after_invalid="$(find "$tc58_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc58_backup_count_after_invalid="$(find "$tc58_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+if (( tc58_invalid_exit != 0 )) && grep -q "Invalid AHR_TEST_FAIL_HEALTH_CHECK value: expected exactly '1' when set" <<<"$tc58_invalid_output" && [[ "$tc58_tx_count_before_invalid" == "$tc58_tx_count_after_invalid" && "$tc58_backup_count_before_invalid" == "$tc58_backup_count_after_invalid" ]]; then pass "invalid health-fault value is rejected before mutation"; else fail "invalid health-fault value was not strictly rejected"; fi
+
+# Existing --recover preserves a completed-but-unhealthy apply and directs its
+# exact rollback. A deliberately invalid newer backup must not be selected.
+cp "$tc58_state" "$tc58_state.before-recover"
+tc58_unrelated="$tc58_home/.local/state/artix-hypr-remix/framework-backups/unrelated-newer"
+cp -a "$tc58_backup" "$tc58_unrelated"
+sed -i 's/^backup_id=.*/backup_id=unrelated-newer/; s/^transaction_id=.*/transaction_id=tx-unrelated-newer/' "$tc58_unrelated/manifest.txt"
+rm -rf "$tc58_unrelated/docs"
+tc58_recover_exit=0
+tc58_recover_output="$(AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc58_recover_exit=$?
+if (( tc58_recover_exit != 0 )) && grep -q 'Recovery does not erase this failure. Run: ahr update-framework --rollback' <<<"$tc58_recover_output" && cmp -s "$tc58_state.before-recover" "$tc58_state"; then pass "existing recovery path preserves and directs injected health failure"; else fail "recovery path did not preserve injected health failure"; fi
+tc58_rollback_exit=0
+AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc58_rollback_exit=$?
+if (( tc58_rollback_exit == 0 )) && [[ "$(json_get "$tc58_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" ]]; then pass "exact recorded backup resolves injected health failure over unrelated backup"; else fail "rollback did not use the injected transaction's exact backup"; fi
+tc58_followup_exit=0
+AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc58_followup_exit=$?
+(( tc58_followup_exit == 0 )) && pass "later unset invocation does not inherit health fault" || fail "later unset invocation inherited health fault"
+
 # ── Results ────────────────────────────────────────────────────────
 echo ""
 echo "========================================"

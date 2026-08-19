@@ -192,6 +192,15 @@ die() {
   exit 1
 }
 
+# This narrow, process-local hook exists solely for controlled recovery
+# validation. It deliberately accepts no command, path, or exit-code input.
+test_fail_health_check=false
+case "${AHR_TEST_FAIL_HEALTH_CHECK:-}" in
+  "") ;;
+  1) test_fail_health_check=true ;;
+  *) die "Invalid AHR_TEST_FAIL_HEALTH_CHECK value: expected exactly '1' when set" ;;
+esac
+
 # ── Structured state records ──────────────────────────────────────
 # State is written as key=value with strict validation of values.
 # No space-separated lists. No sourcing of state files.
@@ -1683,6 +1692,16 @@ cmd_apply() {
     doctor_exit=1
   fi
 
+  # Keep the real doctor execution above, then use the normal health-failure
+  # finalizer below for a controlled post-activation validation fault.
+  local injected_health_failure=false
+  if [[ "$test_fail_health_check" == "true" ]]; then
+    injected_health_failure=true
+    log "TEST FAULT: forcing post-activation health-check failure"
+    log_line "TEST FAULT: forcing post-activation health-check failure"
+    doctor_exit=1
+  fi
+
   local health_status="pass"
   (( doctor_exit != 0 )) && health_status="activated_but_unhealthy"
 
@@ -1691,6 +1710,8 @@ cmd_apply() {
 
   if (( doctor_exit != 0 )); then
     local _apply_backup _apply_commit
+    local failure_reason="doctor_exit_$doctor_exit"
+    [[ "$injected_health_failure" == "true" ]] && failure_reason="test_fault_forced_health_check_failure"
     _apply_backup="$(read_tx_field "$txdir" "backup_dir" 2>/dev/null || true)"
     _apply_commit="$(read_tx_field "$txdir" "staging_commit" 2>/dev/null || true)"
     write_transaction_state "$txdir" \
@@ -1699,7 +1720,7 @@ cmd_apply() {
       "backup_dir=$_apply_backup" \
       "staging_commit=$_apply_commit" \
       "doctor_exit=$doctor_exit" \
-      "failure_reason=doctor_exit_$doctor_exit" \
+      "failure_reason=$failure_reason" \
       "recovery_command=ahr update-framework --recover"
   else
     finalize_transaction "$txdir" "committed" "$final_phase"
