@@ -247,6 +247,27 @@ case "${AHR_TEST_FAIL_BACKUP:-}" in
   *) die "Invalid AHR_TEST_FAIL_BACKUP value: expected exactly '1' when set" ;;
 esac
 
+# These narrow, process-local hooks provide deterministic lifecycle boundaries
+# for signal-validation fixtures. They do not select a signal, command, path,
+# or timeout; an external fixture must deliver a real operating-system signal.
+test_pause_after_backup=false
+case "${AHR_TEST_PAUSE_AFTER_BACKUP:-}" in
+  "") ;;
+  1) test_pause_after_backup=true ;;
+  *) die "Invalid AHR_TEST_PAUSE_AFTER_BACKUP value: expected exactly '1' when set" ;;
+esac
+
+test_pause_after_activation=false
+case "${AHR_TEST_PAUSE_AFTER_ACTIVATION:-}" in
+  "") ;;
+  1) test_pause_after_activation=true ;;
+  *) die "Invalid AHR_TEST_PAUSE_AFTER_ACTIVATION value: expected exactly '1' when set" ;;
+esac
+
+if [[ "$test_pause_after_backup" == "true" && "$test_pause_after_activation" == "true" ]]; then
+  die "AHR_TEST_PAUSE_AFTER_BACKUP and AHR_TEST_PAUSE_AFTER_ACTIVATION cannot both be enabled"
+fi
+
 # Verify transaction helpers before allocating backup or transaction state. An
 # incompatible explicit library override must fail without anonymous residue.
 require_transaction_bootstrap_helpers() {
@@ -254,6 +275,27 @@ require_transaction_bootstrap_helpers() {
   for helper in ahr_validate_backup_id ahr_validate_transaction_id; do
     declare -F "$helper" >/dev/null || die "Required transaction helper missing from framework library: $helper"
   done
+}
+
+# Wait indefinitely for a real external signal without adding a signal trap or
+# a timeout. The child has no timeout and is used only to make Bash's existing
+# signal trap interruptible; it is immediately reaped after that real signal.
+# Existing production INT/TERM/HUP traps remain authoritative.
+pause_for_test_signal() {
+  local marker="$1" wait_pid
+  log "$marker"
+  log_line "$marker"
+  while [[ -z "$signal_received" ]]; do
+    # Do not let the indefinite waiter inherit the flock descriptor. SIGKILL
+    # must release the updater lock so a fresh process can inspect persisted
+    # transaction state and recover it.
+    sleep 2147483647 9>&- &
+    wait_pid=$!
+    wait "$wait_pid" || true
+  done
+  kill "$wait_pid" 2>/dev/null || true
+  wait "$wait_pid" 2>/dev/null || true
+  return 128
 }
 
 # ── Structured state records ──────────────────────────────────────
@@ -1563,6 +1605,12 @@ cmd_apply() {
   } > "$final_manifest_tmp"
   mv -f "$final_manifest_tmp" "$backup_dir/manifest.txt"
 
+  # The completed manifest and all required snapshots now exist; activation
+  # has not begun. This is a deterministic validation-only signal boundary.
+  if [[ "$test_pause_after_backup" == "true" ]]; then
+    pause_for_test_signal "TEST PAUSE: after backup, before activation"
+  fi
+
   write_transaction_state "$txdir" "phase=activation_in_progress"
   log "Activating framework $staged_version..."
 
@@ -1629,6 +1677,12 @@ cmd_apply() {
   fi
 
   rm -rf "$staging_dir"
+
+  # All replacement targets and framework metadata are active, but namespace
+  # installation and every later successor phase remain untouched.
+  if [[ "$test_pause_after_activation" == "true" ]]; then
+    pause_for_test_signal "TEST PAUSE: after activation, before namespace installation"
+  fi
 
   # Step 5: Run namespace installation from newly activated framework
   write_transaction_state "$txdir" "phase=namespace_install"
@@ -2251,6 +2305,14 @@ cmd_recover() {
     rollback_transaction "$found_tx"
     finalize_transaction "$found_tx" "recovered" "recovered"
     log "Recovery complete. Framework restored to pre-update state."
+    current_txdir=""
+    return 0
+  elif [[ "$phase" == "interrupted" ]]; then
+    # The production INT/TERM/HUP handler has already restored the archives
+    # before recording this terminal interrupted state. Replaying rollback
+    # would see moved archives as absent and could remove restored targets.
+    log "Interrupted transaction was already restored by signal handling."
+    finalize_transaction "$found_tx" "recovered" "recovered"
     current_txdir=""
     return 0
   elif [[ "$phase" == "backup_in_progress" ]]; then

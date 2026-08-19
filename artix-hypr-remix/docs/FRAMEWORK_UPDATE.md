@@ -142,6 +142,29 @@ The resulting `migration_failed` apply is intentionally preserved for
 inspection. `--recover` remains a non-mutating direction check that exits
 nonzero and directs the exact-associated `--rollback` resolution path.
 
+### Controlled Validation Interruption Pauses
+
+For developer validation only, two process-local pause hooks establish
+deterministic boundaries for an external fixture to send a real operating-
+system signal to the updater. They are not normal user controls and accept
+only the exact value `1`; any other nonempty value, or enabling both together,
+is rejected before an operation begins. They accept no command, path, timeout,
+or signal-selection value and are never persisted.
+
+- `AHR_TEST_PAUSE_AFTER_BACKUP=1` pauses only after every required component
+  snapshot has succeeded and the primary manifest is atomically marked
+  `completed=true`. Activation has not begun; the transaction remains in its
+  existing pre-activation state.
+- `AHR_TEST_PAUSE_AFTER_ACTIVATION=1` pauses only after all framework targets
+  and `framework.json` metadata have been activated. Namespace installation,
+  runtime smoke, migrations, and health checking have not begun; the existing
+  `activation_in_progress` transaction state remains authoritative.
+
+Each pause emits an exact `TEST PAUSE:` readiness marker and waits indefinitely
+for an external signal. The pause code installs no signal handlers: real
+`INT`, `TERM`, and `HUP` continue through the production signal handler, while
+`SIGKILL` remains untrappable. Dry runs never reach either pause boundary.
+
 ## Backup Contents
 
 Each backup directory contains:
