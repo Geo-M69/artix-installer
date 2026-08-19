@@ -360,12 +360,16 @@ Failure and recovery keys:
 | `failure_reason` | Short token describing the failure |
 | `recovery_command` | Suggested next command |
 
-Phases emitted: `created`, `backup_in_progress`, `activation_in_progress`,
+Phases emitted: `created`, `backup_in_progress`, `snapshot_failed`, `activation_in_progress`,
 `activation_complete`, `migration`, `migration_failed`, `health_check`,
 `health_check_failed`, `rollback_in_progress`, `rolled_back`,
-`recovery_failed`. A failed migration or health check leaves
-`completion=*_failed` so the next `apply` or `rollback` refuses to start
-and `--recover` can inspect the state.
+`recovery_failed`. A failed required snapshot is retained as
+`phase=snapshot_failed`, `completion=failed`, with an incomplete primary
+manifest (`completed=in_progress`); no framework activation has occurred.
+`--recover` marks that pre-activation transaction recovered without rollback,
+while `--rollback` rejects its incomplete backup. A failed migration or health
+check leaves `completion=*_failed` so the next `apply` or `rollback` refuses
+to start and `--recover` can inspect the state.
 
 ## Exit Codes
 
@@ -383,6 +387,23 @@ A failed migration or health check leaves `completion=migration_failed` or
 `--apply` or `--rollback` refuses to start while the failure is unresolved;
 use `--recover` to inspect, or `ahr-update-framework --rollback` after
 reviewing the log.
+
+### Validation-only backup failure hook
+
+`AHR_TEST_FAIL_BACKUP=1` is a process-local validation hook. It is never
+persisted and accepts only the exact value `1`. After staging and ordinary
+backup/snapshot work have completed, it forces the existing required-snapshot
+failure path before the primary backup manifest is completed or any framework
+activation begins. It logs `TEST FAULT: forcing backup failure` and records
+`failure_reason=test_fault_forced_backup_failure`.
+
+The hook does not select paths, components, commands, or exit codes, and does
+not intentionally corrupt host files. It is intended only for containment and
+recovery validation: the candidate framework must never activate, namespace
+installation, runtime smoke, migrations, and doctor must not run, and the
+retained incomplete backup must not be used for rollback. The ordinary
+pre-activation recovery contract applies: `--recover` marks the failed
+transaction recovered; `--rollback` rejects the incomplete backup.
 
 ## Version Format
 

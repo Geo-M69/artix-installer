@@ -2613,6 +2613,82 @@ tc60_followup_exit=0; AHR_TEST_FAIL_NAMESPACE_INSTALL= run_ahr "$tc60_home" "$UP
 (( tc60_followup_exit == 0 )) && pass "later unset invocation does not inherit namespace fault" || fail "later unset invocation inherited namespace fault"
 
 echo ""
+echo ""
+echo "=== TC61: Controlled pre-activation backup fault ==="
+
+tc61_snapshot() {
+  local root="$1"
+  [[ -e "$root" || -L "$root" ]] || return 0
+  find "$root" -xdev -printf "%y %m %s %p -> %l\n" | sort
+  find "$root" -xdev -type f -print0 | sort -z | xargs -0 -r sha256sum
+}
+
+tc61_normal_home="$tmp_root/tc61_normal"
+tc61_normal_repo="$(create_test_repo "$tmp_root/tc61_normal_repo" "0.2.0")"
+setup_installed_framework "$tc61_normal_home" "file://$tc61_normal_repo"
+tc61_normal_exit=0
+AHR_TEST_FAIL_BACKUP= run_ahr "$tc61_normal_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc61_normal_exit=$?
+if (( tc61_normal_exit == 0 )) && [[ "$(json_get "$tc61_normal_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then pass "unset backup fault leaves successful apply unchanged"; else fail "unset backup fault changed normal apply behavior"; fi
+
+tc61_home="$tmp_root/tc61"
+tc61_repo="$(create_test_repo "$tmp_root/tc61_repo" "0.2.0")"
+setup_installed_framework "$tc61_home" "file://$tc61_repo"
+mkdir -p "$tc61_home/.local/bin"
+mkdir -p "$tc61_home/.local/state/artix-hypr-remix/framework-transactions" "$tc61_home/.local/state/artix-hypr-remix/framework-backups"
+printf "unrelated namespace entry\n" > "$tc61_home/.local/bin/unrelated"
+ln -s "$tc61_home/.config/artix-hypr-remix/bin/ahr-doctor" "$tc61_home/.local/bin/ahr"
+
+tc61_dry_tx_before="$(find "$tc61_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+tc61_dry_backup_before="$(find "$tc61_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+tc61_dry_exit=0
+tc61_dry_output="$(AHR_TEST_FAIL_BACKUP=1 run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc61_dry_exit=$?
+tc61_dry_tx_after="$(find "$tc61_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+tc61_dry_backup_after="$(find "$tc61_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+if (( tc61_dry_exit == 0 )) && ! grep -q "TEST FAULT: forcing backup failure" <<<"$tc61_dry_output" && [[ "$tc61_dry_tx_before" == "$tc61_dry_tx_after" && "$tc61_dry_backup_before" == "$tc61_dry_backup_after" ]]; then pass "backup hook does not enter backup lifecycle during dry-run"; else fail "backup hook affected dry-run"; fi
+
+tc61_invalid_exit=0
+tc61_invalid_output="$(AHR_TEST_FAIL_BACKUP=true run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc61_invalid_exit=$?
+if (( tc61_invalid_exit != 0 )) && grep -q "Invalid AHR_TEST_FAIL_BACKUP value: expected exactly 1 when set" <<<"${tc61_invalid_output//\'/}" && [[ "$tc61_dry_tx_after" == "$(find "$tc61_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)" && "$tc61_dry_backup_after" == "$(find "$tc61_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)" ]]; then pass "invalid backup-fault value is rejected before mutation"; else fail "invalid backup-fault value was not strictly rejected"; fi
+
+tc61_framework_before="$(tc61_snapshot "$tc61_home/.config/artix-hypr-remix")"
+tc61_namespace_before="$(tc61_snapshot "$tc61_home/.local/bin")"
+tc61_migrations_before="$(tc61_snapshot "$tc61_home/.local/state/artix-hypr-remix/migrations")"
+tc61_config_before="$(sha256sum "$tc61_home/.config/artix-hypr-remix/framework.json" | awk "{print \$1}")"
+tc61_apply_exit=0
+tc61_apply_output="$(AHR_TEST_FAIL_BACKUP=1 run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --apply 2>&1)" || tc61_apply_exit=$?
+(( tc61_apply_exit != 0 )) && pass "enabled backup fault exits nonzero" || fail "enabled backup fault exited zero"
+if grep -q "Cloning and pinning update source" <<<"$tc61_apply_output" && grep -q "Backing up to:" <<<"$tc61_apply_output" && grep -q "Snapshotting managed components" <<<"$tc61_apply_output" && grep -q "TEST FAULT: forcing backup failure" <<<"$tc61_apply_output"; then pass "staging validation backup and fault lifecycle reached"; else fail "backup fault did not reach required lifecycle boundary"; fi
+if ! grep -q "Activating framework" <<<"$tc61_apply_output" && ! grep -q "Running namespace installation" <<<"$tc61_apply_output" && ! grep -q "Running post-activation runtime smoke test" <<<"$tc61_apply_output" && ! grep -q "Running migrations" <<<"$tc61_apply_output" && ! grep -q "Running health check" <<<"$tc61_apply_output"; then pass "backup fault prevents every successor lifecycle phase"; else fail "backup fault reached activation or successor phase"; fi
+
+tc61_state="$(find "$tc61_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"
+tc61_txdir="$(dirname "$tc61_state")"
+tc61_backup="$(awk -F= '$1 == "backup_path" { print substr($0, 13); exit }' "$tc61_state")"
+tc61_manifest="$tc61_backup/manifest.txt"
+if [[ -f "$tc61_state" && -d "$tc61_backup" && -f "$tc61_manifest" && -f "$tc61_backup/component-manifest.txt" ]]; then pass "failed backup and transaction evidence are retained"; else fail "backup fault did not retain expected evidence"; fi
+tc61_txid="$(transaction_exact_field "$tc61_state" transaction_id 2>/dev/null || true)"
+ tc61_backup_id="$(transaction_exact_field "$tc61_state" backup_id 2>/dev/null || true)"
+ if [[ "$tc61_txid" == "$(basename "$tc61_txdir")" && "$tc61_backup_id" == "$(basename "$tc61_backup")" && "$(manifest_exact_field "$tc61_manifest" transaction_id 2>/dev/null || true)" == "$tc61_txid" && "$(manifest_exact_field "$tc61_manifest" backup_id 2>/dev/null || true)" == "$tc61_backup_id" ]]; then pass "failed backup retains exact transaction and backup identity"; else fail "failed backup identity is incomplete or ambiguous"; fi
+grep -q "^phase=snapshot_failed$" "$tc61_state" && grep -q "^completion=failed$" "$tc61_state" && grep -q "^failure_reason=test_fault_forced_backup_failure$" "$tc61_state" && pass "backup fault records existing snapshot failure state and reason" || fail "backup fault state or reason is wrong"
+! grep -q "^completed=true$" "$tc61_manifest" && grep -q "^completed=in_progress$" "$tc61_manifest" && pass "failed backup primary manifest remains incomplete" || fail "failed backup manifest completion is misleading"
+! grep -q "^activated_" "$tc61_state" && ! grep -q "^completion=committed$" "$tc61_state" && pass "backup failure transaction never activates or commits" || fail "backup failure transaction activated or committed"
+if [[ "$(tc61_snapshot "$tc61_home/.config/artix-hypr-remix")" == "$tc61_framework_before" && "$(tc61_snapshot "$tc61_home/.local/bin")" == "$tc61_namespace_before" && "$(tc61_snapshot "$tc61_home/.local/state/artix-hypr-remix/migrations")" == "$tc61_migrations_before" && "$(sha256sum "$tc61_home/.config/artix-hypr-remix/framework.json" | awk "{print \$1}")" == "$tc61_config_before" ]]; then pass "backup fault leaves framework namespace migration and managed config unchanged"; else fail "backup fault mutated installed state"; fi
+
+tc61_unrelated="$tc61_home/.local/state/artix-hypr-remix/framework-backups/unrelated-valid"
+cp -a "$tc61_backup" "$tc61_unrelated"
+sed -i "s/^completed=.*/completed=true/; s/^backup_id=.*/backup_id=unrelated-valid/; s/^transaction_id=.*/transaction_id=tx-unrelated-valid/" "$tc61_unrelated/manifest.txt"
+tc61_unrelated_before="$(sha256sum "$tc61_unrelated/manifest.txt" | awk "{print \$1}")"
+tc61_rollback_exit=0
+tc61_rollback_output="$(AHR_TEST_FAIL_BACKUP= run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --rollback 2>&1)" || tc61_rollback_exit=$?
+if (( tc61_rollback_exit != 0 )) && grep -q "Backup manifest incomplete" <<<"$tc61_rollback_output" && [[ "$(sha256sum "$tc61_unrelated/manifest.txt" | awk "{print \$1}")" == "$tc61_unrelated_before" ]]; then pass "rollback refuses exact incomplete backup without selecting unrelated valid backup"; else fail "rollback selected an unsafe backup source"; fi
+
+tc61_recover_exit=0
+tc61_recover_output="$(AHR_TEST_FAIL_BACKUP= run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc61_recover_exit=$?
+if (( tc61_recover_exit == 0 )) && grep -q "Transaction in phase .*snapshot_failed.* Attempting recovery..." <<<"$tc61_recover_output" && grep -q "^phase=recovered$" "$tc61_state" && grep -q "^completion=recovered$" "$tc61_state"; then pass "recover resolves pre-activation backup failure without rollback"; else fail "recover did not follow backup-failure contract"; fi
+if [[ "$(tc61_snapshot "$tc61_home/.config/artix-hypr-remix")" == "$tc61_framework_before" && "$(tc61_snapshot "$tc61_home/.local/bin")" == "$tc61_namespace_before" && "$(tc61_snapshot "$tc61_home/.local/state/artix-hypr-remix/migrations")" == "$tc61_migrations_before" ]]; then pass "recover preserves contained installed state"; else fail "recover changed contained installed state"; fi
+tc61_followup_exit=0
+AHR_TEST_FAIL_BACKUP= run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc61_followup_exit=$?
+(( tc61_followup_exit == 0 )) && pass "later unset invocation does not inherit backup fault" || fail "later unset invocation inherited backup fault"
+
 echo "========================================"
 echo "  Results: $PASS passed, $FAIL failed"
 echo "========================================"
