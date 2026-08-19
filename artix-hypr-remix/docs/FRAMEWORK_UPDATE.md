@@ -88,6 +88,22 @@ All destructive operations use an exclusive transaction model with:
 | `failed` | Operation failed at this phase |
 | `recovered` | Recovery completed by --recover |
 
+### Controlled Validation Health Fault
+
+For developer validation only, `AHR_TEST_FAIL_HEALTH_CHECK=1` makes an
+`--apply` run enter the ordinary post-activation `health_check_failed` path.
+The updater still runs the real staged `ahr-doctor` first; it then forces only
+the updater's health decision to fail, records `TEST FAULT: forcing
+post-activation health-check failure`, and records the distinguishable
+`failure_reason=test_fault_forced_health_check_failure` in the transaction.
+The setting is process-local and is not written to framework configuration,
+backup manifests, or persistent defaults. It accepts only the exact value
+`1`; any other nonempty value is rejected before an operation begins.
+
+This is not a normal user feature. A resulting `health_check_failed` apply is
+intentionally preserved for inspection; `--recover` directs the documented
+exact-associated `--rollback` resolution path.
+
 ## Backup Contents
 
 Each backup directory contains:
