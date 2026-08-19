@@ -2818,11 +2818,25 @@ if (( tc63_pre_recover_exit == 0 )) && grep -q 'Incomplete backup detected. No a
 if [[ "$(transaction_exact_field "$tc63_pre_state" transaction_id 2>/dev/null || true)" == "$(manifest_exact_field "$tc63_pre_manifest" transaction_id 2>/dev/null || true)" && "$(sha256sum "$tc63_pre_home/.local/state/artix-hypr-remix/framework-backups/unrelated-valid/manifest.txt" | awk '{print $1}')" == "$tc63_pre_unrelated_sum" ]]; then pass "pre-activation recovery preserves exact backup provenance and unrelated backup"; else fail "pre-activation recovery selected an ambiguous backup"; fi
 
 # Post-activation TERM: the updater has changed the framework and metadata,
-# but has not begun namespace, migrations, or doctor. Existing signal handling
-# restores archives and leaves an interrupted transaction for --recover.
+# but has not begun namespace, migrations, or doctor. Signal handling restores
+# archives and atomically records the terminal recovered state.
 tc63_post_home="$tmp_root/tc63_post"
 tc63_post_repo="$(create_current_tree_repo "$tmp_root/tc63_post_repo" "0.2.0")"
 setup_installed_framework "$tc63_post_home" "file://$tc63_post_repo"
+cat > "$tc63_post_home/.config/artix-hypr-remix/bin/ahr-update-framework" <<'EOF'
+#!/usr/bin/env bash
+# Deliberately old recovery behavior: it would replay archives only for the
+# intermediate interrupted state and has no interrupted-state guard.
+if [[ "$1" == "--recover" ]]; then
+  state="$(find "${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/framework-transactions" -name state -print -quit)"
+  if grep -qx 'phase=interrupted' "$state"; then
+    rm -rf "$AHR_FRAMEWORK_ROOT"/{bin,migrations,docs,hooks,first-run.d,default,framework.json}
+    echo "old updater replayed interrupted archives"
+  fi
+fi
+exit 0
+EOF
+chmod +x "$tc63_post_home/.config/artix-hypr-remix/bin/ahr-update-framework"
 cat > "$tc63_post_repo/artix-hypr-remix/config/artix-hypr-remix/bin/namespace-install.sh" <<'EOF'
 #!/usr/bin/env bash
 touch "$HOME/namespace-ran"
@@ -2842,9 +2856,27 @@ tc63_post_manifest="$tc63_post_backup/manifest.txt"
 if grep -qx 'phase=activation_in_progress' "$tc63_post_state" && [[ "$(json_get "$tc63_post_home/.config/artix-hypr-remix/framework.json" version)" == 0.2.0 ]] && [[ ! -e "$tc63_post_home/namespace-ran" ]] && [[ "$(tc61_snapshot "$tc63_post_home/.local/state/artix-hypr-remix/migrations")" == "$tc63_post_migrations_before" ]]; then pass "post-activation pause precedes namespace and successors"; else fail "post-activation pause boundary is incorrect"; fi
 kill -TERM "$tc63_post_pid" 2>/dev/null
 tc63_post_term_exit=0; wait "$tc63_post_pid" || tc63_post_term_exit=$?
-if (( tc63_post_term_exit != 0 )) && grep -qx 'phase=interrupted' "$tc63_post_state" && grep -qx 'completion=interrupted' "$tc63_post_state" && [[ "$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")" == "$tc63_post_framework_before" && "$(tc61_snapshot "$tc63_post_home/.local/bin")" == "$tc63_post_namespace_before" ]]; then pass "real TERM reaches shared post-activation signal restoration"; else fail "post-activation TERM did not follow existing signal contract"; fi
-tc63_post_recover_exit=0; run_ahr "$tc63_post_home" "$UPDATE_FRAMEWORK" --recover >/dev/null 2>&1 || tc63_post_recover_exit=$?
-if (( tc63_post_recover_exit == 0 )) && grep -qx 'phase=recovered' "$tc63_post_state" && [[ "$(transaction_exact_field "$tc63_post_state" backup_id 2>/dev/null || true)" == "$(manifest_exact_field "$tc63_post_manifest" backup_id 2>/dev/null || true)" && "$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")" == "$tc63_post_framework_before" ]]; then pass "post-activation TERM recovery preserves exact baseline and provenance"; else fail "post-activation TERM recovery was not exact"; fi
+tc63_post_tx_count="$(find "$tc63_post_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc63_post_backup_count="$(find "$tc63_post_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+if (( tc63_post_term_exit != 0 )) && grep -qx 'phase=recovered' "$tc63_post_state" && grep -qx 'completion=recovered' "$tc63_post_state" && [[ "$(transaction_exact_field "$tc63_post_state" transaction_id 2>/dev/null || true)" == "$(manifest_exact_field "$tc63_post_manifest" transaction_id 2>/dev/null || true)" && "$(transaction_exact_field "$tc63_post_state" backup_id 2>/dev/null || true)" == "$(manifest_exact_field "$tc63_post_manifest" backup_id 2>/dev/null || true)" && "$(transaction_exact_field "$tc63_post_state" backup_path 2>/dev/null || true)" == "$tc63_post_backup" && "$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")" == "$tc63_post_framework_before" && "$(tc61_snapshot "$tc63_post_home/.local/bin")" == "$tc63_post_namespace_before" ]]; then pass "real TERM atomically restores and finalizes exact provenance"; else fail "post-activation TERM did not finalize restored transaction"; fi
+tc63_post_status_exit=0; run_ahr "$tc63_post_home" "$UPDATE_FRAMEWORK" --status >/dev/null 2>&1 || tc63_post_status_exit=$?
+if (( tc63_post_status_exit == 0 )) && [[ "$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")" == "$tc63_post_framework_before" ]]; then pass "post-activation TERM status read is non-mutating"; else fail "post-activation TERM status read mutated baseline"; fi
+tc63_post_old_recover_exit=0; tc63_post_old_recover_output="$(run_ahr "$tc63_post_home" "$tc63_post_home/.config/artix-hypr-remix/bin/ahr-update-framework" --recover 2>&1)" || tc63_post_old_recover_exit=$?
+if (( tc63_post_old_recover_exit == 0 )) && ! grep -q 'replayed interrupted archives' <<<"$tc63_post_old_recover_output" && [[ "$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")" == "$tc63_post_framework_before" && "$(tc61_snapshot "$tc63_post_home/.local/bin")" == "$tc63_post_namespace_before" && "$(find "$tc63_post_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)" == "$tc63_post_tx_count" && "$(find "$tc63_post_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)" == "$tc63_post_backup_count" ]]; then pass "restored older updater cannot replay finalized TERM recovery"; else fail "restored older updater replayed or mutated finalized recovery"; fi
+
+# Post-activation INT shares the TERM handler and must finalize immediately.
+tc63_int_home="$tmp_root/tc63_int"
+tc63_int_repo="$(create_current_tree_repo "$tmp_root/tc63_int_repo" "0.2.0")"
+setup_installed_framework "$tc63_int_home" "file://$tc63_int_repo"
+tc63_int_framework_before="$(tc61_snapshot "$tc63_int_home/.config/artix-hypr-remix")"
+tc63_int_log="$tmp_root/tc63-int.log"
+tc63_launch_paused AHR_TEST_PAUSE_AFTER_ACTIVATION "$tc63_int_home" "$tc63_int_log"
+tc63_int_pid="$TC63_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: after activation, before namespace installation' "$tc63_int_log" "$tc63_int_pid"; then pass "post-activation INT reaches shared pause boundary"; else fail "post-activation INT did not reach pause boundary"; fi
+tc63_int_state="$(find "$tc63_int_home/.local/state/artix-hypr-remix/framework-transactions" -name state -print -quit)"
+kill -INT "$tc63_int_pid" 2>/dev/null
+tc63_int_exit=0; wait "$tc63_int_pid" || tc63_int_exit=$?
+if (( tc63_int_exit != 0 )) && grep -qx 'phase=recovered' "$tc63_int_state" && grep -qx 'completion=recovered' "$tc63_int_state" && [[ "$(tc61_snapshot "$tc63_int_home/.config/artix-hypr-remix")" == "$tc63_int_framework_before" ]]; then pass "post-activation INT shares terminal recovered restoration"; else fail "post-activation INT did not finalize restored transaction"; fi
 
 # SIGKILL bypasses every shell trap. A fresh updater must detect the persisted
 # in-progress transaction and recover using its recorded archive association.
