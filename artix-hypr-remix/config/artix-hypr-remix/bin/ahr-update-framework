@@ -192,6 +192,15 @@ die() {
   exit 1
 }
 
+# This narrow, process-local hook exists solely for controlled namespace
+# recovery validation. It deliberately accepts no command, path, or exit-code input.
+test_fail_namespace_install=false
+case "${AHR_TEST_FAIL_NAMESPACE_INSTALL:-}" in
+  "") ;;
+  1) test_fail_namespace_install=true ;;
+  *) die "Invalid AHR_TEST_FAIL_NAMESPACE_INSTALL value: expected exactly '1' when set" ;;
+esac
+
 # This narrow, process-local hook exists solely for controlled migration
 # recovery validation. It deliberately accepts no command, path, or exit-code input.
 test_fail_migration=false
@@ -1572,6 +1581,7 @@ cmd_apply() {
   log "Running namespace installation..."
 
   local namespace_exit=0
+  local injected_namespace_failure=false
   local namespace_installer="$FRAMEWORK_ROOT/bin/namespace-install.sh"
   if [[ -f "$namespace_installer" ]]; then
     local namespace_output
@@ -1579,8 +1589,19 @@ cmd_apply() {
     [[ "$quiet" == "false" && -n "$namespace_output" ]] && echo "$namespace_output" | sed 's/^/  /'
   fi
 
+  # Require the real namespace installer to succeed before this narrow hook
+  # exercises the ordinary production namespace-failure finalizer.
+  if (( namespace_exit == 0 )) && [[ "$test_fail_namespace_install" == "true" ]]; then
+    injected_namespace_failure=true
+    log "TEST FAULT: forcing namespace-install failure"
+    log_line "TEST FAULT: forcing namespace-install failure"
+    namespace_exit=1
+  fi
+
   if (( namespace_exit != 0 )); then
     local _apply_backup _apply_commit
+    local failure_reason="namespace_exit_$namespace_exit"
+    [[ "$injected_namespace_failure" == "true" ]] && failure_reason="test_fault_forced_namespace_install_failure"
     _apply_backup="$(read_tx_field "$txdir" "backup_dir" 2>/dev/null || true)"
     _apply_commit="$(read_tx_field "$txdir" "staging_commit" 2>/dev/null || true)"
     write_transaction_state "$txdir" \
@@ -1589,7 +1610,7 @@ cmd_apply() {
       "backup_dir=$_apply_backup" \
       "staging_commit=$_apply_commit" \
       "namespace_exit=$namespace_exit" \
-      "failure_reason=namespace_exit_$namespace_exit" \
+      "failure_reason=$failure_reason" \
       "recovery_command=ahr update-framework --rollback"
     log "Namespace installation failed (exit $namespace_exit). Migrations and doctor were not run."
     log "Use --rollback to restore the previous framework."
@@ -2184,7 +2205,7 @@ cmd_recover() {
     finalize_transaction "$found_tx" "recovered" "recovered"
     current_txdir=""
     return 0
-  elif [[ "$phase" == "migration_failed" || "$phase" == "health_check_failed" ]]; then
+  elif [[ "$phase" == "namespace_failed" || "$phase" == "migration_failed" || "$phase" == "health_check_failed" ]]; then
     log "Transaction reached framework activation but failed in $phase."
     log "Recovery does not erase this failure. Run: ahr update-framework --rollback"
     current_txdir=""
