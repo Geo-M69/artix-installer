@@ -388,6 +388,15 @@ A failed migration or health check leaves `completion=migration_failed` or
 use `--recover` to inspect, or `ahr-update-framework --rollback` after
 reviewing the log.
 
+### Updater library binding
+
+Direct execution of `ahr-update-framework` loads its core libraries from the
+framework tree containing that updater. This keeps a staged or candidate
+updater compatible with its matching library APIs before installation, while
+ordinary installed execution remains self-contained. `AHR_FRAMEWORK_ROOT`
+continues to select the managed framework target; an existing explicit library
+override remains authoritative for supported fixtures and callers.
+
 ### Validation-only backup failure hook
 
 `AHR_TEST_FAIL_BACKUP=1` is a process-local validation hook. It is never

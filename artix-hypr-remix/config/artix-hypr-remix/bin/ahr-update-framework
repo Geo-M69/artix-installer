@@ -27,17 +27,35 @@ set -euo pipefail
 #   2  Invalid arguments
 
 FRAMEWORK_ROOT="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}"
-SCRIPT_DIR="$FRAMEWORK_ROOT/bin"
-LIB_PATH="${AHR_LIB_PATH:-$SCRIPT_DIR/ahr-lib.sh}"
+
+# Libraries default to the framework tree containing this updater, not the
+# managed framework target. This keeps direct candidate execution internally
+# consistent while retaining AHR_FRAMEWORK_ROOT for the installed target. An
+# existing explicit library override remains authoritative for fixtures and
+# production callers that intentionally provide one.
+if [[ -n "${AHR_LIB_PATH:-}" ]]; then
+  LIB_PATH="$AHR_LIB_PATH"
+else
+  updater_source="${BASH_SOURCE[0]}"
+  while [[ -L "$updater_source" ]]; do
+    updater_dir="$(cd -P "$(dirname "$updater_source")" && pwd)"
+    updater_target="$(readlink "$updater_source")"
+    [[ "$updater_target" == /* ]] || updater_target="$updater_dir/$updater_target"
+    updater_source="$updater_target"
+  done
+  UPDATER_BIN_DIR="$(cd -P "$(dirname "$updater_source")" && pwd)"
+  UPDATER_FRAMEWORK_ROOT="$(cd "$UPDATER_BIN_DIR/.." && pwd)"
+  SCRIPT_DIR="$UPDATER_BIN_DIR"
+  LIB_PATH="$UPDATER_BIN_DIR/ahr-lib.sh"
+fi
 source "$LIB_PATH"
-# Resolve from the canonical framework root so commands invoked through
-# ~/.local/bin symlinks never source libraries from the namespace directory.
+LIB_DIR="$(dirname "$LIB_PATH")"
 # shellcheck source=ahr-version.sh
-source "${AHR_VERSION_LIB_PATH:-$(dirname "$LIB_PATH")/ahr-version.sh}"
+source "${AHR_VERSION_LIB_PATH:-$LIB_DIR/ahr-version.sh}"
 # shellcheck source=ahr-cache.sh
-source "${AHR_CACHE_LIB_PATH:-$(dirname "$LIB_PATH")/ahr-cache.sh}"
+source "${AHR_CACHE_LIB_PATH:-$LIB_DIR/ahr-cache.sh}"
 # shellcheck source=ahr-backup-helper.sh
-source "${AHR_BACKUP_HELPER_PATH:-$(dirname "$LIB_PATH")/ahr-backup-helper.sh}"
+source "${AHR_BACKUP_HELPER_PATH:-$LIB_DIR/ahr-backup-helper.sh}"
 FRAMEWORK_JSON="$FRAMEWORK_ROOT/framework.json"
 STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
 CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/artix-hypr-remix"
@@ -228,6 +246,15 @@ case "${AHR_TEST_FAIL_BACKUP:-}" in
   1) test_fail_backup=true ;;
   *) die "Invalid AHR_TEST_FAIL_BACKUP value: expected exactly '1' when set" ;;
 esac
+
+# Verify transaction helpers before allocating backup or transaction state. An
+# incompatible explicit library override must fail without anonymous residue.
+require_transaction_bootstrap_helpers() {
+  local helper
+  for helper in ahr_validate_backup_id ahr_validate_transaction_id; do
+    declare -F "$helper" >/dev/null || die "Required transaction helper missing from framework library: $helper"
+  done
+}
 
 # ── Structured state records ──────────────────────────────────────
 # State is written as key=value with strict validation of values.
@@ -1378,6 +1405,8 @@ cmd_apply() {
   fi
 
   # Create collision-proof backup directory with timestamp prefix
+
+  require_transaction_bootstrap_helpers
   mkdir -p "$FRAMEWORK_BACKUPS_DIR"
   local backup_ts
   backup_ts="$(date +%Y%m%d-%H%M%S)"
