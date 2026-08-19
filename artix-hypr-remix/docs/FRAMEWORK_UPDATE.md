@@ -331,6 +331,15 @@ The handler:
 - Never deletes the only valid archived target
 - Retains transaction state if automatic restoration fails
 
+For a trapped interruption after activation, when the running updater
+successfully restores the transaction archives, it finalizes that transaction
+as `recovered` before exiting. The restored pre-update framework can contain
+an older updater binary, so successful restoration must not depend on a later
+updater version recognizing an intermediate `interrupted` state safely. If
+archive restoration cannot complete, the transaction remains unresolved for
+explicit recovery. `SIGKILL` remains untrappable and therefore retains its
+in-progress transaction for a fresh updater to recover.
+
 ## State File Paths
 
 | File | Purpose |

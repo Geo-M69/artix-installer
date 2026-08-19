@@ -1113,10 +1113,10 @@ rollback_transaction() {
     local archived="$txdir/archived/$target"
     local dst="$FRAMEWORK_ROOT/$target"
     if [[ -d "$archived" ]]; then
-      rm -rf "$dst"
-      mv -f "$archived" "$dst" 2>/dev/null || true
+      rm -rf "$dst" || return 1
+      mv -f "$archived" "$dst" || return 1
     elif [[ -e "$dst" ]]; then
-      rm -rf "$dst"
+      rm -rf "$dst" || return 1
     fi
   done
 
@@ -1126,7 +1126,7 @@ rollback_transaction() {
     local archived_mf="$txdir/archived/$mf"
     local dst_mf="$FRAMEWORK_ROOT/$mf"
     if [[ -f "$archived_mf" ]]; then
-      cp -a "$archived_mf" "$dst_mf"
+      cp -a "$archived_mf" "$dst_mf" || return 1
     fi
   done
 }
@@ -1198,8 +1198,18 @@ signal_handler() {
     phase="$(read_tx_field "$current_txdir" "phase" 2>/dev/null || true)"
     if [[ "$phase" == "activation_in_progress" ]]; then
       echo "Signal $sig received during activation; performing reverse-order restore" >&2
-      rollback_transaction "$current_txdir" 2>/dev/null || true
-      finalize_transaction "$current_txdir" "interrupted" "interrupted" 2>/dev/null || true
+      if rollback_transaction "$current_txdir"; then
+        if ! finalize_transaction "$current_txdir" "recovered" "recovered"; then
+          write_transaction_state "$current_txdir" "failure_reason=signal_${sig}_finalization_failed" "recovery_command=ahr update-framework --recover" || true
+          log "Signal $sig restoration completed but finalization failed; transaction remains unresolved."
+        else
+          log "Signal $sig restoration completed; transaction finalized as recovered."
+        fi
+      else
+        write_transaction_state "$current_txdir" "failure_reason=signal_${sig}_restore_failed" "recovery_command=ahr update-framework --recover" || true
+        log "Signal $sig restoration did not complete; transaction remains unresolved."
+      fi
+      current_txdir=""
     fi
   fi
 
