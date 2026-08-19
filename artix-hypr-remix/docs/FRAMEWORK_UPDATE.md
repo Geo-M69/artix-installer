@@ -88,6 +88,25 @@ All destructive operations use an exclusive transaction model with:
 | `failed` | Operation failed at this phase |
 | `recovered` | Recovery completed by --recover |
 
+### Controlled Validation Namespace Fault
+
+For developer validation only, AHR_TEST_FAIL_NAMESPACE_INSTALL=1 makes an
+--apply run enter the ordinary post-activation namespace_failed path. The
+updater first runs the real production namespace installer and requires it to
+succeed. It then forces only the updater's namespace decision to fail, logs
+TEST FAULT: forcing namespace-install failure, and records
+failure_reason=test_fault_forced_namespace_install_failure in the transaction.
+
+The setting is process-local and is not written to namespace state, framework
+configuration, backup manifests, migration state, or persistent defaults. It
+accepts only the exact value 1; any other nonempty value is rejected before an
+operation begins. This is not a normal user feature.
+
+The resulting namespace_failed apply is intentionally preserved for
+inspection. Runtime smoke, migrations, and doctor are not reached. --recover
+remains a non-mutating direction check that exits nonzero and directs the
+exact-associated --rollback resolution path.
+
 ### Controlled Validation Health Fault
 
 For developer validation only, `AHR_TEST_FAIL_HEALTH_CHECK=1` makes an

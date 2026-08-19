@@ -2555,6 +2555,64 @@ AHR_TEST_FAIL_MIGRATION= run_ahr "$tc59_home" "$UPDATE_FRAMEWORK" --apply >/dev/
 
 # ── Results ────────────────────────────────────────────────────────
 echo ""
+echo "=== TC60: Controlled post-activation namespace fault ==="
+tc60_normal_home="$tmp_root/tc60_normal"; tc60_normal_repo="$(create_test_repo "$tmp_root/tc60_normal_repo" "0.2.0")"; setup_installed_framework "$tc60_normal_home" "file://$tc60_normal_repo"
+tc60_normal_exit=0; AHR_TEST_FAIL_NAMESPACE_INSTALL= run_ahr "$tc60_normal_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc60_normal_exit=$?
+(( tc60_normal_exit == 0 )) && pass "unset namespace fault leaves successful apply unchanged" || fail "unset namespace fault changed normal apply behavior"
+tc60_home="$tmp_root/tc60"; tc60_repo="$(create_test_repo "$tmp_root/tc60_repo" "0.2.0")"; setup_installed_framework "$tc60_home" "file://$tc60_repo"; tc60_staged="$tc60_repo/artix-hypr-remix/config/artix-hypr-remix"; tc60_local="$tc60_home/.local/bin"; mkdir -p "$tc60_local"
+ln -s "$tc60_home/.config/artix-hypr-remix/bin/ahr" "$tc60_local/ahr"; printf 'unrelated regular data\n' >"$tc60_local/unrelated-regular"; ln -s /usr/bin/true "$tc60_local/unrelated-symlink"; cp "$FRAMEWORK_BIN/namespace-install.sh" "$tc60_staged/bin/namespace-install.real.sh"
+# The fixture begins with a minimal staged tree, so supply the canonical source
+# inventory required by the unmodified production namespace installer.
+mapfile -t tc60_commands < <(bash -c 'source "$1"; printf "%s\n" "${AHR_NAMESPACE_COMMANDS[@]}"' _ "$FRAMEWORK_BIN/ahr-lib.sh")
+for tc60_command in "${tc60_commands[@]}"; do
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$tc60_staged/bin/$tc60_command"
+  chmod +x "$tc60_staged/bin/$tc60_command"
+done
+cat > "$tc60_staged/bin/namespace-install.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+bash "$HOME/.config/artix-hypr-remix/bin/namespace-install.real.sh" --quiet
+ln -sfn "$HOME/.config/artix-hypr-remix/bin/ahr-update" "$HOME/.local/bin/ahr"
+touch "$HOME/.config/artix-hypr-remix/real-namespace-success.marker"
+printf 'real namespace installer succeeded\n'
+EOF
+cat > "$tc60_staged/bin/migrate.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "$HOME/.config/artix-hypr-remix/migration-after-namespace.marker"
+EOF
+cat > "$tc60_staged/bin/ahr-doctor" <<'EOF'
+#!/usr/bin/env bash
+touch "$HOME/.config/artix-hypr-remix/doctor-after-namespace.marker"
+exit 0
+EOF
+chmod +x "$tc60_staged/bin/namespace-install.sh" "$tc60_staged/bin/namespace-install.real.sh" "$tc60_staged/bin/migrate.sh" "$tc60_staged/bin/ahr-doctor"; (cd "$tc60_repo" && git add -A && git commit -q -m "namespace fault fixture" >/dev/null)
+tc60_apply_exit=0; tc60_apply_output="$(AHR_TEST_FAIL_NAMESPACE_INSTALL=1 run_ahr "$tc60_home" "$UPDATE_FRAMEWORK" --apply 2>&1)" || tc60_apply_exit=$?
+(( tc60_apply_exit != 0 )) && pass "enabled namespace fault exits nonzero" || fail "enabled namespace fault exited zero"
+grep -q 'real namespace installer succeeded' <<<"$tc60_apply_output" && grep -q 'TEST FAULT: forcing namespace-install failure' <<<"$tc60_apply_output" && pass "real namespace install succeeds before injected fault" || fail "namespace success or fault evidence missing" "$tc60_apply_output"
+[[ -f "$tc60_home/.config/artix-hypr-remix/real-namespace-success.marker" ]] && pass "real namespace installer completed before failure" || fail "real namespace installer did not complete"
+[[ "$(readlink "$tc60_local/ahr")" == "$tc60_home/.config/artix-hypr-remix/bin/ahr-update" ]] && pass "injected failure retains namespace target B" || fail "namespace target B missing"
+[[ "$(cat "$tc60_local/unrelated-regular")" == "unrelated regular data" && "$(readlink "$tc60_local/unrelated-symlink")" == "/usr/bin/true" ]] && pass "unrelated namespace entries remain unchanged" || fail "unrelated namespace entry changed"
+! grep -q 'Running post-activation runtime smoke test...' <<<"$tc60_apply_output" && [[ ! -e "$tc60_home/.config/artix-hypr-remix/migration-after-namespace.marker" && ! -e "$tc60_home/.config/artix-hypr-remix/doctor-after-namespace.marker" ]] && pass "runtime smoke migrations and doctor do not run after namespace fault" || fail "namespace fault reached a successor phase"
+tc60_state="$(find "$tc60_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"; tc60_txdir="$(dirname "$tc60_state")"; tc60_backup="$(awk -F= '$1 == "backup_path" { print substr($0, 13); exit }' "$tc60_state")"; tc60_manifest="$tc60_backup/manifest.txt"
+[[ -d "$tc60_backup" && -f "$tc60_manifest" ]] && pass "backup exists before injected namespace failure" || fail "namespace fault backup missing"
+grep -q '^phase=namespace_failed$' "$tc60_state" && grep -q '^completion=namespace_failed$' "$tc60_state" && pass "injected namespace uses namespace_failed state" || fail "namespace fault state was not namespace_failed"
+grep -q '^failure_reason=test_fault_forced_namespace_install_failure$' "$tc60_state" && pass "namespace fault reason is distinguishable" || fail "namespace fault reason missing"
+! grep -q '^completion=committed$' "$tc60_state" && pass "injected namespace transaction is not committed" || fail "namespace transaction was committed"
+tc60_txid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc60_state")"; tc60_bid="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc60_state")"; tc60_mtxid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc60_manifest")"; tc60_mbid="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc60_manifest")"
+[[ "$tc60_txid" == "$(basename "$tc60_txdir")" && "$tc60_bid" == "$(basename "$tc60_backup")" && "$tc60_txid" == "$tc60_mtxid" && "$tc60_bid" == "$tc60_mbid" ]] && pass "namespace fault preserves exact transaction and backup provenance" || fail "namespace fault provenance changed"
+[[ "$(json_get "$tc60_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]] && pass "activation completed before namespace fault" || fail "activation did not complete"
+tc60_tx_before_invalid="$(find "$tc60_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"; tc60_invalid_exit=0; tc60_invalid_output="$(AHR_TEST_FAIL_NAMESPACE_INSTALL=true run_ahr "$tc60_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc60_invalid_exit=$?; tc60_tx_after_invalid="$(find "$tc60_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+if (( tc60_invalid_exit != 0 )) && grep -q "Invalid AHR_TEST_FAIL_NAMESPACE_INSTALL value: expected exactly '1' when set" <<<"$tc60_invalid_output" && [[ "$tc60_tx_before_invalid" == "$tc60_tx_after_invalid" ]]; then pass "invalid namespace-fault value is rejected before mutation"; else fail "invalid namespace-fault value was not strictly rejected"; fi
+cp "$tc60_state" "$tc60_state.before-recover"; tc60_unrelated="$tc60_home/.local/state/artix-hypr-remix/framework-backups/unrelated-newer"; cp -a "$tc60_backup" "$tc60_unrelated"; sed -i 's/^backup_id=.*/backup_id=unrelated-newer/; s/^transaction_id=.*/transaction_id=tx-unrelated-newer/' "$tc60_unrelated/manifest.txt"; rm -rf "$tc60_unrelated/docs"
+tc60_recover_exit=0; tc60_recover_output="$(AHR_TEST_FAIL_NAMESPACE_INSTALL= run_ahr "$tc60_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc60_recover_exit=$?
+if (( tc60_recover_exit != 0 )) && grep -q 'Recovery does not erase this failure. Run: ahr update-framework --rollback' <<<"$tc60_recover_output" && cmp -s "$tc60_state.before-recover" "$tc60_state" && [[ "$(readlink "$tc60_local/ahr")" == "$tc60_home/.config/artix-hypr-remix/bin/ahr-update" ]]; then pass "recover preserves and directs injected namespace failure"; else fail "recover did not preserve namespace failure" "$tc60_recover_output"; fi
+tc60_rollback_exit=0; tc60_rollback_output="$(AHR_TEST_FAIL_NAMESPACE_INSTALL= run_ahr "$tc60_home" "$UPDATE_FRAMEWORK" --rollback 2>&1)" || tc60_rollback_exit=$?
+if (( tc60_rollback_exit == 0 )) && [[ "$(json_get "$tc60_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" ]] && [[ "$(readlink "$tc60_local/ahr")" == "$tc60_home/.config/artix-hypr-remix/bin/ahr" ]] && [[ "$(cat "$tc60_local/unrelated-regular")" == "unrelated regular data" && "$(readlink "$tc60_local/unrelated-symlink")" == "/usr/bin/true" ]]; then pass "exact rollback restores namespace target A over unrelated backup"; else fail "rollback did not restore exact namespace baseline" "$tc60_rollback_output"; fi
+grep -q '^phase=resolved_by_rollback$' "$tc60_state" && grep -q '^completion=resolved_by_rollback$' "$tc60_state" && grep -q "^transaction_id=$tc60_txid$" "$tc60_state" && grep -q "^backup_id=$tc60_bid$" "$tc60_state" && pass "namespace failure resolves with immutable provenance" || fail "namespace terminal provenance was not preserved"
+tc60_followup_exit=0; AHR_TEST_FAIL_NAMESPACE_INSTALL= run_ahr "$tc60_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc60_followup_exit=$?
+(( tc60_followup_exit == 0 )) && pass "later unset invocation does not inherit namespace fault" || fail "later unset invocation inherited namespace fault"
+
+echo ""
 echo "========================================"
 echo "  Results: $PASS passed, $FAIL failed"
 echo "========================================"
