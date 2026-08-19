@@ -2734,6 +2734,145 @@ tc62_residue_tx="$(find "$tc62_residue_home/.local/state/artix-hypr-remix/framew
 tc62_residue_backup="$(find "$tc62_residue_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)"
 if (( tc62_residue_exit != 0 && tc62_residue_tx == 0 && tc62_residue_backup == 0 )) && grep -q "Required transaction helper missing from framework library" <<<"$tc62_residue_output"; then pass "incompatible explicit library fails before transaction and backup residue"; else fail "pre-initialization failure left residue or wrong error"; fi
 
+echo ""
+echo "=== TC63: Deterministic interruption pause boundaries ==="
+
+# The pause hooks are parsed before every mode, but dry-run never reaches a
+# pause boundary. Invalid input and mutually-exclusive hooks must fail before
+# creating fixture transaction or backup state.
+tc63_parse_home="$tmp_root/tc63_parse"
+tc63_parse_repo="$(create_current_tree_repo "$tmp_root/tc63_parse_repo" "0.2.0")"
+setup_installed_framework "$tc63_parse_home" "file://$tc63_parse_repo"
+mkdir -p "$tc63_parse_home/.local/state/artix-hypr-remix/framework-transactions" "$tc63_parse_home/.local/state/artix-hypr-remix/framework-backups"
+for tc63_hook in AHR_TEST_PAUSE_AFTER_BACKUP AHR_TEST_PAUSE_AFTER_ACTIVATION; do
+  tc63_before_tx="$(find "$tc63_parse_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  tc63_before_backup="$(find "$tc63_parse_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  tc63_invalid_exit=0
+  tc63_invalid_output="$(env "$tc63_hook=invalid" HOME="$tc63_parse_home" XDG_STATE_HOME="$tc63_parse_home/.local/state" XDG_CACHE_HOME="$tc63_parse_home/.cache" AHR_FRAMEWORK_ROOT="$tc63_parse_home/.config/artix-hypr-remix" AHR_LIB_PATH="$tc63_parse_home/.config/artix-hypr-remix/bin/ahr-lib.sh" bash "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc63_invalid_exit=$?
+  tc63_after_tx="$(find "$tc63_parse_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  tc63_after_backup="$(find "$tc63_parse_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  if (( tc63_invalid_exit != 0 )) && grep -q "Invalid $tc63_hook value: expected exactly '1' when set" <<<"$tc63_invalid_output" && [[ "$tc63_before_tx" == "$tc63_after_tx" && "$tc63_before_backup" == "$tc63_after_backup" ]]; then pass "$tc63_hook rejects invalid value before mutation"; else fail "$tc63_hook invalid value was not rejected safely"; fi
+done
+tc63_both_exit=0
+tc63_both_output="$(AHR_TEST_PAUSE_AFTER_BACKUP=1 AHR_TEST_PAUSE_AFTER_ACTIVATION=1 run_ahr "$tc63_parse_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc63_both_exit=$?
+if (( tc63_both_exit != 0 )) && grep -q 'cannot both be enabled' <<<"$tc63_both_output"; then pass "both pause hooks are rejected before operation"; else fail "both pause hooks were accepted"; fi
+for tc63_hook in AHR_TEST_PAUSE_AFTER_BACKUP AHR_TEST_PAUSE_AFTER_ACTIVATION; do
+  tc63_dry_exit=0
+  tc63_dry_output="$(env "$tc63_hook=1" HOME="$tc63_parse_home" XDG_STATE_HOME="$tc63_parse_home/.local/state" XDG_CACHE_HOME="$tc63_parse_home/.cache" AHR_FRAMEWORK_ROOT="$tc63_parse_home/.config/artix-hypr-remix" AHR_LIB_PATH="$tc63_parse_home/.config/artix-hypr-remix/bin/ahr-lib.sh" bash "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc63_dry_exit=$?
+  if (( tc63_dry_exit == 0 )) && ! grep -q 'TEST PAUSE:' <<<"$tc63_dry_output"; then pass "$tc63_hook is accepted but dry-run never pauses"; else fail "$tc63_hook dry-run paused or failed"; fi
+done
+
+# Launch with reset INT/TERM dispositions: non-interactive background shells
+# otherwise inherit ignored INT. The updater itself receives the real signal.
+tc63_launch_paused() {
+  local hook="$1" home="$2" log_file="$3"
+  env --default-signal=INT --default-signal=TERM --default-signal=HUP \
+    "$hook=1" HOME="$home" XDG_STATE_HOME="$home/.local/state" XDG_CACHE_HOME="$home/.cache" \
+    AHR_FRAMEWORK_ROOT="$home/.config/artix-hypr-remix" \
+    AHR_LIB_PATH="$home/.config/artix-hypr-remix/bin/ahr-lib.sh" \
+    bash "$UPDATE_FRAMEWORK" --apply >"$log_file" 2>&1 &
+  TC63_PAUSE_PID="$!"
+}
+
+tc63_wait_marker() {
+  local marker="$1" log_file="$2" pid="$3" attempt
+  for attempt in $(seq 1 200); do
+    grep -qx "$marker" "$log_file" 2>/dev/null && return 0
+    kill -0 "$pid" 2>/dev/null || return 1
+    sleep 0.05
+  done
+  return 1
+}
+
+tc63_make_unrelated_backup() {
+  local home="$1"
+  local backup="$home/.local/state/artix-hypr-remix/framework-backups/unrelated-valid"
+  mkdir -p "$backup"
+  printf 'manifest_version=1\ncompleted=true\nbackup_id=unrelated-valid\ntransaction_id=tx-unrelated-valid\n' > "$backup/manifest.txt"
+  sha256sum "$backup/manifest.txt" | awk '{print $1}'
+}
+
+# Pre-activation INT: a valid completed backup exists, but no archive or
+# replacement has begun. The existing handler leaves this recoverable state
+# intact; a fresh --recover finalizes it without changing installed content.
+tc63_pre_home="$tmp_root/tc63_pre"
+tc63_pre_repo="$(create_current_tree_repo "$tmp_root/tc63_pre_repo" "0.2.0")"
+setup_installed_framework "$tc63_pre_home" "file://$tc63_pre_repo"
+tc63_pre_framework_before="$(tc61_snapshot "$tc63_pre_home/.config/artix-hypr-remix")"
+tc63_pre_namespace_before="$(tc61_snapshot "$tc63_pre_home/.local/bin")"
+tc63_pre_migrations_before="$(tc61_snapshot "$tc63_pre_home/.local/state/artix-hypr-remix/migrations")"
+tc63_pre_unrelated_sum="$(tc63_make_unrelated_backup "$tc63_pre_home")"
+tc63_pre_log="$tmp_root/tc63-pre.log"
+tc63_launch_paused AHR_TEST_PAUSE_AFTER_BACKUP "$tc63_pre_home" "$tc63_pre_log"
+tc63_pre_pid="$TC63_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: after backup, before activation' "$tc63_pre_log" "$tc63_pre_pid"; then pass "pre-activation readiness marker is deterministic"; else fail "pre-activation readiness marker was not observed"; fi
+tc63_pre_state="$(find "$tc63_pre_home/.local/state/artix-hypr-remix/framework-transactions" -name state -print -quit)"
+tc63_pre_backup="$(transaction_exact_field "$tc63_pre_state" backup_path 2>/dev/null || true)"
+tc63_pre_manifest="$tc63_pre_backup/manifest.txt"
+if grep -qx 'phase=backup_in_progress' "$tc63_pre_state" && grep -qx 'completion=in_progress' "$tc63_pre_state" && grep -qx 'completed=true' "$tc63_pre_manifest" && ! grep -q '^activated_' "$tc63_pre_state"; then pass "pre-activation pause follows completed-backup existing state"; else fail "pre-activation pause state is not safely pre-activation"; fi
+kill -INT "$tc63_pre_pid" 2>/dev/null
+tc63_pre_int_exit=0; wait "$tc63_pre_pid" || tc63_pre_int_exit=$?
+if (( tc63_pre_int_exit != 0 )) && [[ "$(tc61_snapshot "$tc63_pre_home/.config/artix-hypr-remix")" == "$tc63_pre_framework_before" && "$(tc61_snapshot "$tc63_pre_home/.local/bin")" == "$tc63_pre_namespace_before" && "$(tc61_snapshot "$tc63_pre_home/.local/state/artix-hypr-remix/migrations")" == "$tc63_pre_migrations_before" ]]; then pass "real INT leaves pre-activation fixture unactivated"; else fail "pre-activation INT mutated fixture state"; fi
+tc63_pre_recover_exit=0; tc63_pre_recover_output="$(run_ahr "$tc63_pre_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc63_pre_recover_exit=$?
+if (( tc63_pre_recover_exit == 0 )) && grep -q 'Incomplete backup detected. No activation to reverse.' <<<"$tc63_pre_recover_output" && grep -qx 'phase=recovered' "$tc63_pre_state" && grep -qx 'completion=recovered' "$tc63_pre_state"; then pass "pre-activation INT follows existing recovery contract"; else fail "pre-activation INT recovery contract changed"; fi
+if [[ "$(transaction_exact_field "$tc63_pre_state" transaction_id 2>/dev/null || true)" == "$(manifest_exact_field "$tc63_pre_manifest" transaction_id 2>/dev/null || true)" && "$(sha256sum "$tc63_pre_home/.local/state/artix-hypr-remix/framework-backups/unrelated-valid/manifest.txt" | awk '{print $1}')" == "$tc63_pre_unrelated_sum" ]]; then pass "pre-activation recovery preserves exact backup provenance and unrelated backup"; else fail "pre-activation recovery selected an ambiguous backup"; fi
+
+# Post-activation TERM: the updater has changed the framework and metadata,
+# but has not begun namespace, migrations, or doctor. Existing signal handling
+# restores archives and leaves an interrupted transaction for --recover.
+tc63_post_home="$tmp_root/tc63_post"
+tc63_post_repo="$(create_current_tree_repo "$tmp_root/tc63_post_repo" "0.2.0")"
+setup_installed_framework "$tc63_post_home" "file://$tc63_post_repo"
+cat > "$tc63_post_repo/artix-hypr-remix/config/artix-hypr-remix/bin/namespace-install.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "$HOME/namespace-ran"
+EOF
+chmod +x "$tc63_post_repo/artix-hypr-remix/config/artix-hypr-remix/bin/namespace-install.sh"
+(cd "$tc63_post_repo" && git add -A && git commit -q -m 'post-pause fixture' >/dev/null)
+tc63_post_framework_before="$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")"
+tc63_post_namespace_before="$(tc61_snapshot "$tc63_post_home/.local/bin")"
+tc63_post_migrations_before="$(tc61_snapshot "$tc63_post_home/.local/state/artix-hypr-remix/migrations")"
+tc63_post_log="$tmp_root/tc63-post.log"
+tc63_launch_paused AHR_TEST_PAUSE_AFTER_ACTIVATION "$tc63_post_home" "$tc63_post_log"
+tc63_post_pid="$TC63_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: after activation, before namespace installation' "$tc63_post_log" "$tc63_post_pid"; then pass "post-activation readiness marker is deterministic"; else fail "post-activation readiness marker was not observed"; fi
+tc63_post_state="$(find "$tc63_post_home/.local/state/artix-hypr-remix/framework-transactions" -name state -print -quit)"
+tc63_post_backup="$(transaction_exact_field "$tc63_post_state" backup_path 2>/dev/null || true)"
+tc63_post_manifest="$tc63_post_backup/manifest.txt"
+if grep -qx 'phase=activation_in_progress' "$tc63_post_state" && [[ "$(json_get "$tc63_post_home/.config/artix-hypr-remix/framework.json" version)" == 0.2.0 ]] && [[ ! -e "$tc63_post_home/namespace-ran" ]] && [[ "$(tc61_snapshot "$tc63_post_home/.local/state/artix-hypr-remix/migrations")" == "$tc63_post_migrations_before" ]]; then pass "post-activation pause precedes namespace and successors"; else fail "post-activation pause boundary is incorrect"; fi
+kill -TERM "$tc63_post_pid" 2>/dev/null
+tc63_post_term_exit=0; wait "$tc63_post_pid" || tc63_post_term_exit=$?
+if (( tc63_post_term_exit != 0 )) && grep -qx 'phase=interrupted' "$tc63_post_state" && grep -qx 'completion=interrupted' "$tc63_post_state" && [[ "$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")" == "$tc63_post_framework_before" && "$(tc61_snapshot "$tc63_post_home/.local/bin")" == "$tc63_post_namespace_before" ]]; then pass "real TERM reaches shared post-activation signal restoration"; else fail "post-activation TERM did not follow existing signal contract"; fi
+tc63_post_recover_exit=0; run_ahr "$tc63_post_home" "$UPDATE_FRAMEWORK" --recover >/dev/null 2>&1 || tc63_post_recover_exit=$?
+if (( tc63_post_recover_exit == 0 )) && grep -qx 'phase=recovered' "$tc63_post_state" && [[ "$(transaction_exact_field "$tc63_post_state" backup_id 2>/dev/null || true)" == "$(manifest_exact_field "$tc63_post_manifest" backup_id 2>/dev/null || true)" && "$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")" == "$tc63_post_framework_before" ]]; then pass "post-activation TERM recovery preserves exact baseline and provenance"; else fail "post-activation TERM recovery was not exact"; fi
+
+# SIGKILL bypasses every shell trap. A fresh updater must detect the persisted
+# in-progress transaction and recover using its recorded archive association.
+tc63_kill_home="$tmp_root/tc63_kill"
+tc63_kill_repo="$(create_current_tree_repo "$tmp_root/tc63_kill_repo" "0.2.0")"
+setup_installed_framework "$tc63_kill_home" "file://$tc63_kill_repo"
+tc63_kill_framework_before="$(tc61_snapshot "$tc63_kill_home/.config/artix-hypr-remix")"
+tc63_kill_unrelated_sum="$(tc63_make_unrelated_backup "$tc63_kill_home")"
+tc63_kill_log="$tmp_root/tc63-kill.log"
+tc63_launch_paused AHR_TEST_PAUSE_AFTER_ACTIVATION "$tc63_kill_home" "$tc63_kill_log"
+tc63_kill_pid="$TC63_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: after activation, before namespace installation' "$tc63_kill_log" "$tc63_kill_pid"; then pass "SIGKILL fixture reaches post-activation boundary"; else fail "SIGKILL fixture did not reach pause boundary"; fi
+tc63_kill_state="$(find "$tc63_kill_home/.local/state/artix-hypr-remix/framework-transactions" -name state -print -quit)"
+tc63_kill_backup="$(transaction_exact_field "$tc63_kill_state" backup_path 2>/dev/null || true)"
+tc63_kill_manifest="$tc63_kill_backup/manifest.txt"
+kill -KILL "$tc63_kill_pid" 2>/dev/null
+tc63_kill_exit=0; wait "$tc63_kill_pid" || tc63_kill_exit=$?
+if (( tc63_kill_exit != 0 )) && grep -qx 'phase=activation_in_progress' "$tc63_kill_state" && grep -qx 'completion=in_progress' "$tc63_kill_state" && [[ "$(json_get "$tc63_kill_home/.config/artix-hypr-remix/framework.json" version)" == 0.2.0 ]]; then pass "SIGKILL bypasses cleanup and leaves persisted active transaction"; else fail "SIGKILL unexpectedly ran cleanup"; fi
+tc63_kill_apply_exit=0; tc63_kill_apply_output="$(run_ahr "$tc63_kill_home" "$UPDATE_FRAMEWORK" --apply 2>&1)" || tc63_kill_apply_exit=$?
+if (( tc63_kill_apply_exit != 0 )) && grep -q 'Incomplete transaction detected' <<<"$tc63_kill_apply_output"; then pass "fresh process detects abandoned transaction without newest fallback"; else fail "fresh process did not detect abandoned transaction"; fi
+tc63_kill_recover_exit=0; tc63_kill_recover_output="$(run_ahr "$tc63_kill_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc63_kill_recover_exit=$?
+if (( tc63_kill_recover_exit == 0 )) && grep -q "Recovering transaction: $(dirname "$tc63_kill_state")" <<<"$tc63_kill_recover_output" && grep -qx 'phase=recovered' "$tc63_kill_state" && grep -qx 'completion=recovered' "$tc63_kill_state" && [[ "$(tc61_snapshot "$tc63_kill_home/.config/artix-hypr-remix")" == "$tc63_kill_framework_before" ]]; then pass "fresh recovery restores SIGKILL fixture baseline"; else fail "fresh SIGKILL recovery did not restore baseline"; fi
+if [[ "$(transaction_exact_field "$tc63_kill_state" transaction_id 2>/dev/null || true)" == "$(manifest_exact_field "$tc63_kill_manifest" transaction_id 2>/dev/null || true)" && "$(sha256sum "$tc63_kill_home/.local/state/artix-hypr-remix/framework-backups/unrelated-valid/manifest.txt" | awk '{print $1}')" == "$tc63_kill_unrelated_sum" ]]; then pass "SIGKILL recovery retains exact association and ignores unrelated backup"; else fail "SIGKILL recovery association was ambiguous"; fi
+
+tc63_unset_exit=0
+tc63_unset_output="$(AHR_TEST_PAUSE_AFTER_BACKUP= AHR_TEST_PAUSE_AFTER_ACTIVATION= run_ahr "$tc63_kill_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc63_unset_exit=$?
+if (( tc63_unset_exit == 0 )) && ! grep -q 'TEST PAUSE:' <<<"$tc63_unset_output"; then pass "pause hooks do not persist into later unset process"; else fail "unset pause process did not complete normally"; fi
+
 echo "========================================"
 echo "  Results: $PASS passed, $FAIL failed"
 echo "========================================"
