@@ -8,5 +8,10 @@ gvfs
 gvfs-mtp
 gvfs-nfs
 gvfs-smb
+udisks2
 gnome-disk-utility
 file-roller
+evince
+imv
+mpv
+gnome-calculator

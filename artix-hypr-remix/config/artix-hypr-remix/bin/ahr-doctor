@@ -14,6 +14,13 @@ AHR_RUNLEVELS_DIR="${AHR_RUNLEVELS_DIR:-/etc/runlevels}"
 AHR_RC_SERVICE_CMD="${AHR_RC_SERVICE_CMD:-rc-service}"
 AHR_IP_CMD="${AHR_IP_CMD:-ip}"
 
+# Shared default-app/MIME matrix (single source of truth for setup + validation).
+MATRIX_LIB="$(dirname "${BASH_SOURCE[0]}")/ahr-default-apps-matrix.sh"
+if [[ -f "$MATRIX_LIB" ]]; then
+  # shellcheck source=/dev/null
+  source "$MATRIX_LIB"
+fi
+
 doctor_warn() { printf '  WARN: %s\n' "$*"; }
 doctor_fail() { printf '  FAIL: %s\n' "$*"; overall_status=1; }
 doctor_pass() { printf '  OK: %s\n' "$*"; }
@@ -321,6 +328,29 @@ else
   overall_status=1
 fi
 
+printf '\n=== Default Application Extras ===\n'
+# Calculator is a core native app; report presence without failing the doctor
+# if it is momentarily absent during an update.
+if command -v gnome-calculator >/dev/null 2>&1 \
+   || ahr_matrix_desktop_entry_exists org.gnome.Calculator.desktop \
+   || ahr_matrix_desktop_entry_exists gnome-calculator.desktop; then
+  printf '  OK: default calculator (gnome-calculator) available\n'
+else
+  printf '  WARN: default calculator (gnome-calculator) not found\n'
+fi
+
+printf '\n=== Advertised Capture Actions ===\n'
+# Color Picker is an advertised Capture action. hyprpicker is installed by
+# default; if it is missing, report clearly but do not fail the doctor (it is
+# a single optional capture utility, not required for session health).
+check_optional 'Color Picker (hyprpicker)' hyprpicker hyprpicker
+# SwayOSD is intentionally optional; its absence must not affect health.
+if command -v swayosd-server >/dev/null 2>&1; then
+  printf '  OK: SwayOSD available (optional OSD polish)\n'
+else
+  printf '  WARN: SwayOSD not installed (optional; volume/brightness/media controls do not depend on it)\n'
+fi
+
 printf '\n=== OpenRC Services ===\n'
 service_check dbus true
 service_check elogind true
@@ -342,6 +372,24 @@ mime_check 'Default PDF viewer (application/pdf)'     application/pdf
 mime_check 'Default image viewer (image/png)'         image/png
 mime_check 'Default video player (video/mp4)'         video/mp4 true
 mime_check 'Default archive (application/zip)'        application/zip
+
+# Extended matrix: validate the remaining AHR-managed MIME types from the same
+# shared definition used by setup, so validation cannot drift from setup.
+if declare -F ahr_matrix_mimes >/dev/null; then
+  printf '\n=== Extended MIME Matrix ===\n'
+  declare -A AHR_BASE_MIMES=(
+    [text/html]=1 [x-scheme-handler/http]=1 [inode/directory]=1
+    [application/pdf]=1 [image/png]=1 [video/mp4]=1 [application/zip]=1
+  )
+  mime="" label="" category=""
+  while IFS= read -r mime; do
+    [[ -n "$mime" ]] || continue
+    [[ -n "${AHR_BASE_MIMES[$mime]:-}" ]] && continue
+    category="$(ahr_matrix_category_for_mime "$mime")"
+    label="Default ${category} (${mime})"
+    mime_check "$label" "$mime"
+  done < <(ahr_matrix_mimes)
+fi
 
 printf '\n=== Theme State ===\n'
 theme_check

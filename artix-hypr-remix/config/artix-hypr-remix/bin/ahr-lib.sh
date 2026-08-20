@@ -76,7 +76,8 @@ declare -a AHR_NAMESPACE_COMMANDS=(
   ahr-theme-bg-install ahr-theme-bg-gallery ahr-theme-set-templates
   ahr-theme-colors-from-alacritty ahr-launch-terminal ahr-launch-apps
   ahr-launch-browser ahr-launch-files ahr-launch-audio ahr-launch-bluetooth
-  ahr-launch-wifi ahr-default-browser ahr-default-terminal ahr-update
+  ahr-launch-wifi ahr-default-browser ahr-default-terminal ahr-default-calculator
+  ahr-onlyoffice ahr-update
   ahr-update-available ahr-update-framework ahr-restore-component ahr-repair
   ahr-status ahr-list-backups ahr-voxtype-model ahr-voxtype-config
   ahr-toggle-idle ahr-toggle-nightlight ahr-toggle-notification-silencing

@@ -20,3 +20,4 @@ brightnessctl
 playerctl
 pamixer
 hyprsunset
+hyprpicker

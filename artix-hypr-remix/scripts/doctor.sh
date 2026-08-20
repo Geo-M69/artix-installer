@@ -4,6 +4,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKER_SCRIPT="$SCRIPT_DIR/check-config-deps.sh"
 
+# Shared default-app/MIME matrix (single source of truth for setup + validation).
+MATRIX_LIB="$SCRIPT_DIR/../config/artix-hypr-remix/bin/ahr-default-apps-matrix.sh"
+if [[ -f "$MATRIX_LIB" ]]; then
+  # shellcheck source=/dev/null
+  source "$MATRIX_LIB"
+fi
+
 checker_args=()
 host_policy="${AHR_HOST_POLICY:-artix}"
 overall_status=0
@@ -372,6 +379,30 @@ else
 fi
 
 echo
+echo "Running default application extra checks"
+if command -v gnome-calculator >/dev/null 2>&1 \
+   || (declare -F ahr_matrix_desktop_entry_exists >/dev/null && \
+       { ahr_matrix_desktop_entry_exists org.gnome.Calculator.desktop \
+         || ahr_matrix_desktop_entry_exists gnome-calculator.desktop; }); then
+  echo "OK: default calculator (gnome-calculator) available"
+else
+  echo "WARN: default calculator (gnome-calculator) not found"
+fi
+
+echo
+echo "Running advertised capture action checks"
+if command -v hyprpicker >/dev/null 2>&1; then
+  echo "OK: Color Picker dependency (hyprpicker)"
+else
+  echo "WARN: Color Picker dependency (hyprpicker) not found; install with: sudo pacman -S hyprpicker"
+fi
+if command -v swayosd-server >/dev/null 2>&1; then
+  echo "OK: SwayOSD available (optional OSD polish)"
+else
+  echo "WARN: SwayOSD not installed (optional; volume/brightness/media controls do not depend on it)"
+fi
+
+echo
 echo "Running default application tooling checks"
 for cmd in xdg-settings xdg-mime xdg-open; do
   if command -v "$cmd" >/dev/null 2>&1; then
@@ -429,6 +460,23 @@ mime_check "PDF viewer" "application/pdf"
 mime_check "Image viewer" "image/png"
 mime_check "Video player" "video/mp4"
 mime_check "Archive manager" "application/zip"
+
+# Extended matrix: validate the remaining AHR-managed MIME types from the same
+# shared definition used by setup, so validation cannot drift from setup.
+if declare -F ahr_matrix_mimes >/dev/null; then
+  declare -A AHR_BASE_MIMES=(
+    [x-scheme-handler/http]=1 [inode/directory]=1 [text/plain]=1
+    [application/pdf]=1 [image/png]=1 [video/mp4]=1 [application/zip]=1
+  )
+  mime="" label="" category=""
+  while IFS= read -r mime; do
+    [[ -n "$mime" ]] || continue
+    [[ -n "${AHR_BASE_MIMES[$mime]:-}" ]] && continue
+    category="$(ahr_matrix_category_for_mime "$mime")"
+    label="Default ${category} (${mime})"
+    mime_check "$label" "$mime"
+  done < <(ahr_matrix_mimes)
+fi
 
 # Check $EDITOR is set to a valid command
 if [[ -n "${EDITOR:-}" ]]; then
