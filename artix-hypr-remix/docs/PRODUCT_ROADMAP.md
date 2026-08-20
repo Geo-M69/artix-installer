@@ -108,6 +108,52 @@ Make AHR capable of safely delivering and recovering from its own updates.
 - A deliberately broken framework update can be rolled back.
 - New migrations arrive through the same update path that executes them.
 
+### Phase 1 Artix Validation Status
+
+**Status: complete.** The Phase 1 validation runbook defines no Batch 2G or
+other mandatory work after Batch 2F.
+
+- Validation branch: `validation/ahr-phase1-artix-20260806`
+- Validated candidate: `98d7ecd2349af66c846bf01403fb7abedb589466`
+
+`ARTIX BATCH 2F RESTART-SAFE RECOVERY/ROLLBACK PASS`
+
+Completed validation batches:
+
+- Batch 1 successful paths: **PASS**
+- Batch 2A health-failure rollback: **PASS**
+- Batch 2B migration-failure rollback: **PASS**
+- Batch 2C namespace-failure rollback: **PASS**
+- Batch 2D backup-failure containment/recovery: **PASS**
+- Batch 2E updater interruption: **PASS**
+- Batch 2F restart-safe recovery/rollback: **PASS**
+
+Batch 2F evidence:
+
+- The remote validation branch and persistent validation-source `HEAD` both
+  resolved exactly to `98d7ecd2349af66c846bf01403fb7abedb589466`.
+- Persistent source `git fsck --full` was clean.
+- `scripts/test-framework-update.sh`: `445 passed, 0 failed`.
+- `scripts/test-ahr-doctor.sh`: `25 passed, 0 failed`.
+- `scripts/test-framework-check.sh`: `18 passed, 0 failed`.
+- `AHR_HOST_POLICY=artix bash scripts/smoke-framework.sh` passed.
+- Candidate-direct dry-run exited `0` and pinned the exact candidate commit.
+- No-mutation verification passed for the installed framework, namespace,
+  migration markers, transactions, and framework backups.
+- Final transaction count: `0`; final backup count: `0`.
+- Installed `framework.json` was restored to the public source:
+  `update_source=https://github.com/Geo-M69/artix-installer.git` and
+  `revision=null`.
+
+Accepted Phase 1 limitations:
+
+1. Rollback restores migration markers but cannot reverse arbitrary external
+   migration side effects.
+2. `SIGKILL` is untrappable; restart safety relies on durable persisted
+   checkpoints plus explicit continuation.
+3. No additional destructive live recovery-interruption run was performed
+   beyond the approved Batch 2F scope.
+
 ## Phase 2: Complete Daily-Desktop Baseline
 
 ### Goal
