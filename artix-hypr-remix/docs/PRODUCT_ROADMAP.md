@@ -183,6 +183,89 @@ tasks without asking the user to assemble missing pieces.
   install or clearly offers the supported dependency.
 - No optional application is required for first login or core recovery.
 
+### Phase 2 Implementation Summary
+
+**Status: implemented (isolated validation complete; clean-Artix live
+validation pending).** The default-app/MIME baseline is data-driven,
+idempotent, and choice-preserving. See `docs/DEFAULT_APPS.md` for the matrix,
+package → desktop-entry mapping, doctor validation, and live-validation
+procedure; see `docs/FLATPAK_PROFILES.md` for the opt-in OnlyOffice profile.
+
+Implemented in this phase:
+
+- PDF → Evince (`org.gnome.Evince.desktop`); image → imv; video **and** audio →
+  mpv (audio MIME explicitly maps to `mpv.desktop`); calculator → GNOME
+  Calculator; directory/removable-device workflow → Nautilus + GVfs/MTP +
+  UDisks2 (explicit dependency chain in `packages/30-files.txt`); archives →
+  File Roller.
+- `hyprpicker` added to the core desktop (`packages/10-hyprland.txt`) because
+  Color Picker is an advertised Capture action. SwayOSD stays optional
+  (`packages/91-aur-optional.txt`); its absence never fails doctor, smoke, or
+  volume/brightness/media controls.
+- OnlyOffice is an opt-in Flatpak profile only (`flatpaks/optional.txt` +
+  `ahr-onlyoffice`); it is excluded from the default install, first-login,
+  recovery, and framework-update requirements.
+- The shared matrix lives in
+  `config/artix-hypr-remix/bin/ahr-default-apps-matrix.sh` and is consumed by
+  first-run setup (`56-default-apps.sh`), `ahr-doctor`, `scripts/doctor.sh`,
+  and `scripts/post-install-smoke.sh`, so setup and validation cannot drift.
+
+#### Phase 2 Validation Status
+
+- **Isolated tests: PASS.** `scripts/test-default-apps.sh` (70 passed, 0
+  failed) covers the MIME/default matrix, default preservation (no handler,
+  valid user-selected native and Flatpak handlers, stale entry, missing entry,
+  multiple candidates), desktop-entry discovery (user + Flatpak), idempotency,
+  optional-component absence (SwayOSD/OnlyOffice), package consistency, and
+  diagnostics (validation does not mutate defaults). `scripts/test-ahr-doctor.sh`
+  (28 passed) and `scripts/test-framework-check.sh` (18 passed) remain green.
+- **Live Artix validation: PENDING.** The clean-session matrix (real files),
+  removable-device mount/open/browse/unmount/safe-removal from a live Nautilus
+  session, and post-reboot / post-framework-update repeats require a booted
+  Artix desktop and are documented but not yet executed here. See
+  `docs/DEFAULT_APPS.md` § Live Validation for the exact commands and expected
+  evidence.
+
+The Phase 2 exit gate is satisfied for isolated validation; the live-session
+items are tracked as the remaining blocker in the final report.
+
+Implementation decisions:
+
+- Use Evince as the core PDF viewer, `imv` as the core image viewer, `mpv` as
+  the core video/audio player, and GNOME Calculator as the core calculator.
+  Add their Artix packages to the native package manifests and verify their
+  installed desktop-entry IDs instead of assuming upstream names.
+- Keep Nautilus and File Roller as the directory and archive handlers. Make
+  the removable-device dependency chain explicit, including GVfs/MTP and
+  UDisks, and validate mount, open, unmount, and safe-removal behavior from a
+  live Nautilus session.
+- Add `hyprpicker` to the core desktop because Color Picker is already an
+  advertised Capture action and the package is available from the configured
+  repositories. Keep SwayOSD optional because it is presentation polish rather
+  than a dependency of the underlying volume, brightness, or media controls;
+  its startup hook must continue to skip cleanly when it is absent.
+- Split OnlyOffice into a supported, opt-in office Flatpak profile. The profile
+  must expose its application ID, installation and launch checks, document MIME
+  behavior, and removal command without deleting user documents. It remains
+  outside the default install and is not used by first-login or recovery paths.
+
+The default-app setup will become data-driven and idempotent for HTTP/HTTPS,
+directories, plain text and Markdown, PDF, common image formats, common video
+and audio formats, and supported archives. It will set an AHR default only when
+no valid handler exists, preserve explicit user choices, and report handlers
+whose desktop entries have disappeared. Doctor and post-install smoke will use
+the same matrix so setup and validation cannot drift.
+
+Validation will combine isolated tests with a clean Artix live-session run.
+Fixtures will cover missing packages, missing and stale desktop entries,
+preserved user defaults, repeat execution, and optional-component absence. The
+live run will open representative URL, directory, text, PDF, image, audio,
+video, and archive samples; exercise a removable device; verify every visible
+Capture and Setup action; then repeat the default checks after a reboot and a
+framework update. Phase 2 is complete only when that evidence is recorded and
+the existing Phase 2 exit gate passes without depending on the office profile,
+SwayOSD, AUR software, or another optional application.
+
 ## Phase 3: Flatpak Application Catalog
 
 ### Goal

@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LIB_PATH="${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "$LIB_PATH"
+backup_lib="${AHR_BACKUP_HELPER_PATH:-$(dirname "$LIB_PATH")/ahr-backup-helper.sh}"
+[[ -f "$backup_lib" ]] && source "$backup_lib"
+
+SHELL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/artix-hypr-remix/env"
+
+declare -A CALC_DESKTOP=(
+  [gnome-calculator]="org.gnome.Calculator.desktop"
+)
+
+if (($# == 0)); then
+  if [[ -f "$SHELL_CONFIG" ]]; then
+    current="$(grep -s '^export CALCULATOR=' "$SHELL_CONFIG" | sed 's/^export CALCULATOR=//' | head -1 || true)"
+    if [[ -n "$current" ]]; then
+      printf '%s\n' "$current"
+      exit 0
+    fi
+  fi
+  printf '%s\n' "${CALCULATOR:-unknown}"
+  exit 0
+fi
+
+case "$1" in
+  gnome-calculator)
+    calc_cmd="gnome-calculator"
+    desktop_id="${CALC_DESKTOP[$1]}"
+    name="GNOME Calculator"
+    ;;
+  *)
+    echo "Usage: ahr-default-calculator <gnome-calculator>" >&2
+    exit 1
+    ;;
+esac
+
+if ! ahr_has_cmd "$calc_cmd"; then
+  ahr_fail "Calculator not found: $calc_cmd"
+fi
+
+if ! ahr_desktop_entry_exists "$desktop_id"; then
+  ahr_fail "Desktop entry not found for $name ($desktop_id)"
+fi
+
+mkdir -p "$(dirname "$SHELL_CONFIG")"
+if [[ -f "$SHELL_CONFIG" ]]; then
+  if ! declare -F ahr_backup_before_edit >/dev/null; then
+    echo "Error: Unable to back up $SHELL_CONFIG; refusing to modify it" >&2
+    exit 1
+  fi
+  ahr_backup_before_edit "$SHELL_CONFIG" 2>/dev/null || {
+    echo "Error: Unable to back up $SHELL_CONFIG; refusing to modify it" >&2
+    exit 1
+  }
+fi
+
+if grep -qs '^export CALCULATOR=' "$SHELL_CONFIG" 2>/dev/null; then
+  sed -i "s|^export CALCULATOR=.*|export CALCULATOR=$calc_cmd|" "$SHELL_CONFIG"
+else
+  printf '%s\n' "# Calculator preference set by ahr-default-calculator" >> "$SHELL_CONFIG"
+  printf '%s\n' "export CALCULATOR=$calc_cmd" >> "$SHELL_CONFIG"
+fi
+
+ahr_notify "Default Calculator" "$name is now the default calculator (CALCULATOR=$calc_cmd)"
+
+exit 0

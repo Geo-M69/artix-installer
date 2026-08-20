@@ -146,6 +146,9 @@ run_case mime-missing-handler-warning 0 'gone.desktop (desktop entry not found)'
 run_case mime-no-default-warning 0 'Default video player (video/mp4) — no default handler set' base
 run_case mime-several-candidates-warning 0 'Default video player (video/mp4) — no default handler set' multiple-candidates
 run_case mime-webm-only-warning 0 'Default video player (video/mp4) — no default handler set' webm-only
+run_case mime-audio-extended 0 'Default audio (audio/mpeg) → valid.desktop' base
+run_case mime-markdown-extended 0 'Default editor (text/markdown) → valid.desktop' base
+run_case mime-https-extended 0 'Default browser (x-scheme-handler/https) → valid.desktop' base
 run_case warnings-only 0 'All checks passed.' enabled-nm
 run_case cache-library-0644 0 'OK: ahr-cache.sh (library)' base
 run_case cache-library-0755 0 'OK: ahr-cache.sh (library)' executable-cache-lib

@@ -2,9 +2,11 @@
 set -euo pipefail
 
 source "${AHR_LIB_PATH:-$HOME/.config/artix-hypr-remix/bin/ahr-lib.sh}"
+source "${AHR_DEFAULT_APPS_MATRIX:-$(dirname "${BASH_SOURCE[0]}")/ahr-default-apps-matrix.sh}"
 
 browser_cmd="$HOME/.config/artix-hypr-remix/bin/ahr-default-browser"
 terminal_cmd="$HOME/.config/artix-hypr-remix/bin/ahr-default-terminal"
+calculator_cmd="$HOME/.config/artix-hypr-remix/bin/ahr-default-calculator"
 SHELL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/artix-hypr-remix/env"
 
 browser_default_is_valid() {
@@ -150,8 +152,9 @@ set_editor_default() {
     fi
 
     if ahr_desktop_entry_exists "$desktop_id"; then
-      xdg-mime default "$desktop_id" text/plain >/dev/null 2>&1 || true
-      xdg-mime default "$desktop_id" text/x-markdown >/dev/null 2>&1 || true
+      for mime in text/plain text/markdown text/x-markdown text/x-shellscript text/x-python; do
+        xdg-mime default "$desktop_id" "$mime" >/dev/null 2>&1 || true
+      done
     fi
 
     echo "Default editor set: $editor_cmd"
@@ -161,53 +164,42 @@ set_editor_default() {
   return 1
 }
 
+calculator_default_is_valid() {
+  local saved_calc
+
+  if [[ -f "$SHELL_CONFIG" ]]; then
+    saved_calc="$(grep -s '^export CALCULATOR=' "$SHELL_CONFIG" | sed 's/^export CALCULATOR=//' | head -1 || true)"
+    if [[ -n "$saved_calc" ]]; then
+      command -v "$saved_calc" >/dev/null 2>&1 && return 0
+    fi
+  fi
+
+  # An installed AHR default calculator counts as a valid configuration.
+  ahr_matrix_desktop_entry_exists org.gnome.Calculator.desktop || \
+    ahr_matrix_desktop_entry_exists gnome-calculator.desktop
+}
+
+set_calculator_default() {
+  local desktop_id
+
+  for desktop_id in org.gnome.Calculator.desktop gnome-calculator.desktop; do
+    if ahr_matrix_desktop_entry_exists "$desktop_id"; then
+      if [[ -x "$calculator_cmd" ]]; then
+        "$calculator_cmd" set gnome-calculator || true
+      fi
+      echo "Default calculator set: gnome-calculator"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 mime_defaults_apply() {
-  local applied=false
-
-  ahr_has_cmd xdg-mime || return 1
-
-  # PDF viewer — firefox is always installed and handles PDFs
-  if ahr_desktop_entry_exists firefox.desktop; then
-    xdg-mime default firefox.desktop application/pdf >/dev/null 2>&1 || true
-    applied=true
-  fi
-
-  # Image viewer — imv is the default image viewer candidate
-  if ahr_has_cmd imv && ahr_desktop_entry_exists imv.desktop; then
-    for mime in image/png image/jpeg image/gif image/webp image/bmp image/tiff; do
-      xdg-mime default imv.desktop "$mime" >/dev/null 2>&1 || true
-    done
-    applied=true
-    echo "Default image viewer set: imv"
-  fi
-
-  # Video player — mpv is the default video player candidate
-  if ahr_has_cmd mpv && ahr_desktop_entry_exists mpv.desktop; then
-    for mime in video/mp4 video/x-matroska video/webm video/x-msvideo video/ogg video/quicktime; do
-      xdg-mime default mpv.desktop "$mime" >/dev/null 2>&1 || true
-    done
-    applied=true
-    echo "Default video player set: mpv"
-  fi
-
-  # Archive manager — file-roller
-  if ahr_desktop_entry_exists org.gnome.FileRoller.desktop || ahr_desktop_entry_exists file-roller.desktop; then
-    local rid
-    rid="org.gnome.FileRoller.desktop"
-    ahr_desktop_entry_exists "$rid" || rid="file-roller.desktop"
-    for mime in application/zip application/x-tar application/x-bzip application/x-bzip2 application/gzip application/x-7z-compressed application/x-rar-compressed; do
-      xdg-mime default "$rid" "$mime" >/dev/null 2>&1 || true
-    done
-    applied=true
-    echo "Default archive manager set: $rid"
-  fi
-
-  # Audio — pavucontrol for audio control (not a file-open MIME, but useful)
-  if ahr_has_cmd pavucontrol; then
-    xdg-mime default pavucontrol.desktop x-scheme-handler/pulse >/dev/null 2>&1 || true
-  fi
-
-  if $applied; then
+  # PDF, image, video, audio, and archive defaults are driven entirely by the
+  # shared matrix (ahr-default-apps-matrix.sh). Each is set only when no valid
+  # handler already exists, so a user-selected or Flatpak handler is preserved.
+  if ahr_matrix_apply_pure_mime_categories; then
     return 0
   fi
   return 1
@@ -217,4 +209,5 @@ browser_default_is_valid || set_browser_default || echo "Skipping default browse
 terminal_default_is_valid || set_terminal_default || echo "Skipping default terminal setup: no supported terminal found"
 file_manager_default_is_valid || set_file_manager_default || echo "Skipping default file manager setup: no supported file manager desktop entry found"
 editor_default_is_valid || set_editor_default || echo "Skipping default editor setup: no supported editor command found"
+calculator_default_is_valid || set_calculator_default || echo "Skipping default calculator setup: no supported calculator desktop entry found"
 mime_defaults_apply || echo "Skipping some MIME defaults: no candidate desktop entries found"
