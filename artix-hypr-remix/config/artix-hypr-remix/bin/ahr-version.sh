@@ -121,8 +121,8 @@ ahr_version_compare() {
   ahr_version_validate "$a" || return 2
   ahr_version_validate "$b" || return 2
 
-  # Use vercmp when available and it produces a valid result
-  if command -v vercmp >/dev/null 2>&1; then
+  # Pacman vercmp does not implement SemVer prerelease precedence. Use it only for core versions.
+  if [[ "$a" != *-* && "$b" != *-* ]] && command -v vercmp >/dev/null 2>&1; then
     local r
     r="$(vercmp "$a" "$b" 2>/dev/null || true)"
     if [[ "$r" =~ ^-?[0-9]+$ ]]; then

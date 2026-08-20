@@ -8,6 +8,15 @@ set -euo pipefail
 #   git clone https://github.com/Geo-M69/artix-installer && ./scripts/doctor.sh --no-aur
 
 overall_status=0
+FRAMEWORK_ROOT="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}"
+AHR_INITD_DIR="${AHR_INITD_DIR:-/etc/init.d}"
+AHR_RUNLEVELS_DIR="${AHR_RUNLEVELS_DIR:-/etc/runlevels}"
+AHR_RC_SERVICE_CMD="${AHR_RC_SERVICE_CMD:-rc-service}"
+AHR_IP_CMD="${AHR_IP_CMD:-ip}"
+
+doctor_warn() { printf '  WARN: %s\n' "$*"; }
+doctor_fail() { printf '  FAIL: %s\n' "$*"; overall_status=1; }
+doctor_pass() { printf '  OK: %s\n' "$*"; }
 
 usage() {
   cat <<'EOF'
@@ -74,48 +83,59 @@ check_desktop_cmd() {
 }
 
 mime_check() {
-  local label="$1" mime_type="$2"
+  local label="$1" mime_type="$2" preference="${3:-false}"
   if ! command -v xdg-mime >/dev/null 2>&1; then
     return
   fi
-  local current
+  local current desktop_file="" app_dir
   current="$(xdg-mime query default "$mime_type" 2>/dev/null || true)"
   if [[ -n "$current" ]]; then
-    printf '  OK: %s → %s\n' "$label" "$current"
+    for app_dir in /usr/share/applications "$HOME/.local/share/applications" \
+      "$HOME/.local/share/flatpak/exports/share/applications" \
+      /var/lib/flatpak/exports/share/applications; do
+      if [[ -f "$app_dir/$current" ]]; then
+        desktop_file="$app_dir/$current"
+        break
+      fi
+    done
+    if [[ -n "$desktop_file" ]]; then
+      doctor_pass "$label → $current"
+    elif [[ "$preference" == "true" ]]; then
+      doctor_warn "$label → $current (desktop entry not found)"
+    else
+      doctor_fail "$label → $current (desktop entry not found)"
+    fi
   else
-    printf '  WARN: %s — no default handler set\n' "$label"
+    doctor_warn "$label — no default handler set"
   fi
 }
 
 service_check() {
   local service="$1" required="${2:-true}"
-  if [[ ! -x "/etc/init.d/$service" ]]; then
+  if [[ ! -x "$AHR_INITD_DIR/$service" ]]; then
     if [[ "$required" == "true" ]]; then
-      printf '  MISSING: service script /etc/init.d/%s\n' "$service"
-      overall_status=1
+      doctor_fail "service script $AHR_INITD_DIR/$service missing"
     else
-      printf '  WARN: optional service not installed: %s\n' "$service"
+      doctor_warn "optional service not installed: $service"
     fi
     return
   fi
 
   local enabled=false
   local running=false
-  [[ -e "/etc/runlevels/default/$service" ]] && enabled=true
-  rc-service "$service" status >/dev/null 2>&1 && running=true
+  [[ -e "$AHR_RUNLEVELS_DIR/default/$service" ]] && enabled=true
+  "$AHR_RC_SERVICE_CMD" "$service" status >/dev/null 2>&1 && running=true
 
   if [[ "$required" == "true" ]]; then
     if ! $enabled; then
-      printf '  MISSING: %s not in default runlevel\n' "$service"
-      overall_status=1
+      doctor_fail "$service not in default runlevel"
       return
     fi
     if ! $running; then
-      printf '  MISSING: %s installed but not running\n' "$service"
-      overall_status=1
+      doctor_fail "$service installed but not running"
       return
     fi
-    printf '  OK: %s (default runlevel, running)\n' "$service"
+    doctor_pass "$service (default runlevel, running)"
   else
     printf '  OK: /etc/init.d/%s' "$service"
     $enabled && printf ' (default runlevel)'
@@ -124,9 +144,56 @@ service_check() {
   fi
 }
 
+network_stack_check() {
+  if ! command -v "$AHR_RC_SERVICE_CMD" >/dev/null 2>&1; then
+    doctor_fail "supported network stack cannot be checked: $AHR_RC_SERVICE_CMD unavailable"
+    return
+  fi
+  if ! command -v "$AHR_IP_CMD" >/dev/null 2>&1; then
+    doctor_fail "supported network stack cannot be checked: $AHR_IP_CMD unavailable"
+    return
+  fi
+
+  local -a supported=(NetworkManager connmand)
+  local -a active=() inactive_enabled=()
+  local service
+  for service in "${supported[@]}"; do
+    [[ -x "$AHR_INITD_DIR/$service" ]] || continue
+    if "$AHR_RC_SERVICE_CMD" "$service" status >/dev/null 2>&1; then
+      active+=("$service")
+    elif [[ -e "$AHR_RUNLEVELS_DIR/default/$service" || -e "$AHR_RUNLEVELS_DIR/sysinit/$service" ]]; then
+      inactive_enabled+=("$service")
+    fi
+  done
+
+  if (( ${#active[@]} == 0 )); then
+    doctor_fail "no supported network manager is active (NetworkManager or connmand)"
+    return
+  fi
+  if (( ${#active[@]} > 1 )); then
+    doctor_warn "multiple supported network managers are active: ${active[*]}"
+  else
+    doctor_pass "supported network manager active: ${active[0]}"
+  fi
+  if (( ${#inactive_enabled[@]} > 0 )); then
+    doctor_warn "inactive supported manager enabled in an OpenRC runlevel: ${inactive_enabled[*]} (choose one intended manager)"
+  fi
+
+  if ! "$AHR_IP_CMD" -o addr show up 2>/dev/null | awk '$2 != "lo" && ($3 == "inet" || $3 == "inet6") { found=1 } END { exit !found }'; then
+    doctor_fail "supported network manager is active but no non-loopback address is configured"
+    return
+  fi
+  doctor_pass "non-loopback network address configured"
+  if "$AHR_IP_CMD" route show default 2>/dev/null | grep -q .; then
+    doctor_pass "default route configured"
+  else
+    doctor_warn "no default route reported (local networking may still be intentional)"
+  fi
+}
+
 framework_cmd_check() {
   local name="$1"
-  local path="$HOME/.config/artix-hypr-remix/bin/$name"
+  local path="$FRAMEWORK_ROOT/bin/$name"
   if [[ -x "$path" ]]; then
     printf '  OK: %s\n' "$name"
   elif [[ -e "$path" ]]; then
@@ -139,16 +206,72 @@ framework_cmd_check() {
 }
 
 theme_check() {
-  local current_link="$HOME/.config/artix-hypr-remix/current/theme"
-  if [[ -L "$current_link" ]]; then
-    local target
-    target="$(readlink "$current_link")"
-    printf '  OK: current theme → %s\n' "$target"
-  elif [[ -f "$current_link" ]]; then
-    printf '  WARN: current theme path is a file, not a symlink\n'
-  else
-    printf '  WARN: no current theme symlink (run ahr theme set <name>)\n'
+  local state_dir="$FRAMEWORK_ROOT/current"
+  local name_file="$state_dir/theme.name"
+  local current_theme="$state_dir/theme"
+  local theme_name="" source_theme="" resolved=""
+
+  if [[ ! -f "$name_file" || ! -r "$name_file" ]]; then
+    doctor_fail "current theme name missing or unreadable: $name_file"
+    return
   fi
+  theme_name="$(<"$name_file")"
+  if [[ ! "$theme_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    doctor_fail "current theme name is empty or invalid: $name_file"
+    return
+  fi
+  for source_theme in "$FRAMEWORK_ROOT/themes/$theme_name" "$FRAMEWORK_ROOT/default/themes/$theme_name"; do
+    [[ -d "$source_theme" ]] && break
+  done
+  if [[ ! -d "$source_theme" ]]; then
+    doctor_fail "named source theme is missing: $theme_name"
+    return
+  fi
+
+  if [[ -L "$current_theme" ]]; then
+    resolved="$(readlink -f "$current_theme" 2>/dev/null || true)"
+    case "$resolved" in
+      "$FRAMEWORK_ROOT/themes/"*|"$FRAMEWORK_ROOT/default/themes/"*) ;;
+      *) doctor_fail "legacy current theme symlink escapes allowed theme roots: $current_theme"; return ;;
+    esac
+    [[ -d "$resolved" ]] || { doctor_fail "legacy current theme symlink target is missing: $current_theme"; return; }
+    if [[ "$resolved" != "$source_theme" ]]; then
+      doctor_fail "legacy current theme target does not match theme.name ($theme_name)"
+      return
+    fi
+    doctor_pass "current theme legacy symlink → $resolved"
+  elif [[ -d "$current_theme" ]]; then
+    local required_asset
+    for required_asset in colors.toml icons.theme; do
+      if [[ ! -f "$current_theme/$required_asset" || ! -f "$source_theme/$required_asset" ]]; then
+        doctor_fail "current theme directory is missing required $required_asset"
+        return
+      fi
+      if ! cmp -s "$current_theme/$required_asset" "$source_theme/$required_asset"; then
+        doctor_fail "current theme directory does not match theme.name ($theme_name)"
+        return
+      fi
+    done
+    doctor_pass "current theme directory matches $theme_name"
+  else
+    doctor_fail "current theme path missing or unsupported: $current_theme"
+    return
+  fi
+
+  local background="$state_dir/background"
+  if [[ -L "$background" ]]; then
+    resolved="$(readlink -f "$background" 2>/dev/null || true)"
+    case "$resolved" in
+      "$FRAMEWORK_ROOT/"*) [[ -f "$resolved" ]] || { doctor_fail "current background target is missing: $background"; return; } ;;
+      *) doctor_fail "current background symlink escapes framework root: $background"; return ;;
+    esac
+  elif [[ -f "$background" ]]; then
+    doctor_pass "current background file exists"
+    return
+  else
+    doctor_fail "current background state missing: $background"
+  fi
+  doctor_pass "current background symlink is valid"
 }
 
 # ── Environment ────────────────────────────────────────────────
@@ -193,7 +316,7 @@ fi
 printf '\n=== OpenRC Services ===\n'
 service_check dbus true
 service_check elogind true
-service_check NetworkManager true
+network_stack_check
 service_check bluetoothd true
 check_optional docker docker docker
 service_check cupsd false
@@ -209,7 +332,7 @@ mime_check 'Default browser (x-scheme-handler/http)'  x-scheme-handler/http
 mime_check 'Default file manager (inode/directory)'   inode/directory
 mime_check 'Default PDF viewer (application/pdf)'     application/pdf
 mime_check 'Default image viewer (image/png)'         image/png
-mime_check 'Default video player (video/mp4)'         video/mp4
+mime_check 'Default video player (video/mp4)'         video/mp4 true
 mime_check 'Default archive (application/zip)'        application/zip
 
 printf '\n=== Theme State ===\n'
@@ -238,7 +361,7 @@ else
 fi
 
 printf '\n=== Framework Version ===\n'
-FRAMEWORK_JSON="$HOME/.config/artix-hypr-remix/framework.json"
+FRAMEWORK_JSON="$FRAMEWORK_ROOT/framework.json"
 if [[ -f "$FRAMEWORK_JSON" ]]; then
   if command -v jq >/dev/null 2>&1; then
     fw_version="$(jq -r '.version // "unknown"' "$FRAMEWORK_JSON" 2>/dev/null || echo "unknown")"
@@ -264,7 +387,7 @@ if [[ -d "$ns_bin_dir" ]]; then
     if [[ -L "$ns_path" ]]; then
       ns_target_read="$(readlink "$ns_path" 2>/dev/null || true)"
       case "$ns_target_read" in
-        "$HOME/.config/artix-hypr-remix/bin/"*)
+        "$FRAMEWORK_ROOT/bin/"*)
           if [[ -e "$ns_path" ]]; then
             printf '  OK: %s -> %s\n' "$ns_cmd" "$ns_target_read"
             ns_ok=$((ns_ok + 1))
