@@ -264,6 +264,23 @@ case "${AHR_TEST_PAUSE_AFTER_ACTIVATION:-}" in
   *) die "Invalid AHR_TEST_PAUSE_AFTER_ACTIVATION value: expected exactly '1' when set" ;;
 esac
 
+# These test-only hooks pause after a durable restore-complete checkpoint has
+# been written.  They make the otherwise tiny SIGKILL window reproducible
+# without accepting any executable, path, timeout, or signal input.
+test_pause_recover_after_restore=false
+case "${AHR_TEST_PAUSE_RECOVER_AFTER_RESTORE:-}" in
+  "") ;;
+  1) test_pause_recover_after_restore=true ;;
+  *) die "Invalid AHR_TEST_PAUSE_RECOVER_AFTER_RESTORE value: expected exactly '1' when set" ;;
+esac
+
+test_pause_rollback_after_restore=false
+case "${AHR_TEST_PAUSE_ROLLBACK_AFTER_RESTORE:-}" in
+  "") ;;
+  1) test_pause_rollback_after_restore=true ;;
+  *) die "Invalid AHR_TEST_PAUSE_ROLLBACK_AFTER_RESTORE value: expected exactly '1' when set" ;;
+esac
+
 if [[ "$test_pause_after_backup" == "true" && "$test_pause_after_activation" == "true" ]]; then
   die "AHR_TEST_PAUSE_AFTER_BACKUP and AHR_TEST_PAUSE_AFTER_ACTIVATION cannot both be enabled"
 fi
@@ -325,11 +342,11 @@ create_transaction() {
   # The backup directory has already been allocated by cmd_apply, so these
   # values do not need to be inferred from timestamps or directory ordering.
   local -a association_fields=()
-  if [[ "$action" == "apply" ]]; then
+  if [[ "$action" == "apply" || "$action" == "rollback" ]]; then
     local backup_id
     backup_id="$(basename "$backup_dir")"
-    ahr_validate_backup_id "$backup_id" || die "Invalid apply backup ID"
-    ahr_validate_transaction_id "$txname" || die "Invalid apply transaction ID"
+    ahr_validate_backup_id "$backup_id" || die "Invalid $action backup ID"
+    ahr_validate_transaction_id "$txname" || die "Invalid $action transaction ID"
     association_fields=(
       "backup_id=$backup_id"
       "backup_path=$backup_dir"
@@ -394,7 +411,7 @@ write_transaction_state() {
     # update status fields only; they cannot silently redirect a transaction
     # to a different backup or transaction record.
     case "$key" in
-      backup_id|backup_path|transaction_id)
+      backup_id|backup_path|transaction_id|resolved_apply_txid|resolved_apply_backup)
         if [[ -n "${existing[$key]+x}" && "${existing[$key]}" != "${updates[$key]}" ]]; then
           echo "Immutable transaction association changed: $key" >&2
           return 1
@@ -404,10 +421,10 @@ write_transaction_state() {
     existing["$key"]="${updates[$key]}"
   done
 
-  # A new-format apply state either has its complete immutable association or
-  # is an older legacy record.  Do not accept partially written association
-  # metadata, and never infer a value from directory ordering.
-  if [[ "${existing[action]:-}" == "apply" ]] && \
+  # A new-format apply or rollback state either has its complete immutable
+  # association or is an older legacy record. Do not accept partially written
+  # association metadata, and never infer a value from directory ordering.
+  if [[ "${existing[action]:-}" =~ ^(apply|rollback)$ ]] && \
      { [[ -n "${existing[backup_id]+x}" ]] || [[ -n "${existing[backup_path]+x}" ]] || [[ -n "${existing[transaction_id]+x}" ]]; }; then
     [[ -n "${existing[backup_id]+x}" && -n "${existing[backup_path]+x}" && -n "${existing[transaction_id]+x}" ]] || {
       echo "Incomplete transaction association metadata" >&2
@@ -423,13 +440,13 @@ write_transaction_state() {
   tmp="$(mktemp "${state_file}.tmp.XXXXXX")"
   chmod 600 "$tmp"
   # Deterministic order aids diagnostics and tests.
-  for key in format_version txid action pid target_version staging_commit backup_dir backup_id backup_path transaction_id phase completion \
+  for key in format_version txid action pid target_version staging_commit backup_dir backup_id backup_path transaction_id phase completion restore_completed \
     failure_reason current_target migration_exit doctor_exit log_path recovery_command targets; do
     [[ -n "${existing[$key]+x}" ]] && echo "$key=${existing[$key]}" >> "$tmp"
   done
   for key in "${!existing[@]}"; do
     case "$key" in
-      format_version|txid|action|pid|target_version|staging_commit|backup_dir|backup_id|backup_path|transaction_id|phase|completion|failure_reason|current_target|migration_exit|doctor_exit|log_path|recovery_command|targets) ;;
+      format_version|txid|action|pid|target_version|staging_commit|backup_dir|backup_id|backup_path|transaction_id|phase|completion|restore_completed|failure_reason|current_target|migration_exit|doctor_exit|log_path|recovery_command|targets) ;;
       *) echo "$key=${existing[$key]}" >> "$tmp" ;;
     esac
   done
@@ -1131,6 +1148,35 @@ rollback_transaction() {
   done
 }
 
+# A restore-complete checkpoint closes the SIGKILL window between moving the
+# transaction archives back into place and recording the terminal state.  It
+# is deliberately durable state, not an inference from missing archives.
+checkpoint_recovery_restore_completed() {
+  local txdir="$1"
+  write_transaction_state "$txdir" \
+    "phase=recovery_restore_completed" \
+    "completion=in_progress" \
+    "restore_completed=true" || return 1
+
+  # A signal handler already has signal_received set; never pause from that
+  # trap because its signal is the event that requested completion.
+  if [[ "$test_pause_recover_after_restore" == "true" && -z "$signal_received" ]]; then
+    pause_for_test_signal "TEST PAUSE: recovery restore complete, before finalization"
+  fi
+}
+
+checkpoint_rollback_restore_completed() {
+  local txdir="$1"
+  write_transaction_state "$txdir" \
+    "phase=rollback_restore_completed" \
+    "completion=in_progress" \
+    "restore_completed=true" || return 1
+
+  if [[ "$test_pause_rollback_after_restore" == "true" && -z "$signal_received" ]]; then
+    pause_for_test_signal "TEST PAUSE: rollback restore complete, before finalization"
+  fi
+}
+
 # ── Post-activation runtime smoke test ─────────────────────────────
 
 # Verify that newly activated framework commands can start and load their
@@ -1199,7 +1245,7 @@ signal_handler() {
     if [[ "$phase" == "activation_in_progress" ]]; then
       echo "Signal $sig received during activation; performing reverse-order restore" >&2
       if rollback_transaction "$current_txdir"; then
-        if ! finalize_transaction "$current_txdir" "recovered" "recovered"; then
+        if ! checkpoint_recovery_restore_completed "$current_txdir" || ! finalize_transaction "$current_txdir" "recovered" "recovered"; then
           write_transaction_state "$current_txdir" "failure_reason=signal_${sig}_finalization_failed" "recovery_command=ahr update-framework --recover" || true
           log "Signal $sig restoration completed but finalization failed; transaction remains unresolved."
         else
@@ -1911,6 +1957,18 @@ cmd_rollback() {
   touch "$FRAMEWORK_LOG"
   acquire_framework_lock
 
+  # A prior process may have restored every target and then been SIGKILLed
+  # before terminal writes. Resume only that exact transaction; do not create
+  # another rollback or touch the restored framework tree.
+  local restore_completed_tx=""
+  restore_completed_tx="$(find_rollback_restore_completed_tx)" || die "Unable to determine a unique rollback restore-complete transaction"
+  if [[ -n "$restore_completed_tx" ]]; then
+    log "Finalizing rollback restore-complete transaction: $restore_completed_tx"
+    finalize_rollback_restore_completed "$restore_completed_tx" || die "Rollback restore-complete checkpoint validation failed"
+    log "Rollback finalization complete. No archive restoration was replayed."
+    return 0
+  fi
+
   check_incomplete_transactions rollback || die "Incomplete transaction detected. Use --recover to handle it."
 
   trap 'signal_handler EXIT' EXIT
@@ -2131,7 +2189,7 @@ cmd_rollback() {
   done
 
   # Run post-rollback health check
-  write_transaction_state "$txdir" "phase=health_check"
+  checkpoint_rollback_restore_completed "$txdir" || die "Failed to record rollback restore-complete checkpoint"
   log "Running health checks..."
   local doctor_exit=0
   local doctor_cmd="$FRAMEWORK_ROOT/bin/ahr-doctor"
@@ -2146,7 +2204,7 @@ cmd_rollback() {
   local health_status="pass"
   (( doctor_exit != 0 )) && health_status="rollback_unhealthy"
 
-  local final_phase="rollback_complete"
+  local final_phase="rolled_back"
   (( doctor_exit != 0 )) && final_phase="rollback_failed"
 
   if (( doctor_exit != 0 )); then
@@ -2156,7 +2214,14 @@ cmd_rollback() {
       "doctor_exit=$doctor_exit" \
       "failure_reason=rollback_doctor_exit_$doctor_exit"
   else
-    finalize_transaction "$txdir" "rolled_back" "$final_phase"
+    # Resolve the failed apply first. If SIGKILL lands between these terminal
+    # writes, the durable rollback restore checkpoint remains resumable and
+    # the next process can idempotently finalize only the rollback state.
+    if [[ -n "$failed_apply_tx" ]]; then
+      finalize_transaction "$failed_apply_tx" "resolved_by_rollback" "resolved_by_rollback" || die "Failed to finalize linked failed apply transaction"
+      log "Original failed apply resolved by rollback: $(basename "$failed_apply_tx")"
+    fi
+    finalize_transaction "$txdir" "rolled_back" "$final_phase" || die "Failed to finalize rollback transaction"
   fi
   invalidate_cache "$FRAMEWORK_CACHE"
 
@@ -2164,12 +2229,6 @@ cmd_rollback() {
     log "Rollback completed but health checks reported issues."
     current_txdir=""
     return 1
-  fi
-
-  # Mark the resolved apply transaction as terminal
-  if [[ -n "$failed_apply_tx" ]]; then
-    finalize_transaction "$failed_apply_tx" "resolved_by_rollback" "resolved_by_rollback"
-    log "Original failed apply resolved by rollback: $(basename "$failed_apply_tx")"
   fi
 
   log "Framework rolled back: → $prev_version"
@@ -2240,6 +2299,118 @@ find_unresolved_apply_tx() {
   [[ -z "$found" ]] || printf '%s\n' "$found"
 }
 
+# Validate the minimal identity carried by a restore-complete checkpoint.  A
+# checkpoint is authoritative only when it belongs to this exact transaction
+# directory; a malformed marker must never turn into a restore replay.
+validate_restore_checkpoint_identity() {
+  local txdir="$1" expected_action="$2" expected_phase="$3"
+  local txid action phase completion restored
+  txid="$(read_tx_field_unique "$txdir" "txid" 2>/dev/null || true)"
+  action="$(read_tx_field_unique "$txdir" "action" 2>/dev/null || true)"
+  phase="$(read_tx_field_unique "$txdir" "phase" 2>/dev/null || true)"
+  completion="$(read_tx_field_unique "$txdir" "completion" 2>/dev/null || true)"
+  restored="$(read_tx_field_unique "$txdir" "restore_completed" 2>/dev/null || true)"
+  ahr_validate_transaction_id "$txid" || { echo "Restore checkpoint has invalid transaction ID" >&2; return 1; }
+  [[ "$txid" == "$(basename "$txdir")" ]] || { echo "Restore checkpoint transaction ID does not match directory" >&2; return 1; }
+  [[ "$action" == "$expected_action" ]] || { echo "Restore checkpoint action is invalid" >&2; return 1; }
+  [[ "$phase" == "$expected_phase" && "$completion" == "in_progress" && "$restored" == "true" ]] || {
+    echo "Restore checkpoint is incomplete or malformed" >&2
+    return 1
+  }
+}
+
+finalize_recovery_restore_completed() {
+  local txdir="$1"
+  validate_restore_checkpoint_identity "$txdir" "apply" "recovery_restore_completed" || return 1
+  finalize_transaction "$txdir" "recovered" "recovered"
+}
+
+# The linked failed apply is part of a rollback's immutable provenance.  A
+# partially written link, a redirected backup, or a mismatched manifest is a
+# hard stop before any filesystem restoration is considered.
+AHR_ROLLBACK_LINKED_APPLY_TX=""
+validate_rollback_restore_completed() {
+  local txdir="$1"
+  local backup_dir backup_path backup_id transaction_id manifest
+  validate_restore_checkpoint_identity "$txdir" "rollback" "rollback_restore_completed" || return 1
+
+  backup_dir="$(read_tx_field_unique "$txdir" "backup_dir" 2>/dev/null || true)"
+  backup_path="$(read_tx_field_unique "$txdir" "backup_path" 2>/dev/null || true)"
+  backup_id="$(read_tx_field_unique "$txdir" "backup_id" 2>/dev/null || true)"
+  transaction_id="$(read_tx_field_unique "$txdir" "transaction_id" 2>/dev/null || true)"
+  [[ "$transaction_id" == "$(basename "$txdir")" ]] || { echo "Rollback checkpoint transaction association is invalid" >&2; return 1; }
+  ahr_validate_backup_id "$backup_id" || { echo "Rollback checkpoint has invalid backup ID" >&2; return 1; }
+  [[ "$backup_dir" == "$backup_path" && "$backup_id" == "$(basename "$backup_path")" ]] || {
+    echo "Rollback checkpoint backup association is invalid" >&2
+    return 1
+  }
+  path_under "$backup_path" "$FRAMEWORK_BACKUPS_DIR" || { echo "Rollback checkpoint backup is outside backup root" >&2; return 1; }
+  manifest="$backup_path/manifest.txt"
+  ahr_parse_primary_manifest "$manifest" "$backup_id" true || { echo "Rollback checkpoint backup manifest is invalid" >&2; return 1; }
+
+  local link_tx_count link_backup_count linked_txid linked_backup linked_tx linked_action linked_state_txid linked_backup_id linked_completion
+  link_tx_count="$(grep -c '^resolved_apply_txid=' "$txdir/state" 2>/dev/null || true)"
+  link_backup_count="$(grep -c '^resolved_apply_backup=' "$txdir/state" 2>/dev/null || true)"
+  if [[ "$link_tx_count" == "0" && "$link_backup_count" == "0" ]]; then
+    AHR_ROLLBACK_LINKED_APPLY_TX=""
+    return 0
+  fi
+  [[ "$link_tx_count" == "1" && "$link_backup_count" == "1" ]] || { echo "Rollback checkpoint has malformed failed-apply link" >&2; return 1; }
+  linked_txid="$(read_tx_field_unique "$txdir" "resolved_apply_txid" 2>/dev/null || true)"
+  linked_backup="$(read_tx_field_unique "$txdir" "resolved_apply_backup" 2>/dev/null || true)"
+  ahr_validate_transaction_id "$linked_txid" || { echo "Rollback checkpoint linked transaction ID is invalid" >&2; return 1; }
+  [[ "$linked_backup" == "$backup_path" ]] || { echo "Rollback checkpoint linked backup does not match rollback backup" >&2; return 1; }
+  [[ "$AHR_PRIMARY_MANIFEST_TRANSACTION_ID" == "$linked_txid" ]] || { echo "Rollback checkpoint manifest transaction does not match linked failed apply" >&2; return 1; }
+
+  linked_tx="$FRAMEWORK_TRANSACTIONS_DIR/$linked_txid"
+  [[ -d "$linked_tx" && -f "$linked_tx/state" ]] || { echo "Rollback checkpoint linked failed apply is missing" >&2; return 1; }
+  linked_action="$(read_tx_field_unique "$linked_tx" "action" 2>/dev/null || true)"
+  linked_state_txid="$(read_tx_field_unique "$linked_tx" "transaction_id" 2>/dev/null || true)"
+  linked_backup_id="$(read_tx_field_unique "$linked_tx" "backup_id" 2>/dev/null || true)"
+  linked_completion="$(read_tx_field_unique "$linked_tx" "completion" 2>/dev/null || true)"
+  [[ "$linked_action" == "apply" && "$linked_state_txid" == "$linked_txid" && "$linked_backup_id" == "$backup_id" ]] || {
+    echo "Rollback checkpoint linked failed apply identity is invalid" >&2
+    return 1
+  }
+  [[ "$(read_tx_field_unique "$linked_tx" "backup_dir" 2>/dev/null || true)" == "$backup_path" ]] || {
+    echo "Rollback checkpoint linked failed apply backup is invalid" >&2
+    return 1
+  }
+  case "$linked_completion" in
+    namespace_failed|migration_failed|health_check_failed|failed|resolved_by_rollback) ;;
+    *) echo "Rollback checkpoint linked transaction is not a failed apply" >&2; return 1 ;;
+  esac
+  AHR_ROLLBACK_LINKED_APPLY_TX="$linked_tx"
+}
+
+finalize_rollback_restore_completed() {
+  local txdir="$1"
+  validate_rollback_restore_completed "$txdir" || return 1
+  if [[ -n "$AHR_ROLLBACK_LINKED_APPLY_TX" ]]; then
+    if [[ "$(read_tx_field_unique "$AHR_ROLLBACK_LINKED_APPLY_TX" "completion" 2>/dev/null || true)" != "resolved_by_rollback" ]]; then
+      finalize_transaction "$AHR_ROLLBACK_LINKED_APPLY_TX" "resolved_by_rollback" "resolved_by_rollback" || return 1
+    fi
+  fi
+  finalize_transaction "$txdir" "rolled_back" "rolled_back"
+}
+
+# Return the one rollback transaction whose archive restoration has completed
+# but whose terminal bookkeeping has not. Directory order is never used to
+# choose among multiple candidates.
+find_rollback_restore_completed_tx() {
+  [[ -d "$FRAMEWORK_TRANSACTIONS_DIR" ]] || return 0
+  local txdir phase found="" count=0
+  for txdir in "$FRAMEWORK_TRANSACTIONS_DIR"/*/; do
+    [[ -f "$txdir/state" ]] || continue
+    phase="$(read_tx_field_unique "${txdir%/}" "phase" 2>/dev/null || true)"
+    [[ "$phase" == "rollback_restore_completed" ]] || continue
+    found="${txdir%/}"
+    count=$((count + 1))
+  done
+  (( count <= 1 )) || { echo "Multiple rollback restore-complete transactions; refusing ambiguous continuation" >&2; return 1; }
+  [[ -z "$found" ]] || printf '%s\n' "$found"
+}
+
 check_incomplete_transactions() {
   local requested_action="${1:-apply}"
   [[ -d "$FRAMEWORK_TRANSACTIONS_DIR" ]] || return 0
@@ -2283,6 +2454,19 @@ cmd_recover() {
 
   log "Scanning for incomplete transactions..."
 
+  # Prefer the explicit rollback continuation over directory traversal. A
+  # linked apply may already have been terminally resolved when SIGKILL
+  # occurred, but the rollback checkpoint is still the sole operation to
+  # finish and must not restore archives again.
+  local rollback_restore_completed_tx=""
+  rollback_restore_completed_tx="$(find_rollback_restore_completed_tx)" || return 1
+  if [[ -n "$rollback_restore_completed_tx" ]]; then
+    log "Rollback archive restoration was already completed; finalizing only."
+    finalize_rollback_restore_completed "$rollback_restore_completed_tx" || return 1
+    log "Rollback finalization complete. No archive restoration was replayed."
+    return 0
+  fi
+
   local found_tx=""
   local txdir
   for txdir in "$FRAMEWORK_TRANSACTIONS_DIR"/*/; do
@@ -2292,7 +2476,7 @@ cmd_recover() {
     local completion
     completion="$(grep -F 'completion=' "$state_file" | head -n1 | cut -d= -f2-)"
     case "$completion" in
-      committed|rolled_back|recovered|abandoned) continue ;;
+      committed|rolled_back|recovered|abandoned|resolved_by_rollback) continue ;;
       *) found_tx="$txdir"; break ;;
     esac
   done
@@ -2312,9 +2496,20 @@ cmd_recover() {
   if [[ "$phase" == "activation_in_progress" ]]; then
     # Reverse-order restore from transaction archives
     log "Restoring from transaction archives..."
-    rollback_transaction "$found_tx"
-    finalize_transaction "$found_tx" "recovered" "recovered"
+    rollback_transaction "$found_tx" || { current_txdir=""; return 1; }
+    checkpoint_recovery_restore_completed "$found_tx" || { current_txdir=""; return 1; }
+    finalize_recovery_restore_completed "$found_tx" || { current_txdir=""; return 1; }
     log "Recovery complete. Framework restored to pre-update state."
+    current_txdir=""
+    return 0
+  elif [[ "$phase" == "recovery_restore_completed" ]]; then
+    log "Recovery archive restoration was already completed; finalizing only."
+    finalize_recovery_restore_completed "$found_tx" || { current_txdir=""; return 1; }
+    current_txdir=""
+    return 0
+  elif [[ "$phase" == "rollback_restore_completed" ]]; then
+    log "Rollback archive restoration was already completed; finalizing only."
+    finalize_rollback_restore_completed "$found_tx" || { current_txdir=""; return 1; }
     current_txdir=""
     return 0
   elif [[ "$phase" == "interrupted" ]]; then
@@ -2338,8 +2533,9 @@ cmd_recover() {
     return 1
   else
     log "Transaction in phase '$phase'. Attempting recovery..."
-    rollback_transaction "$found_tx"
-    finalize_transaction "$found_tx" "recovered" "recovered"
+    rollback_transaction "$found_tx" || { current_txdir=""; return 1; }
+    checkpoint_recovery_restore_completed "$found_tx" || { current_txdir=""; return 1; }
+    finalize_recovery_restore_completed "$found_tx" || { current_txdir=""; return 1; }
     current_txdir=""
     return 0
   fi

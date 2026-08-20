@@ -2905,6 +2905,124 @@ tc63_unset_exit=0
 tc63_unset_output="$(AHR_TEST_PAUSE_AFTER_BACKUP= AHR_TEST_PAUSE_AFTER_ACTIVATION= run_ahr "$tc63_kill_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc63_unset_exit=$?
 if (( tc63_unset_exit == 0 )) && ! grep -q 'TEST PAUSE:' <<<"$tc63_unset_output"; then pass "pause hooks do not persist into later unset process"; else fail "unset pause process did not complete normally"; fi
 
+echo ""
+echo "=== TC64: Restore-complete SIGKILL continuation ==="
+
+tc64_state_for_action() {
+  local home="$1" action="$2" state
+  for state in "$home/.local/state/artix-hypr-remix/framework-transactions"/*/state; do
+    [[ -f "$state" ]] || continue
+    grep -qx "action=$action" "$state" && { printf '%s\n' "$state"; return 0; }
+  done
+  return 1
+}
+
+tc64_launch_pause() {
+  local hook="$1" home="$2" log_file="$3" mode="$4"
+  env --default-signal=INT --default-signal=TERM --default-signal=HUP \
+    "$hook=1" HOME="$home" XDG_STATE_HOME="$home/.local/state" XDG_CACHE_HOME="$home/.cache" \
+    AHR_FRAMEWORK_ROOT="$home/.config/artix-hypr-remix" \
+    AHR_LIB_PATH="$home/.config/artix-hypr-remix/bin/ahr-lib.sh" \
+    bash "$UPDATE_FRAMEWORK" "$mode" >"$log_file" 2>&1 &
+  TC64_PAUSE_PID="$!"
+}
+
+# Invalid restore-complete hooks are parsed before every operation allocates or
+# mutates framework state.
+tc64_parse_home="$tmp_root/tc64_parse"
+tc64_parse_repo="$(create_current_tree_repo "$tmp_root/tc64_parse_repo" "0.2.0")"
+setup_installed_framework "$tc64_parse_home" "file://$tc64_parse_repo"
+mkdir -p "$tc64_parse_home/.local/state/artix-hypr-remix/framework-transactions"
+for tc64_hook in AHR_TEST_PAUSE_RECOVER_AFTER_RESTORE AHR_TEST_PAUSE_ROLLBACK_AFTER_RESTORE; do
+  tc64_before_tx="$(find "$tc64_parse_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  tc64_invalid_exit=0
+  tc64_invalid_output="$(env "$tc64_hook=x" HOME="$tc64_parse_home" XDG_STATE_HOME="$tc64_parse_home/.local/state" XDG_CACHE_HOME="$tc64_parse_home/.cache" AHR_FRAMEWORK_ROOT="$tc64_parse_home/.config/artix-hypr-remix" AHR_LIB_PATH="$tc64_parse_home/.config/artix-hypr-remix/bin/ahr-lib.sh" bash "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc64_invalid_exit=$?
+  tc64_after_tx="$(find "$tc64_parse_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  if (( tc64_invalid_exit != 0 )) && grep -q "Invalid $tc64_hook value: expected exactly '1' when set" <<<"$tc64_invalid_output" && [[ "$tc64_before_tx" == "$tc64_after_tx" ]]; then pass "$tc64_hook rejects invalid value before operation"; else fail "$tc64_hook invalid value was not rejected safely"; fi
+done
+
+# A. SIGKILL after recovery has restored transaction archives must leave an
+# authoritative checkpoint. A sentinel added after that checkpoint proves the
+# fresh process did not replay archive restoration (which would delete it).
+tc64_recover_home="$tmp_root/tc64_recover"
+tc64_recover_repo="$(create_current_tree_repo "$tmp_root/tc64_recover_repo" "0.2.0")"
+setup_installed_framework "$tc64_recover_home" "file://$tc64_recover_repo"
+tc64_recover_before="$(tc61_snapshot "$tc64_recover_home/.config/artix-hypr-remix")"
+tc64_recover_apply_log="$tmp_root/tc64-recover-apply.log"
+tc63_launch_paused AHR_TEST_PAUSE_AFTER_ACTIVATION "$tc64_recover_home" "$tc64_recover_apply_log"
+tc64_recover_apply_pid="$TC63_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: after activation, before namespace installation' "$tc64_recover_apply_log" "$tc64_recover_apply_pid"; then pass "recovery SIGKILL fixture reaches active transaction"; else fail "recovery SIGKILL fixture did not reach active transaction"; fi
+kill -KILL "$tc64_recover_apply_pid" 2>/dev/null
+wait "$tc64_recover_apply_pid" 2>/dev/null || true
+tc64_recover_state="$(tc64_state_for_action "$tc64_recover_home" apply)"
+tc64_recover_log="$tmp_root/tc64-recover.log"
+tc64_launch_pause AHR_TEST_PAUSE_RECOVER_AFTER_RESTORE "$tc64_recover_home" "$tc64_recover_log" --recover
+tc64_recover_pid="$TC64_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: recovery restore complete, before finalization' "$tc64_recover_log" "$tc64_recover_pid" && grep -qx 'phase=recovery_restore_completed' "$tc64_recover_state" && grep -qx 'completion=in_progress' "$tc64_recover_state" && grep -qx 'restore_completed=true' "$tc64_recover_state"; then pass "recovery writes durable restore-complete checkpoint"; else fail "recovery restore-complete checkpoint was not durable"; fi
+printf 'keep-after-recovery-checkpoint\n' > "$tc64_recover_home/.config/artix-hypr-remix/bin/tc64-recovery-sentinel"
+kill -KILL "$tc64_recover_pid" 2>/dev/null
+wait "$tc64_recover_pid" 2>/dev/null || true
+tc64_recover_resume_exit=0; tc64_recover_resume_output="$(run_ahr "$tc64_recover_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc64_recover_resume_exit=$?
+if (( tc64_recover_resume_exit == 0 )) && grep -qx 'phase=recovered' "$tc64_recover_state" && grep -qx 'completion=recovered' "$tc64_recover_state" && [[ -f "$tc64_recover_home/.config/artix-hypr-remix/bin/tc64-recovery-sentinel" && "$(tc61_snapshot "$tc64_recover_home/.config/artix-hypr-remix")" != "$tc64_recover_before" ]] && grep -q 'finalizing only' <<<"$tc64_recover_resume_output" && ! grep -q 'Restoring from transaction archives' <<<"$tc64_recover_resume_output"; then pass "fresh recovery finalizes checkpoint without replaying archives"; else fail "fresh recovery replayed archives or did not finalize" "$tc64_recover_resume_output"; fi
+
+# B. Rollback has the same checkpoint, with an immutable link to the failed
+# apply. The resumed rollback must resolve both records without restoring again.
+tc64_rollback_home="$tmp_root/tc64_rollback"
+tc64_rollback_repo="$(create_current_tree_repo "$tmp_root/tc64_rollback_repo" "0.2.0")"
+setup_installed_framework "$tc64_rollback_home" "file://$tc64_rollback_repo"
+tc64_failed_apply_exit=0; AHR_TEST_FAIL_NAMESPACE_INSTALL=1 run_ahr "$tc64_rollback_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc64_failed_apply_exit=$?
+tc64_rollback_apply_state="$(tc64_state_for_action "$tc64_rollback_home" apply)"
+tc64_rollback_log="$tmp_root/tc64-rollback.log"
+tc64_launch_pause AHR_TEST_PAUSE_ROLLBACK_AFTER_RESTORE "$tc64_rollback_home" "$tc64_rollback_log" --rollback
+tc64_rollback_pid="$TC64_PAUSE_PID"
+tc64_rollback_state=""
+for tc64_attempt in $(seq 1 200); do
+  tc64_rollback_state="$(tc64_state_for_action "$tc64_rollback_home" rollback 2>/dev/null || true)"
+  [[ -n "$tc64_rollback_state" ]] && break
+  sleep 0.05
+done
+if (( tc64_failed_apply_exit != 0 )) && tc63_wait_marker 'TEST PAUSE: rollback restore complete, before finalization' "$tc64_rollback_log" "$tc64_rollback_pid" && grep -qx 'phase=rollback_restore_completed' "$tc64_rollback_state" && grep -qx 'completion=in_progress' "$tc64_rollback_state" && grep -qx 'restore_completed=true' "$tc64_rollback_state"; then pass "rollback writes durable restore-complete checkpoint"; else fail "rollback restore-complete checkpoint was not durable"; fi
+printf 'keep-after-rollback-checkpoint\n' > "$tc64_rollback_home/.config/artix-hypr-remix/bin/tc64-rollback-sentinel"
+kill -KILL "$tc64_rollback_pid" 2>/dev/null
+wait "$tc64_rollback_pid" 2>/dev/null || true
+tc64_rollback_resume_exit=0; tc64_rollback_resume_output="$(run_ahr "$tc64_rollback_home" "$UPDATE_FRAMEWORK" --rollback 2>&1)" || tc64_rollback_resume_exit=$?
+if (( tc64_rollback_resume_exit == 0 )) && grep -qx 'phase=rolled_back' "$tc64_rollback_state" && grep -qx 'completion=rolled_back' "$tc64_rollback_state" && grep -qx 'phase=resolved_by_rollback' "$tc64_rollback_apply_state" && grep -qx 'completion=resolved_by_rollback' "$tc64_rollback_apply_state" && [[ -f "$tc64_rollback_home/.config/artix-hypr-remix/bin/tc64-rollback-sentinel" ]] && grep -q 'No archive restoration was replayed' <<<"$tc64_rollback_resume_output"; then pass "fresh rollback finalizes linked transactions without replaying restore"; else fail "fresh rollback replayed restore or missed terminal state" "$tc64_rollback_resume_output"; fi
+
+# C. A corrupted rollback link must fail before filesystem mutation, including
+# any archive replay or unrelated-backup selection.
+tc64_bad_home="$tmp_root/tc64_bad_link"
+tc64_bad_repo="$(create_current_tree_repo "$tmp_root/tc64_bad_repo" "0.2.0")"
+setup_installed_framework "$tc64_bad_home" "file://$tc64_bad_repo"
+AHR_TEST_FAIL_NAMESPACE_INSTALL=1 run_ahr "$tc64_bad_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || true
+tc64_bad_log="$tmp_root/tc64-bad-link.log"
+tc64_launch_pause AHR_TEST_PAUSE_ROLLBACK_AFTER_RESTORE "$tc64_bad_home" "$tc64_bad_log" --rollback
+tc64_bad_pid="$TC64_PAUSE_PID"
+tc64_bad_state=""
+for tc64_attempt in $(seq 1 200); do
+  tc64_bad_state="$(tc64_state_for_action "$tc64_bad_home" rollback 2>/dev/null || true)"
+  [[ -n "$tc64_bad_state" ]] && break
+  sleep 0.05
+done
+tc63_wait_marker 'TEST PAUSE: rollback restore complete, before finalization' "$tc64_bad_log" "$tc64_bad_pid" || true
+printf 'keep-after-malformed-link\n' > "$tc64_bad_home/.config/artix-hypr-remix/bin/tc64-bad-link-sentinel"
+tc64_bad_unrelated_sum="$(tc63_make_unrelated_backup "$tc64_bad_home")"
+sed -i 's/^resolved_apply_txid=.*/resolved_apply_txid=tx-missing-linked-apply/' "$tc64_bad_state"
+kill -KILL "$tc64_bad_pid" 2>/dev/null
+wait "$tc64_bad_pid" 2>/dev/null || true
+tc64_bad_exit=0; tc64_bad_output="$(run_ahr "$tc64_bad_home" "$UPDATE_FRAMEWORK" --rollback 2>&1)" || tc64_bad_exit=$?
+if (( tc64_bad_exit != 0 )) && grep -qx 'phase=rollback_restore_completed' "$tc64_bad_state" && [[ -f "$tc64_bad_home/.config/artix-hypr-remix/bin/tc64-bad-link-sentinel" && "$(sha256sum "$tc64_bad_home/.local/state/artix-hypr-remix/framework-backups/unrelated-valid/manifest.txt" | awk '{print $1}')" == "$tc64_bad_unrelated_sum" ]] && grep -q 'Rollback restore-complete checkpoint validation failed' <<<"$tc64_bad_output"; then pass "malformed rollback link is rejected before any replay or unrelated backup mutation"; else fail "malformed rollback link was not rejected safely" "$tc64_bad_output"; fi
+
+# D. Pre-checkpoint transaction records remain compatible with ordinary
+# recovery. No restore_completed field is required for those legacy states.
+tc64_legacy_home="$tmp_root/tc64_legacy"
+tc64_legacy_repo="$(create_current_tree_repo "$tmp_root/tc64_legacy_repo" "0.2.0")"
+setup_installed_framework "$tc64_legacy_home" "file://$tc64_legacy_repo"
+tc64_legacy_tx="$tc64_legacy_home/.local/state/artix-hypr-remix/framework-transactions/tx-legacy-restore"
+mkdir -p "$tc64_legacy_tx"
+printf 'format_version=1\ntxid=tx-legacy-restore\naction=apply\npid=1\ntarget_version=0.2.0\nstaging_commit=legacy\nbackup_dir=%s\nphase=activation_in_progress\ncompletion=in_progress\n' "$tc64_legacy_home/.local/state/artix-hypr-remix/framework-backups/legacy" > "$tc64_legacy_tx/state"
+tc64_legacy_exit=0; tc64_legacy_output="$(run_ahr "$tc64_legacy_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc64_legacy_exit=$?
+if (( tc64_legacy_exit == 0 )) && grep -qx 'phase=recovered' "$tc64_legacy_tx/state" && grep -qx 'completion=recovered' "$tc64_legacy_tx/state"; then pass "legacy pre-checkpoint transaction recovers normally"; else fail "legacy transaction did not retain normal recovery compatibility" "$tc64_legacy_output"; fi
+
 echo "========================================"
 echo "  Results: $PASS passed, $FAIL failed"
 echo "========================================"

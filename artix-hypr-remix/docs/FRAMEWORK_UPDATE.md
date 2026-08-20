@@ -87,6 +87,8 @@ All destructive operations use an exclusive transaction model with:
 | `migration_failed` | Migration failed (exit 1) |
 | `failed` | Operation failed at this phase |
 | `recovered` | Recovery completed by --recover |
+| `recovery_restore_completed` | Archives restored; only recovery finalization remains |
+| `rollback_restore_completed` | Rollback restore completed; only terminal bookkeeping remains |
 
 ### Controlled Validation Namespace Fault
 
@@ -144,12 +146,13 @@ nonzero and directs the exact-associated `--rollback` resolution path.
 
 ### Controlled Validation Interruption Pauses
 
-For developer validation only, two process-local pause hooks establish
+For developer validation only, process-local pause hooks establish
 deterministic boundaries for an external fixture to send a real operating-
 system signal to the updater. They are not normal user controls and accept
-only the exact value `1`; any other nonempty value, or enabling both together,
-is rejected before an operation begins. They accept no command, path, timeout,
-or signal-selection value and are never persisted.
+only the exact value `1`; any other nonempty value is rejected before an
+operation begins. They accept no command, path, timeout, or signal-selection
+value and are never persisted. The two apply lifecycle pauses cannot be
+enabled together.
 
 - `AHR_TEST_PAUSE_AFTER_BACKUP=1` pauses only after every required component
   snapshot has succeeded and the primary manifest is atomically marked
@@ -159,6 +162,14 @@ or signal-selection value and are never persisted.
   and `framework.json` metadata have been activated. Namespace installation,
   runtime smoke, migrations, and health checking have not begun; the existing
   `activation_in_progress` transaction state remains authoritative.
+- `AHR_TEST_PAUSE_RECOVER_AFTER_RESTORE=1` pauses only after recovery writes
+  `phase=recovery_restore_completed`, `completion=in_progress`, and
+  `restore_completed=true`. It is for SIGKILL validation of finalize-only
+  recovery continuation.
+- `AHR_TEST_PAUSE_ROLLBACK_AFTER_RESTORE=1` pauses only after rollback writes
+  `phase=rollback_restore_completed`, `completion=in_progress`, and
+  `restore_completed=true`. It is for SIGKILL validation of finalize-only
+  rollback continuation.
 
 Each pause emits an exact `TEST PAUSE:` readiness marker and waits indefinitely
 for an external signal. The pause code installs no signal handlers: real
@@ -314,6 +325,24 @@ The `--recover` command:
 - Reinstalls or repairs the namespace where needed
 - Runs a health check after recovery
 
+After archive restoration, recovery first atomically records
+`phase=recovery_restore_completed`, `completion=in_progress`, and
+`restore_completed=true`. A fresh `--recover` that sees this exact checkpoint
+does **not** replay archive restoration or create a new transaction; it
+validates the transaction identity and finalizes it as
+`phase=recovered`, `completion=recovered`.
+
+Rollback uses the corresponding durable
+`phase=rollback_restore_completed`, `completion=in_progress`, and
+`restore_completed=true` checkpoint after all backup content is restored.
+A fresh `--rollback` (or `--recover`) validates the rollback transaction, its
+exact backup association, and any linked failed-apply transaction before
+finalizing only. It records `phase=rolled_back`, `completion=rolled_back` on
+the rollback transaction and `phase=resolved_by_rollback`,
+`completion=resolved_by_rollback` on the linked failed apply. Missing or
+mismatched links fail safely before an archive is replayed or an unrelated
+backup can be selected.
+
 ## Signal Handling
 
 During the activation transaction, traps are installed for:
@@ -337,8 +366,11 @@ as `recovered` before exiting. The restored pre-update framework can contain
 an older updater binary, so successful restoration must not depend on a later
 updater version recognizing an intermediate `interrupted` state safely. If
 archive restoration cannot complete, the transaction remains unresolved for
-explicit recovery. `SIGKILL` remains untrappable and therefore retains its
-in-progress transaction for a fresh updater to recover.
+explicit recovery. `SIGKILL` remains untrappable. If it lands before restore
+completion, a fresh updater performs ordinary recovery from the exact
+transaction archives. If it lands after either restore-complete checkpoint, a
+fresh process performs only the validated terminal finalization and never
+replays the already-restored archives.
 
 ## State File Paths
 
@@ -391,10 +423,12 @@ Failure and recovery keys:
 | `doctor_exit` | Last `ahr-doctor` exit code |
 | `failure_reason` | Short token describing the failure |
 | `recovery_command` | Suggested next command |
+| `restore_completed` | `true` only after the associated archive restoration is durable |
 
 Phases emitted: `created`, `backup_in_progress`, `snapshot_failed`, `activation_in_progress`,
 `activation_complete`, `migration`, `migration_failed`, `health_check`,
-`health_check_failed`, `rollback_in_progress`, `rolled_back`,
+`health_check_failed`, `recovery_restore_completed`, `rollback_in_progress`,
+`rollback_restore_completed`, `rolled_back`,
 `recovery_failed`. A failed required snapshot is retained as
 `phase=snapshot_failed`, `completion=failed`, with an incomplete primary
 manifest (`completed=in_progress`); no framework activation has occurred.
