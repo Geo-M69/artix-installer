@@ -28,122 +28,13 @@ fi
 source_dir="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/bin"
 target_dir="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
 STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
+LIB_PATH="${AHR_LIB_PATH:-$source_dir/ahr-lib.sh}"
+source "$LIB_PATH"
 
 # ── Command and alias inventory ─────────────────────────────────────
 
-declare -a commands=(
-  ahr
-  ahr-toggle
-  ahr-toggle-lib.sh
-  ahr-menu
-  ahr-menu-keybindings
-  ahr-theme
-  ahr-theme-install-omarchy
-  ahr-theme-list
-  ahr-theme-current
-  ahr-theme-set
-  ahr-theme-refresh
-  ahr-theme-bg-next
-  ahr-theme-bg-set
-  ahr-theme-bg-switcher
-  ahr-theme-bg-install
-  ahr-theme-bg-gallery
-  ahr-theme-set-templates
-  ahr-theme-colors-from-alacritty
-  ahr-launch-terminal
-  ahr-launch-apps
-  ahr-launch-browser
-  ahr-launch-files
-  ahr-launch-audio
-  ahr-launch-bluetooth
-  ahr-launch-wifi
-  ahr-default-browser
-  ahr-default-terminal
-  ahr-update
-  ahr-update-available
-  ahr-update-framework
-  ahr-restore-component
-  ahr-repair
-  ahr-status
-  ahr-list-backups
-  ahr-voxtype-model
-  ahr-voxtype-config
-  ahr-toggle-idle
-  ahr-toggle-nightlight
-  ahr-toggle-notification-silencing
-  ahr-toggle-waybar
-  ahr-toggle-waybar-position
-  ahr-restore-nightlight
-  ahr-restore-idle
-  ahr-notification-dismiss
-  ahr-restart-mako
-  ahr-restart-waybar
-  ahr-restart-walker
-  ahr-migrate
-  ahr-system-lock
-  ahr-system-reboot
-  ahr-capture-screenrecording
-  ahr-capture-screenshot
-  ahr-capture-picker
-  ahr-edit-config
-  ahr-system-suspend
-  ahr-system-hibernate
-  ahr-doctor
-  ahr-font
-  ahr-font-list
-  ahr-font-set
-)
-
-declare -a aliases=(
-  "omarchy:ahr"
-  "omarchy-menu:ahr-menu"
-  "omarchy-menu-keybindings:ahr-menu-keybindings"
-  "omarchy-theme:ahr-theme"
-  "omarchy-theme-list:ahr-theme-list"
-  "omarchy-theme-current:ahr-theme-current"
-  "omarchy-theme-set:ahr-theme-set"
-  "omarchy-theme-refresh:ahr-theme-refresh"
-  "omarchy-theme-bg-next:ahr-theme-bg-next"
-  "omarchy-theme-bg-set:ahr-theme-bg-set"
-  "omarchy-theme-set-templates:ahr-theme-set-templates"
-  "omarchy-theme-colors-from-alacritty:ahr-theme-colors-from-alacritty"
-  "omarchy-launch-terminal:ahr-launch-terminal"
-  "omarchy-launch-walker:ahr-launch-apps"
-  "omarchy-launch-browser:ahr-launch-browser"
-  "omarchy-launch-nautilus:ahr-launch-files"
-  "omarchy-launch-audio:ahr-launch-audio"
-  "omarchy-launch-bluetooth:ahr-launch-bluetooth"
-  "omarchy-launch-wifi:ahr-launch-wifi"
-  "omarchy-system-lock:ahr-system-lock"
-  "omarchy-system-reboot:ahr-system-reboot"
-  "omarchy-capture-screenrecording:ahr-capture-screenrecording"
-  "omarchy-capture-screenshot:ahr-capture-screenshot"
-  "omarchy-default-browser:ahr-default-browser"
-  "omarchy-default-terminal:ahr-default-terminal"
-  "omarchy-update:ahr-update"
-  "omarchy-update-available:ahr-update-available"
-  "omarchy-repair:ahr-repair"
-  "omarchy-status:ahr-status"
-  "omarchy-list-backups:ahr-list-backups"
-  "omarchy-voxtype-model:ahr-voxtype-model"
-  "omarchy-voxtype-config:ahr-voxtype-config"
-  "omarchy-toggle-idle:ahr-toggle-idle"
-  "omarchy-toggle-nightlight:ahr-toggle-nightlight"
-  "omarchy-toggle-notification-silencing:ahr-toggle-notification-silencing"
-  "omarchy-toggle-waybar:ahr-toggle-waybar"
-  "omarchy-restore-nightlight:ahr-restore-nightlight"
-  "omarchy-notification-dismiss:ahr-notification-dismiss"
-  "omarchy-restart-mako:ahr-restart-mako"
-  "omarchy-restart-waybar:ahr-restart-waybar"
-  "omarchy-restart-walker:ahr-restart-walker"
-  "omarchy-migrate:ahr-migrate"
-  "omarchy-edit-config:ahr-edit-config"
-  "omarchy-system-suspend:ahr-system-suspend"
-  "omarchy-system-hibernate:ahr-system-hibernate"
-  "omarchy-font:ahr-font"
-  "omarchy-font-list:ahr-font-list"
-  "omarchy-font-set:ahr-font-set"
-)
+declare -a commands=("${AHR_NAMESPACE_COMMANDS[@]}")
+declare -a aliases=("${AHR_NAMESPACE_ALIASES[@]}")
 
 # ── Output helpers ─────────────────────────────────────────────────
 

@@ -605,12 +605,12 @@ new_version=0.2.0
 EOF
 
 tc16_exit=0
-run_restore_component "$tc16_home" chromium-theme --from-last-update >/dev/null 2>&1 || tc16_exit=$?
+run_restore_component "$tc16_home" chromium-theme --backup test-bk >/dev/null 2>&1 || tc16_exit=$?
 (( tc16_exit != 0 )) && pass "refuses structured-file component without --apply" || fail "accepted structured-file without --apply"
 
 # With --apply, should succeed
 tc16_apply_exit=0
-run_restore_component "$tc16_home" theme-state --from-last-update --apply >/dev/null 2>&1 || tc16_apply_exit=$?
+run_restore_component "$tc16_home" theme-state --backup test-bk --apply >/dev/null 2>&1 || tc16_apply_exit=$?
 (( tc16_apply_exit == 0 )) && pass "accepts unsafe component with --apply" || fail "rejected with --apply"
 
 echo ""
@@ -1300,10 +1300,9 @@ tc34_backup="$tc34_home/.local/state/artix-hypr-remix/framework-backups/test-ns-
 mkdir -p "$tc34_backup"
 printf "manifest_version=1\ncompleted=true\nprevious_version=0.1.0\nnew_version=0.2.0\n" > "$tc34_backup/manifest.txt"
 # Create namespace manifest with correct targets
-printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
-  "$tc34_fw" "$tc34_home/.local/bin" "$tc34_fw" > "$tc34_backup/derived-namespace-links"
+printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc34_fw" > "$tc34_backup/derived-namespace-links"
 tc34_exit=0
-run_restore_component "$tc34_home" namespace-links --from-last-update --apply 2>/dev/null || tc34_exit=$?
+run_restore_component "$tc34_home" namespace-links --backup test-ns-restore --apply 2>/dev/null || tc34_exit=$?
 (( tc34_exit == 0 )) && pass "namespace restore from manifest succeeds" || fail "namespace restore failed (exit $tc34_exit)"
 tc34_target="$(readlink "$tc34_home/.local/bin/ahr-doctor" 2>/dev/null || echo "MISSING")"
 [[ "$tc34_target" == "$tc34_fw/bin/ahr-doctor" ]] && pass "link restored to manifest target" || fail "link target wrong: $tc34_target"
@@ -1323,10 +1322,9 @@ tc35_backup="$tc35_home/.local/state/artix-hypr-remix/framework-backups/test-ns-
 mkdir -p "$tc35_backup"
 printf "manifest_version=1\ncompleted=true\nprevious_version=0.1.0\nnew_version=0.2.0\n" > "$tc35_backup/manifest.txt"
 tc35_fw="$tc35_home/.config/artix-hypr-remix"
-printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
-  "$tc35_fw" "$tc35_home/.local/bin" "$tc35_fw" > "$tc35_backup/derived-namespace-links"
+printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc35_fw" > "$tc35_backup/derived-namespace-links"
 tc35_exit=0
-tc35_output="$(run_restore_component "$tc35_home" namespace-links --from-last-update 2>&1 || true)"
+tc35_output="$(run_restore_component "$tc35_home" namespace-links --backup test-ns-dry 2>&1 || true)"
 tc35_after="$(readlink "$tc35_home/.local/bin/ahr-doctor" 2>/dev/null || echo "MISSING")"
 [[ "$tc35_before" == "$tc35_after" ]] && pass "dry-run does not modify links" || fail "dry-run modified links"
 echo "$tc35_output" | grep -q 'DRY RUN' && pass "dry-run reports DRY RUN" || fail "no DRY RUN output"
@@ -1347,8 +1345,7 @@ tc36_backup="$tc36_home/.local/state/artix-hypr-remix/framework-backups/test-ns-
 mkdir -p "$tc36_backup"
 printf "manifest_version=1\ncompleted=true\nprevious_version=0.1.0\nnew_version=0.2.0\n" > "$tc36_backup/manifest.txt"
 tc36_fw="$tc36_home/.config/artix-hypr-remix"
-printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
-  "$tc36_fw" "$tc36_home/.local/bin" "$tc36_fw" > "$tc36_backup/derived-namespace-links"
+printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc36_fw" > "$tc36_backup/derived-namespace-links"
 tc36_exit=0
 run_restore_component "$tc36_home" namespace-links --from-last-update --apply 2>/dev/null || tc36_exit=$?
 (( tc36_exit != 0 )) && pass "refuses restore with unrelated file conflict" || fail "restore succeeded despite conflict"
@@ -1511,12 +1508,11 @@ tc46_backup="$tc46_home/.local/state/artix-hypr-remix/framework-backups/test-ns-
 mkdir -p "$tc46_backup"
 printf "manifest_version=1\ncompleted=true\nprevious_version=0.1.0\nnew_version=0.2.0\n" > "$tc46_backup/manifest.txt"
 tc46_fw="$tc46_home/.config/artix-hypr-remix"
-printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
-  "$tc46_fw" "$tc46_home/.local/bin" "$tc46_fw" > "$tc46_backup/derived-namespace-links"
+printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc46_fw" > "$tc46_backup/derived-namespace-links"
 # Remove a link
 rm -f "$tc46_home/.local/bin/ahr-doctor"
 tc46_exit=0
-run_restore_component "$tc46_home" namespace-links --from-last-update --apply 2>/dev/null || tc46_exit=$?
+run_restore_component "$tc46_home" namespace-links --backup test-ns-removed --apply 2>/dev/null || tc46_exit=$?
 (( tc46_exit == 0 )) && pass "restores removed link" || fail "restore failed (exit $tc46_exit)"
 [[ -L "$tc46_home/.local/bin/ahr-doctor" ]] && pass "link recreated after restore" || fail "link not recreated"
 
@@ -1534,12 +1530,11 @@ tc47_backup="$tc47_home/.local/state/artix-hypr-remix/framework-backups/test-ns-
 mkdir -p "$tc47_backup"
 printf "manifest_version=1\ncompleted=true\nprevious_version=0.1.0\nnew_version=0.2.0\n" > "$tc47_backup/manifest.txt"
 tc47_fw="$tc47_home/.config/artix-hypr-remix"
-printf "format_version=1\ncreated_at=2026-08-02T00:00:00Z\nframework_root=%s\nlocal_bin=%s\nlink_name=ahr-doctor\nlink_target=%s/bin/ahr-doctor\nownership=command\nalias_type=false\nexisted=true\n---\n" \
-  "$tc47_fw" "$tc47_home/.local/bin" "$tc47_fw" > "$tc47_backup/derived-namespace-links"
+printf 'ahr-doctor\t%s/bin/ahr-doctor\n' "$tc47_fw" > "$tc47_backup/derived-namespace-links"
 # Add a link that wasn't in the snapshot
 ln -s "/usr/bin/true" "$tc47_home/.local/bin/custom-tool"
 tc47_exit=0
-run_restore_component "$tc47_home" namespace-links --from-last-update --apply 2>/dev/null || tc47_exit=$?
+run_restore_component "$tc47_home" namespace-links --backup test-ns-added --apply 2>/dev/null || tc47_exit=$?
 (( tc47_exit == 0 )) && pass "restore succeeds with extra link present" || fail "restore failed (exit $tc47_exit)"
 tc47_custom="$(readlink "$tc47_home/.local/bin/custom-tool" 2>/dev/null || echo "MISSING")"
 [[ "$tc47_custom" == "/usr/bin/true" ]] && pass "unrelated extra link preserved" || fail "extra link modified"
@@ -1878,8 +1873,1156 @@ for tc51_case in active-theme theme-state background-state; do
   (( tc51_missing_rb_exit != 0 )) && pass "rollback rejects incomplete $tc51_case backup" || fail "rollback accepted incomplete $tc51_case backup"
 done
 
+# The focused association cases below use only deterministic fixture IDs and
+# exact paths; they never rely on backup ordering or timestamp selection.
+echo ""
+echo "=== TC52: Primary manifest association validation ==="
+
+manifest_exact_field() {
+  local manifest="$1" key="$2"
+  awk -v key="$key" 'index($0, key "=") == 1 { count++; value=substr($0, length(key) + 2) } END { if (count == 1) print value; else exit 1 }' "$manifest"
+}
+
+transaction_exact_field() {
+  local state_file="$1" key="$2"
+  awk -v key="$key" 'index($0, key "=") == 1 { count++; value=substr($0, length(key) + 2) } END { if (count == 1) print value; else exit 1 }' "$state_file"
+}
+
+tc52_home="$tmp_root/tc52"
+tc52_repo="$(create_test_repo "$tmp_root/tc52_repo" "0.2.0")"
+setup_installed_framework "$tc52_home" "file://$tc52_repo"
+tc52_apply=0
+run_ahr "$tc52_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc52_apply=$?
+(( tc52_apply == 0 )) && pass "association fixture apply succeeds" || fail "association fixture apply failed (exit $tc52_apply)"
+tc52_backup="$(find "$tc52_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+tc52_manifest="$tc52_backup/manifest.txt"
+tc52_backup_id="$(manifest_exact_field "$tc52_manifest" backup_id 2>/dev/null || true)"
+tc52_transaction_id="$(manifest_exact_field "$tc52_manifest" transaction_id 2>/dev/null || true)"
+[[ -n "$tc52_backup_id" ]] && pass "successful backup has exactly one backup_id" || fail "successful backup backup_id is missing or duplicated"
+[[ -n "$tc52_transaction_id" ]] && pass "successful backup has exactly one transaction_id" || fail "successful backup transaction_id is missing or duplicated"
+[[ "$tc52_backup_id" == "$(basename "$tc52_backup")" ]] && pass "manifest backup_id matches backup directory" || fail "manifest backup_id does not match backup directory"
+[[ -d "$tc52_home/.local/state/artix-hypr-remix/framework-transactions/$tc52_transaction_id" ]] && pass "manifest transaction_id matches transaction directory" || fail "manifest transaction_id does not match transaction directory"
+tc52_txdir="$tc52_home/.local/state/artix-hypr-remix/framework-transactions/$tc52_transaction_id"
+tc52_state="$tc52_txdir/state"
+tc52_state_backup_id="$(transaction_exact_field "$tc52_state" backup_id 2>/dev/null || true)"
+tc52_state_backup_path="$(transaction_exact_field "$tc52_state" backup_path 2>/dev/null || true)"
+tc52_state_transaction_id="$(transaction_exact_field "$tc52_state" transaction_id 2>/dev/null || true)"
+[[ "$tc52_state_backup_id" == "$tc52_backup_id" ]] && pass "terminal transaction retains exact backup_id" || fail "terminal transaction backup_id differs from manifest"
+[[ "$tc52_state_backup_path" == "$tc52_backup" ]] && pass "terminal transaction retains exact backup_path" || fail "terminal transaction backup_path differs from backup"
+[[ "$tc52_state_transaction_id" == "$tc52_transaction_id" ]] && pass "terminal transaction retains exact transaction_id" || fail "terminal transaction ID differs from manifest"
+[[ "$(transaction_exact_field "$tc52_state" completion 2>/dev/null || true)" == "committed" && "$(transaction_exact_field "$tc52_state" phase 2>/dev/null || true)" == "complete" ]] && pass "terminal transaction is committed with association intact" || fail "terminal transaction was not committed with complete phase"
+
+# Re-finalizing an already successful fixture may update only terminal timing;
+# the immutable association must remain byte-for-byte equivalent.
+tc52_refinalize_exit=0
+HOME="$tc52_home" XDG_STATE_HOME="$tc52_home/.local/state" XDG_CACHE_HOME="$tc52_home/.cache" \
+  AHR_FRAMEWORK_ROOT="$tc52_home/.config/artix-hypr-remix" \
+  AHR_LIB_PATH="$tc52_home/.config/artix-hypr-remix/bin/ahr-lib.sh" \
+  bash -s -- "$UPDATE_FRAMEWORK" "$tc52_txdir" <<'EOF' >/dev/null 2>&1 || tc52_refinalize_exit=$?
+update_framework="$1"
+txdir="$2"
+set --
+source <(sed -n '1,/^# ── JSON helpers/p' "$update_framework")
+finalize_transaction "$txdir" committed complete
+EOF
+(( tc52_refinalize_exit == 0 )) && pass "terminal finalization accepts matching manifest association" || fail "terminal finalization rejected matching manifest association"
+[[ "$(transaction_exact_field "$tc52_state" backup_id 2>/dev/null || true)" == "$tc52_state_backup_id" && "$(transaction_exact_field "$tc52_state" backup_path 2>/dev/null || true)" == "$tc52_state_backup_path" && "$(transaction_exact_field "$tc52_state" transaction_id 2>/dev/null || true)" == "$tc52_state_transaction_id" ]] && pass "terminal finalization cannot delete or change association" || fail "terminal finalization changed association"
+
+# The reader must use the recorded association rather than a newer or
+# unrelated backup directory. No timestamp or directory ordering is involved.
+mkdir -p "$tc52_home/.local/state/artix-hypr-remix/framework-backups/unrelated-backup"
+printf 'manifest_version=1\nbackup_id=unrelated-backup\ntransaction_id=tx-unrelated\n' > "$tc52_home/.local/state/artix-hypr-remix/framework-backups/unrelated-backup/manifest.txt"
+[[ "$(transaction_exact_field "$tc52_state" backup_id 2>/dev/null || true)" == "$tc52_backup_id" && "$(transaction_exact_field "$tc52_state" transaction_id 2>/dev/null || true)" == "$tc52_transaction_id" ]] && pass "unrelated backup does not alter terminal transaction readback" || fail "unrelated backup changed terminal transaction readback"
+
+# Validation evidence must capture the exact two artifacts before a caller's
+# restoration handler removes Batch-created state.
+tc52_evidence="$tmp_root/tc52-evidence"
+tc52_evidence_exit=0
+tc52_evidence_output="$(bash "$REPO_ROOT/scripts/preserve-framework-transaction-evidence.sh" \
+  --state-root "$tc52_home/.local/state/artix-hypr-remix" \
+  --transaction-id "$tc52_transaction_id" \
+  --backup-id "$tc52_backup_id" \
+  --apply-log "$tc52_home/.local/state/artix-hypr-remix/framework-update.log" \
+  --output "$tc52_evidence" 2>&1)" || tc52_evidence_exit=$?
+(( tc52_evidence_exit == 0 )) && pass "validation helper preserves exact transaction evidence" || fail "validation helper failed to preserve transaction evidence" "$tc52_evidence_output"
+cmp -s "$tc52_state" "$tc52_evidence/transaction.state" && cmp -s "$tc52_manifest" "$tc52_evidence/manifest.txt" && grep -qx "transaction_id=$tc52_transaction_id" "$tc52_evidence/identity.txt" && grep -qx "backup_id=$tc52_backup_id" "$tc52_evidence/identity.txt" && pass "preserved evidence matches terminal transaction and manifest" || fail "preserved evidence did not match exact association"
+
+# The structured writer rejects duplicate and malformed association fields;
+# neither condition can be hidden by a terminal serialization pass.
+tc52_duplicate_tx="$tmp_root/tc52-duplicate-tx"
+cp -a "$tc52_txdir" "$tc52_duplicate_tx"
+printf 'backup_id=%s\n' "$tc52_backup_id" >> "$tc52_duplicate_tx/state"
+tc52_duplicate_exit=0
+HOME="$tc52_home" XDG_STATE_HOME="$tc52_home/.local/state" XDG_CACHE_HOME="$tc52_home/.cache" \
+  AHR_FRAMEWORK_ROOT="$tc52_home/.config/artix-hypr-remix" \
+  AHR_LIB_PATH="$tc52_home/.config/artix-hypr-remix/bin/ahr-lib.sh" \
+  bash -s -- "$UPDATE_FRAMEWORK" "$tc52_duplicate_tx" <<'EOF' >/dev/null 2>&1 || tc52_duplicate_exit=$?
+update_framework="$1"
+txdir="$2"
+set --
+source <(sed -n '1,/^# ── JSON helpers/p' "$update_framework")
+write_transaction_state "$txdir" "phase=complete"
+EOF
+(( tc52_duplicate_exit != 0 )) && pass "duplicate transaction backup_id is rejected" || fail "duplicate transaction backup_id was accepted"
+tc52_malformed_tx="$tmp_root/tc52-malformed-tx"
+cp -a "$tc52_txdir" "$tc52_malformed_tx"
+sed -i 's/^backup_id=.*/backup_id=bad\/path/' "$tc52_malformed_tx/state"
+tc52_malformed_exit=0
+HOME="$tc52_home" XDG_STATE_HOME="$tc52_home/.local/state" XDG_CACHE_HOME="$tc52_home/.cache" \
+  AHR_FRAMEWORK_ROOT="$tc52_home/.config/artix-hypr-remix" \
+  AHR_LIB_PATH="$tc52_home/.config/artix-hypr-remix/bin/ahr-lib.sh" \
+  bash -s -- "$UPDATE_FRAMEWORK" "$tc52_malformed_tx" <<'EOF' >/dev/null 2>&1 || tc52_malformed_exit=$?
+update_framework="$1"
+txdir="$2"
+set --
+source <(sed -n '1,/^# ── JSON helpers/p' "$update_framework")
+write_transaction_state "$txdir" "phase=complete"
+EOF
+(( tc52_malformed_exit != 0 )) && pass "malformed transaction backup_id is rejected" || fail "malformed transaction backup_id was accepted"
+
+# Staged validation happens before backup/transaction creation. A failure at
+# that point must not fabricate an association record.
+tc52_prebackup_home="$tmp_root/tc52-prebackup"
+tc52_prebackup_repo="$(create_test_repo "$tmp_root/tc52-prebackup-repo" "0.2.0")"
+rm -f "$tc52_prebackup_repo/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-doctor"
+commit_test_repo "$tc52_prebackup_repo" "missing staged doctor"
+setup_installed_framework "$tc52_prebackup_home" "file://$tc52_prebackup_repo"
+tc52_prebackup_exit=0
+run_ahr "$tc52_prebackup_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc52_prebackup_exit=$?
+(( tc52_prebackup_exit != 0 )) && pass "pre-backup staged validation fails" || fail "pre-backup staged validation unexpectedly succeeded"
+if [[ -z "$(find "$tc52_prebackup_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null)" ]] && \
+   [[ -z "$(find "$tc52_prebackup_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null)" ]]; then
+  pass "failure before backup creates no fabricated association"
+else
+  fail "failure before backup created transaction or backup state"
+fi
+
+tc52_parser_dir="$tmp_root/tc52_parser"
+mkdir -p "$tc52_parser_dir"
+cat > "$tc52_parser_dir/good" <<'EOF'
+manifest_version=1
+backup_id=backup-A
+transaction_id=tx-A
+EOF
+cat > "$tc52_parser_dir/legacy" <<'EOF'
+manifest_version=1
+EOF
+for tc52_case in duplicate_backup duplicate_transaction malformed_backup malformed_transaction directory_mismatch malformed_key; do
+  cp "$tc52_parser_dir/good" "$tc52_parser_dir/$tc52_case"
+done
+printf 'backup_id=backup-A\n' >> "$tc52_parser_dir/duplicate_backup"
+printf 'transaction_id=tx-A\n' >> "$tc52_parser_dir/duplicate_transaction"
+sed -i 's/^backup_id=.*/backup_id=bad\/path/' "$tc52_parser_dir/malformed_backup"
+sed -i 's/^transaction_id=.*/transaction_id=not-a-transaction/' "$tc52_parser_dir/malformed_transaction"
+sed -i 's/^backup_id=.*/backup_id=backup-B/' "$tc52_parser_dir/directory_mismatch"
+sed -i 's/^backup_id=.*/backup_id broken/' "$tc52_parser_dir/malformed_key"
+source "$FRAMEWORK_BIN/ahr-lib.sh"
+ahr_parse_primary_manifest "$tc52_parser_dir/good" backup-A true && pass "strict parser accepts exact new-format association" || fail "strict parser rejected valid association"
+ahr_parse_primary_manifest "$tc52_parser_dir/legacy" backup-A false && pass "legacy exact backup selection is accepted" || fail "legacy exact backup selection rejected"
+ahr_parse_primary_manifest "$tc52_parser_dir/legacy" backup-A true && fail "legacy automatic association accepted" || pass "legacy automatic association rejected"
+for tc52_case in duplicate_backup duplicate_transaction malformed_backup malformed_transaction directory_mismatch malformed_key; do
+  ahr_parse_primary_manifest "$tc52_parser_dir/$tc52_case" backup-A true && fail "$tc52_case accepted" || pass "$tc52_case rejected"
+done
+
+# Existing failure fixtures cover each post-backup terminal path.  Their
+# manifests and transaction states must retain the same two association IDs.
+for tc52_failure in migration:"$tx_state_file" health:"$tc19_state" namespace:"$tc21_tx"; do
+  tc52_label="${tc52_failure%%:*}"
+  tc52_state="${tc52_failure#*:}"
+  tc52_dir="$(dirname "$tc52_state")"
+  tc52_backup_path="$(awk -F= '$1 == "backup_dir" { print substr($0, 12); exit }' "$tc52_state")"
+  tc52_failure_manifest="$tc52_backup_path/manifest.txt"
+  tc52_manifest_backup="$(manifest_exact_field "$tc52_failure_manifest" backup_id 2>/dev/null || true)"
+  tc52_manifest_tx="$(manifest_exact_field "$tc52_failure_manifest" transaction_id 2>/dev/null || true)"
+  [[ "$tc52_manifest_backup" == "$(basename "$tc52_backup_path")" && "$tc52_manifest_tx" == "$(basename "$tc52_dir")" ]] && pass "$tc52_label failure preserves manifest association IDs" || fail "$tc52_label failure changed manifest association IDs"
+  [[ "$(transaction_exact_field "$tc52_state" backup_id 2>/dev/null || true)" == "$tc52_manifest_backup" && "$(transaction_exact_field "$tc52_state" transaction_id 2>/dev/null || true)" == "$tc52_manifest_tx" && "$(transaction_exact_field "$tc52_state" backup_path 2>/dev/null || true)" == "$tc52_backup_path" ]] && pass "$tc52_label failure preserves transaction association IDs and path" || fail "$tc52_label failure changed transaction association IDs or path"
+done
+
+echo ""
+echo "=== TC53: Component status and required-unsupported behavior ==="
+
+tc53_helper_backup="$tmp_root/tc53_helper_backup"
+mkdir -p "$tc53_helper_backup"
+tc53_helper_exit=0
+bash -s -- "$FRAMEWORK_BIN/ahr-backup-helper.sh" "$tc53_helper_backup" <<'EOF' || tc53_helper_exit=$?
+set -euo pipefail
+source "$1"
+ahr_snapshot_component required-structured /does/not/matter "$2" structured-file true framework unsupported
+EOF
+(( tc53_helper_exit != 0 )) && pass "required unsupported component fails snapshot" || fail "required unsupported component snapshot succeeded"
+[[ "$(manifest_component_field "$tc53_helper_backup/component-manifest.txt" required-structured snapshot_status)" == "unsupported" ]] && pass "required unsupported component is recorded as unsupported" || fail "required unsupported component status wrong"
+
+tc53_make_backup() {
+  local home="$1" id="$2" status="$3"
+  local backup="$home/.local/state/artix-hypr-remix/framework-backups/$id"
+  mkdir -p "$home/.config/artix-hypr-remix/current/theme" "$backup/derived-theme-state/theme"
+  printf 'live\n' > "$home/.config/artix-hypr-remix/current/theme/marker"
+  printf 'saved\n' > "$backup/derived-theme-state/theme/marker"
+  printf 'manifest_version=1\ncompleted=true\nbackup_id=%s\ntransaction_id=tx-%s\n' "$id" "$id" > "$backup/manifest.txt"
+  if [[ "$status" == "present" ]]; then
+    printf 'component=theme-state\nsnapshot_path=%s/snapshots/theme-state\nsnapshot_status=%s\n---\n' "$backup" "$status" > "$backup/component-manifest.txt"
+  else
+    printf 'component=theme-state\nsnapshot_path=\nsnapshot_status=%s\n---\n' "$status" > "$backup/component-manifest.txt"
+  fi
+}
+
+tc53_present_home="$tmp_root/tc53_present"
+tc53_make_backup "$tc53_present_home" component-present present
+tc53_present_exit=0
+run_restore_component "$tc53_present_home" theme-state --backup component-present --apply >/dev/null 2>&1 || tc53_present_exit=$?
+if (( tc53_present_exit == 0 )) && [[ -f "$tc53_present_home/.config/artix-hypr-remix/current/theme/marker" ]] && [[ "$(cat "$tc53_present_home/.config/artix-hypr-remix/current/theme/marker")" == "saved" ]]; then
+  pass "present component follows normal restore path"
+else
+  fail "present component restore failed"
+fi
+
+for tc53_status in absent unsupported failed unknown; do
+  tc53_home="$tmp_root/tc53_$tc53_status"
+  tc53_id="component-$tc53_status"
+  tc53_make_backup "$tc53_home" "$tc53_id" "$tc53_status"
+  tc53_output="$(run_restore_component "$tc53_home" theme-state --backup "$tc53_id" --apply 2>&1 || true)"
+  [[ "$(cat "$tc53_home/.config/artix-hypr-remix/current/theme/marker")" == "live" ]] && pass "$tc53_status component is rejected before mutation" || fail "$tc53_status component mutated target"
+  case "$tc53_status" in
+    absent) grep -q 'was absent' <<<"$tc53_output" ;;
+    unsupported) grep -q 'automatic restoration is unsupported' <<<"$tc53_output" ;;
+    failed) grep -q 'no valid restorable snapshot' <<<"$tc53_output" ;;
+    unknown) grep -q 'invalid component snapshot status' <<<"$tc53_output" ;;
+  esac
+  [[ $? == 0 ]] && pass "$tc53_status component reports distinct status" || fail "$tc53_status component status message missing"
+done
+
+echo ""
+echo "=== TC54: Rollback uses exact failed-transaction backup ==="
+
+tc54_home="$tmp_root/tc54"
+tc54_repo="$(create_test_repo "$tmp_root/tc54_repo" "0.2.0")"
+setup_installed_framework "$tc54_home" "file://$tc54_repo"
+printf '#!/usr/bin/env bash\nexit 7\n' > "$tc54_repo/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-doctor"
+chmod +x "$tc54_repo/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-doctor"
+(cd "$tc54_repo" && git add -A && git commit -q -m "failing doctor for association" >/dev/null)
+run_ahr "$tc54_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || true
+tc54_backup="$(find "$tc54_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+tc54_manifest="$tc54_backup/manifest.txt"
+tc54_state="$(find "$tc54_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"
+cp "$tc54_manifest" "$tc54_manifest.saved"
+cp "$tc54_state" "$tc54_state.saved"
+
+# Each corrupt association must stop before rollback changes the installed
+# framework.  Restore the isolated fixture record after every assertion.
+sed -i 's/^transaction_id=.*/transaction_id=tx-other/' "$tc54_manifest"
+tc54_bad_tx=0
+run_ahr "$tc54_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc54_bad_tx=$?
+if (( tc54_bad_tx != 0 )) && [[ "$(json_get "$tc54_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then
+  pass "transaction/manifest transaction-ID mismatch rejected before mutation"
+else
+  fail "transaction-ID mismatch was not safely rejected"
+fi
+cp "$tc54_manifest.saved" "$tc54_manifest"
+
+sed -i 's/^backup_id=.*/backup_id=backup-other/' "$tc54_manifest"
+tc54_bad_backup=0
+run_ahr "$tc54_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc54_bad_backup=$?
+if (( tc54_bad_backup != 0 )) && [[ "$(json_get "$tc54_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then
+  pass "backup-directory/manifest-ID mismatch rejected before mutation"
+else
+  fail "backup-directory mismatch was not safely rejected"
+fi
+cp "$tc54_manifest.saved" "$tc54_manifest"
+
+sed -i 's/^backup_id=.*/backup_id=backup-other/' "$tc54_state"
+tc54_bad_state=0
+run_ahr "$tc54_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc54_bad_state=$?
+if (( tc54_bad_state != 0 )) && [[ "$(json_get "$tc54_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then
+  pass "transaction/manifest backup-ID mismatch rejected before mutation"
+else
+  fail "transaction backup-ID mismatch was not safely rejected"
+fi
+cp "$tc54_state.saved" "$tc54_state"
+
+# An unrelated complete backup exists alongside the explicitly associated
+# failed apply.  A test-only stat shim makes it appear newer without changing
+# filesystem timestamps; its invalid payload proves it was not selected.
+tc54_other="$tc54_home/.local/state/artix-hypr-remix/framework-backups/unrelated-backup"
+cp -a "$tc54_backup" "$tc54_other"
+sed -i 's/^backup_id=.*/backup_id=unrelated-backup/; s/^transaction_id=.*/transaction_id=tx-unrelated/' "$tc54_other/manifest.txt"
+rm -rf "$tc54_other/docs"
+tc54_fakebin="$tc54_home/fakebin"
+mkdir -p "$tc54_fakebin"
+cat > "$tc54_fakebin/stat" <<'EOF'
+#!/usr/bin/env bash
+for arg in "$@"; do path="$arg"; done
+case "$path" in
+  *unrelated-backup*) printf '200\n' ;;
+  *) printf '100\n' ;;
+esac
+EOF
+chmod +x "$tc54_fakebin/stat"
+tc54_rollback=0
+PATH="$tc54_fakebin:$PATH" run_ahr "$tc54_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc54_rollback=$?
+if (( tc54_rollback == 0 )) && [[ "$(json_get "$tc54_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" ]]; then
+  pass "exact recorded backup wins over unrelated backup"
+else
+  fail "rollback did not use exact failed-transaction backup"
+fi
+
+echo ""
+echo "=== TC55: Restore selector and target roots ==="
+tc55_home="$tmp_root/tc55"
+tc55_fw="$tc55_home/.config/artix-hypr-remix"
+tc55_backup="$tc55_home/.local/state/artix-hypr-remix/framework-backups/selector-fixture"
+mkdir -p "$tc55_fw/current/theme" "$tc55_home/.local/bin" "$tc55_backup/snapshots" "$tmp_root/tc55-unrelated"
+printf '{"version":"0.2.0"}\n' > "$tc55_fw/framework.json"
+printf 'saved\n' > "$tc55_backup/derived-framework-config"
+printf 'manifest_version=1\ncompleted=true\nbackup_id=selector-fixture\ntransaction_id=tx-selector-fixture\n' > "$tc55_backup/manifest.txt"
+printf 'ahr\t%s/bin/ahr\n' "$tc55_fw" > "$tc55_backup/derived-namespace-links"
+mkdir -p "$tc55_backup/snapshots/theme-state"
+printf 'saved\n' > "$tc55_backup/snapshots/theme-state/value"
+for tc55_component in active-theme waybar-theme mako-theme terminal-theme fontconfig; do printf 'saved\n' > "$tc55_backup/snapshots/$tc55_component"; done
+ln -s target "$tc55_backup/snapshots/background-state"
+printf 'component=theme-state\nsnapshot_path=%s/snapshots/theme-state\nsnapshot_status=present\n---\ncomponent=active-theme\nsnapshot_path=%s/snapshots/active-theme\nsnapshot_status=present\n---\ncomponent=background-state\nsnapshot_path=%s/snapshots/background-state\nsnapshot_status=present\n---\ncomponent=waybar-theme\nsnapshot_path=%s/snapshots/waybar-theme\nsnapshot_status=present\n---\ncomponent=mako-theme\nsnapshot_path=%s/snapshots/mako-theme\nsnapshot_status=present\n---\ncomponent=terminal-theme\nsnapshot_path=%s/snapshots/terminal-theme\nsnapshot_status=present\n---\ncomponent=fontconfig\nsnapshot_path=%s/snapshots/fontconfig\nsnapshot_status=present\n---\ncomponent=foot-theme\nsnapshot_path=\nsnapshot_status=absent\n---\ncomponent=chromium-theme\nsnapshot_path=\nsnapshot_status=unsupported\n---\n' "$tc55_backup" "$tc55_backup" "$tc55_backup" "$tc55_backup" "$tc55_backup" "$tc55_backup" "$tc55_backup" > "$tc55_backup/component-manifest.txt"
+tc55_run() { (cd "$tmp_root/tc55-unrelated" && HOME="$tc55_home" XDG_CONFIG_HOME="$tc55_home/.config" XDG_STATE_HOME="$tc55_home/.local/state" AHR_FRAMEWORK_ROOT="$tc55_fw" AHR_LOCAL_BIN="$tc55_home/.local/bin" AHR_LIB_PATH="$FRAMEWORK_BIN/ahr-lib.sh" bash "$RESTORE_COMPONENT" "$@"); }
+find "$tc55_fw" -xdev -printf '%y %m %s %p -> %l\n' | sort > "$tmp_root/tc55-before"
+for tc55_component in framework-config namespace-links theme-state active-theme background-state waybar-theme mako-theme terminal-theme fontconfig; do tc55_out="$(tc55_run "$tc55_component" --backup selector-fixture 2>&1)"; grep -q "canonical=$tc55_component" <<<"$tc55_out" && pass "$tc55_component selector maps canonically" || fail "$tc55_component selector mapping failed"; done
+tc55_waybar="$(tc55_run waybar-theme --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_home/.config/waybar/style.css" <<<"$tc55_waybar" && pass "Waybar target uses XDG config root" || fail "Waybar target root incorrect"
+tc55_mako="$(tc55_run mako-theme --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_home/.config/mako/config" <<<"$tc55_mako" && pass "Mako target uses XDG config root" || fail "Mako target root incorrect"
+tc55_terminal="$(tc55_run terminal-theme --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_home/.config/ghostty/config" <<<"$tc55_terminal" && pass "terminal target uses XDG config root" || fail "terminal target root incorrect"
+tc55_font="$(tc55_run fontconfig --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_home/.config/fontconfig/fonts.conf" <<<"$tc55_font" && pass "Fontconfig target uses XDG config root" || fail "Fontconfig target root incorrect"
+tc55_ns="$(tc55_run namespace-links --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_home/.local/bin" <<<"$tc55_ns" && pass "namespace target uses local-bin root" || fail "namespace target root incorrect"
+tc55_theme="$(tc55_run theme-state --backup selector-fixture 2>&1)"; grep -q "Target: $tc55_fw/current" <<<"$tc55_theme" && pass "theme-state dry-run uses framework root" || fail "theme-state target root incorrect"
+find "$tc55_fw" -xdev -printf '%y %m %s %p -> %l\n' | sort > "$tmp_root/tc55-after"; diff -u "$tmp_root/tc55-before" "$tmp_root/tc55-after" && pass "dry-run from unrelated cwd is non-mutating" || fail "dry-run mutated framework"
+tc55_absent="$(tc55_run foot-theme --backup selector-fixture 2>&1 || true)"; grep -q 'was absent' <<<"$tc55_absent" && pass "absent status remains distinct" || fail "absent status not reported"
+tc55_unsupported="$(tc55_run chromium-theme --backup selector-fixture 2>&1 || true)"; grep -q 'automatic restoration is unsupported' <<<"$tc55_unsupported" && pass "unsupported status remains distinct" || fail "unsupported status not reported"
+tc55_unknown=0; tc55_run no-such-component --backup selector-fixture >/dev/null 2>&1 || tc55_unknown=$?; (( tc55_unknown != 0 )) && pass "unknown public component is rejected" || fail "unknown public component accepted"
+printf 'component=theme-state\nsnapshot_path=%s/snapshots/theme-state\nsnapshot_status=present\n---\n' "$tc55_backup" >> "$tc55_backup/component-manifest.txt"
+tc55_duplicate=0; tc55_run theme-state --backup selector-fixture >/dev/null 2>&1 || tc55_duplicate=$?; (( tc55_duplicate != 0 )) && pass "duplicate canonical manifest record is rejected" || fail "duplicate canonical record accepted"
+
+echo ""
+echo "=== TC56: Historical namespace TSV restore parser ==="
+
+tc56_home="$tmp_root/tc56"
+tc56_fw="$tc56_home/.config/artix-hypr-remix"
+tc56_local="$tc56_home/.local/bin"
+mkdir -p "$tc56_fw/bin" "$tc56_local"
+cp -a "$REPO_ROOT/config/artix-hypr-remix" "$tc56_home/.config/"
+
+tc56_make_backup() {
+  local id="$1"
+  local backup="$tc56_home/.local/state/artix-hypr-remix/framework-backups/$id"
+  mkdir -p "$backup"
+  printf 'manifest_version=1\ncompleted=true\nbackup_id=%s\ntransaction_id=tx-%s\n' "$id" "$id" > "$backup/manifest.txt"
+  printf '%s' "$backup"
+}
+
+# This uses the production schema and structurally matches the live 107-record
+# backup using the same canonical inventory as namespace-install.sh.
+source "$FRAMEWORK_BIN/ahr-lib.sh"
+tc56_backup="$(tc56_make_backup live-tsv)"
+tc56_records=0
+declare -a tc56_names=()
+: > "$tc56_backup/derived-namespace-links"
+for tc56_name in "${AHR_NAMESPACE_COMMANDS[@]}"; do
+  (( tc56_records < 107 )) || break
+  [[ -f "$tc56_fw/bin/$tc56_name" ]] || continue
+  printf '%s\t%s/bin/%s\n' "$tc56_name" "$tc56_fw" "$tc56_name" >> "$tc56_backup/derived-namespace-links"
+  tc56_names+=("$tc56_name")
+  ((tc56_records+=1))
+done
+for tc56_alias in "${AHR_NAMESPACE_ALIASES[@]}"; do
+  (( tc56_records < 107 )) || break
+  tc56_name="${tc56_alias%%:*}"
+  tc56_alias_target="${tc56_alias##*:}"
+  printf '%s\t%s/%s\n' "$tc56_name" "$tc56_local" "$tc56_alias_target" >> "$tc56_backup/derived-namespace-links"
+  tc56_names+=("$tc56_name")
+  ((tc56_records+=1))
+done
+(( tc56_records == 107 )) || fail "canonical inventory did not provide 107 records"
+ln -s "$tc56_fw/bin/ahr-doctor" "$tc56_local/ahr"
+printf 'user data\n' > "$tc56_local/unrelated-regular"
+ln -s /usr/bin/true "$tc56_local/unrelated-symlink"
+
+tc56_plan_rc=0
+tc56_plan_output="$(run_restore_component "$tc56_home" namespace-links --backup live-tsv 2>&1)" || tc56_plan_rc=$?
+(( tc56_plan_rc == 0 )) && grep -q "ahr-update-framework -> $tc56_fw/bin/ahr-update-framework" <<<"$tc56_plan_output" && pass "107-record production TSV is accepted by dry-run" || fail "production TSV dry-run rejected" "$tc56_plan_output"
+[[ "$(readlink "$tc56_local/ahr")" == "$tc56_fw/bin/ahr-doctor" ]] && pass "dry-run leaves changed managed link untouched" || fail "dry-run changed managed link"
+
+tc56_apply_rc=0
+run_restore_component "$tc56_home" namespace-links --backup live-tsv --apply >/dev/null 2>&1 || tc56_apply_rc=$?
+if (( tc56_apply_rc == 0 )) && [[ "$(readlink "$tc56_local/ahr")" == "$tc56_fw/bin/ahr" ]] && [[ "$(readlink "$tc56_local/ahr-doctor")" == "$tc56_fw/bin/ahr-doctor" ]]; then
+  pass "same production TSV is accepted by apply and restores exact targets"
+else
+  fail "production TSV apply did not restore exact targets"
+fi
+tc56_count=0
+for tc56_name in "${tc56_names[@]}"; do
+  [[ -L "$tc56_local/$tc56_name" ]] && ((tc56_count+=1))
+done
+(( tc56_count == 107 )) && pass "all 107 validated namespace records are restored" || fail "expected 107 restored links, got $tc56_count"
+[[ "$(cat "$tc56_local/unrelated-regular")" == "user data" ]] && pass "unrelated regular namespace entry is preserved" || fail "unrelated regular namespace entry changed"
+[[ "$(readlink "$tc56_local/unrelated-symlink")" == "/usr/bin/true" ]] && pass "unrelated symlink namespace entry is preserved" || fail "unrelated symlink namespace entry changed"
+
+# The existing namespace ownership policy accepts only framework/local-bin
+# absolute targets, so plan and apply must reject the same relative target.
+tc56_relative="$(tc56_make_backup relative-target)"
+printf 'ahr\tbin/ahr\n' > "$tc56_relative/derived-namespace-links"
+tc56_relative_plan=0; run_restore_component "$tc56_home" namespace-links --backup relative-target >/dev/null 2>&1 || tc56_relative_plan=$?
+tc56_relative_apply=0; run_restore_component "$tc56_home" namespace-links --backup relative-target --apply >/dev/null 2>&1 || tc56_relative_apply=$?
+(( tc56_relative_plan != 0 && tc56_relative_apply != 0 )) && pass "relative targets follow the existing rejection policy in plan and apply" || fail "relative target policy diverged"
+
+# Each invalid TSV form must be rejected by both entry points before the
+# existing managed link is touched.
+for tc56_case in empty-name empty-target extra-field duplicate slash dot dotdot malformed; do
+  tc56_bad="$(tc56_make_backup "bad-$tc56_case")"
+  case "$tc56_case" in
+    empty-name) printf '\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    empty-target) printf 'ahr\t\n' > "$tc56_bad/derived-namespace-links" ;;
+    extra-field) printf 'ahr\t%s/bin/ahr\textra\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    duplicate) printf 'ahr\t%s/bin/ahr\nahr\t%s/bin/ahr-doctor\n' "$tc56_fw" "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    slash) printf 'ahr/bad\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    dot) printf '.\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    dotdot) printf '..\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+    malformed) printf 'ahr %s/bin/ahr\n' "$tc56_fw" > "$tc56_bad/derived-namespace-links" ;;
+  esac
+  ln -sfn "$tc56_fw/bin/ahr-doctor" "$tc56_local/ahr"
+  tc56_bad_plan=0; run_restore_component "$tc56_home" namespace-links --backup "bad-$tc56_case" >/dev/null 2>&1 || tc56_bad_plan=$?
+  tc56_bad_apply=0; run_restore_component "$tc56_home" namespace-links --backup "bad-$tc56_case" --apply >/dev/null 2>&1 || tc56_bad_apply=$?
+  if (( tc56_bad_plan != 0 && tc56_bad_apply != 0 )) && [[ "$(readlink "$tc56_local/ahr")" == "$tc56_fw/bin/ahr-doctor" ]]; then
+    pass "$tc56_case TSV is rejected identically before mutation"
+  else
+    fail "$tc56_case TSV parser or atomicity failure"
+  fi
+done
+
+tc56_atomic="$(tc56_make_backup malformed-among-many)"
+printf 'ahr\t%s/bin/ahr\nahr-doctor\t%s/bin/ahr-doctor\nbad-record\nahr-update-framework\t%s/bin/ahr-update-framework\n' "$tc56_fw" "$tc56_fw" "$tc56_fw" > "$tc56_atomic/derived-namespace-links"
+ln -sfn "$tc56_fw/bin/ahr-doctor" "$tc56_local/ahr"
+ln -sfn "$tc56_fw/bin/ahr" "$tc56_local/ahr-doctor"
+tc56_atomic_rc=0; run_restore_component "$tc56_home" namespace-links --backup malformed-among-many --apply >/dev/null 2>&1 || tc56_atomic_rc=$?
+if (( tc56_atomic_rc != 0 )) && [[ "$(readlink "$tc56_local/ahr")" == "$tc56_fw/bin/ahr-doctor" ]] && [[ "$(readlink "$tc56_local/ahr-doctor")" == "$tc56_fw/bin/ahr" ]]; then
+  pass "one malformed record prevents every namespace mutation"
+else
+  fail "malformed record produced partial namespace restoration"
+fi
+
+tc56_conflict="$(tc56_make_backup user-conflict)"
+printf 'ahr\t%s/bin/ahr\n' "$tc56_fw" > "$tc56_conflict/derived-namespace-links"
+rm -f "$tc56_local/ahr"
+printf 'do not replace\n' > "$tc56_local/ahr"
+tc56_conflict_rc=0; run_restore_component "$tc56_home" namespace-links --backup user-conflict --apply >/dev/null 2>&1 || tc56_conflict_rc=$?
+if (( tc56_conflict_rc != 0 )) && [[ "$(cat "$tc56_local/ahr")" == "do not replace" ]]; then
+  pass "user-owned conflicting namespace entry is not overwritten"
+else
+  fail "user-owned namespace conflict was not preserved"
+fi
+ln -sfn "$tc56_fw/bin/ahr" "$tc56_local/ahr-doctor"
+tc56_many_conflict_rc=0; run_restore_component "$tc56_home" namespace-links --backup live-tsv --apply >/dev/null 2>&1 || tc56_many_conflict_rc=$?
+if (( tc56_many_conflict_rc != 0 )) && [[ "$(readlink "$tc56_local/ahr-doctor")" == "$tc56_fw/bin/ahr" ]]; then
+  pass "one regular conflict among 107 valid records prevents all mutation"
+else
+  fail "107-record conflict allowed partial namespace restoration"
+fi
+
+echo ""
+echo "=== TC57: Stale canonical namespace slots are repairable ==="
+
+tc57_home="$tmp_root/tc57"
+tc57_fw="$tc57_home/.config/artix-hypr-remix"
+tc57_local="$tc57_home/.local/bin"
+mkdir -p "$tc57_home/.config" "$tc57_local"
+cp -a "$REPO_ROOT/config/artix-hypr-remix" "$tc57_home/.config/"
+tc57_make_backup() {
+  local id="$1" backup="$tc57_home/.local/state/artix-hypr-remix/framework-backups/$1"
+  mkdir -p "$backup"
+  printf 'manifest_version=1\ncompleted=true\nbackup_id=%s\ntransaction_id=tx-%s\n' "$id" "$id" > "$backup/manifest.txt"
+  printf '%s' "$backup"
+}
+tc57_backup="$(tc57_make_backup stale-link)"
+printf 'ahr\t%s/bin/ahr\nahr-doctor\t%s/bin/ahr-doctor\n' "$tc57_fw" "$tc57_fw" > "$tc57_backup/derived-namespace-links"
+ln -s /tmp/distinctive-non-ahr-target "$tc57_local/ahr"
+ln -s /usr/bin/true "$tc57_local/unrelated-symlink"
+printf 'unrelated\n' > "$tc57_local/unrelated-regular"
+tc57_plan_rc=0
+tc57_plan="$(run_restore_component "$tc57_home" namespace-links --backup stale-link 2>&1)" || tc57_plan_rc=$?
+if (( tc57_plan_rc == 0 )) && grep -q 'ahr -> .*\[repairable-stale-managed\]' <<<"$tc57_plan"; then
+  pass "dry-run classifies foreign-target managed slot as repairable"
+else
+  fail "dry-run did not classify foreign-target managed slot as repairable" "$tc57_plan"
+fi
+tc57_apply_rc=0; run_restore_component "$tc57_home" namespace-links --backup stale-link --apply >/dev/null 2>&1 || tc57_apply_rc=$?
+if (( tc57_apply_rc == 0 )) && [[ "$(readlink "$tc57_local/ahr")" == "$tc57_fw/bin/ahr" ]] && [[ "$(readlink "$tc57_local/unrelated-symlink")" == /usr/bin/true ]] && [[ "$(cat "$tc57_local/unrelated-regular")" == unrelated ]]; then
+  pass "foreign-target managed symlink restores exactly without touching neighbors"
+else
+  fail "foreign-target managed symlink restoration failed"
+fi
+
+ln -sfn "$tc57_fw/bin/ahr-doctor" "$tc57_local/ahr"
+tc57_stale_rc=0; run_restore_component "$tc57_home" namespace-links --backup stale-link --apply >/dev/null 2>&1 || tc57_stale_rc=$?
+if (( tc57_stale_rc == 0 )) && [[ "$(readlink "$tc57_local/ahr")" == "$tc57_fw/bin/ahr" ]]; then pass "stale AHR target restores successfully"; else fail "stale AHR target restore failed"; fi
+ln -sfn "$tc57_fw/bin/missing-command" "$tc57_local/ahr"
+tc57_broken_rc=0; run_restore_component "$tc57_home" namespace-links --backup stale-link --apply >/dev/null 2>&1 || tc57_broken_rc=$?
+if (( tc57_broken_rc == 0 )) && [[ "$(readlink "$tc57_local/ahr")" == "$tc57_fw/bin/ahr" ]]; then pass "broken managed target restores successfully"; else fail "broken managed target restore failed"; fi
+rm -f "$tc57_local/ahr-doctor"
+tc57_absent_rc=0; run_restore_component "$tc57_home" namespace-links --backup stale-link --apply >/dev/null 2>&1 || tc57_absent_rc=$?
+if (( tc57_absent_rc == 0 )) && [[ "$(readlink "$tc57_local/ahr-doctor")" == "$tc57_fw/bin/ahr-doctor" ]]; then pass "absent managed slot is recreated exactly"; else fail "absent managed slot was not recreated"; fi
+
+tc57_unknown="$(tc57_make_backup unknown-name)"
+printf 'ahr-not-inventory\t%s/bin/ahr\n' "$tc57_fw" > "$tc57_unknown/derived-namespace-links"
+tc57_unknown_plan=0; run_restore_component "$tc57_home" namespace-links --backup unknown-name >/dev/null 2>&1 || tc57_unknown_plan=$?
+tc57_unknown_apply=0; run_restore_component "$tc57_home" namespace-links --backup unknown-name --apply >/dev/null 2>&1 || tc57_unknown_apply=$?
+(( tc57_unknown_plan != 0 && tc57_unknown_apply != 0 )) && pass "snapshot name outside canonical inventory is rejected consistently" || fail "non-canonical snapshot name was accepted"
+
+tc57_conflict="$(tc57_make_backup managed-file-conflict)"
+printf 'ahr\t%s/bin/ahr\nahr-doctor\t%s/bin/ahr-doctor\n' "$tc57_fw" "$tc57_fw" > "$tc57_conflict/derived-namespace-links"
+rm -f "$tc57_local/ahr"
+printf 'user-owned\n' > "$tc57_local/ahr"
+ln -sfn "$tc57_fw/bin/ahr" "$tc57_local/ahr-doctor"
+tc57_conflict_rc=0; run_restore_component "$tc57_home" namespace-links --backup managed-file-conflict --apply >/dev/null 2>&1 || tc57_conflict_rc=$?
+if (( tc57_conflict_rc != 0 )) && [[ "$(cat "$tc57_local/ahr")" == user-owned ]] && [[ "$(readlink "$tc57_local/ahr-doctor")" == "$tc57_fw/bin/ahr" ]]; then
+  pass "managed regular-file conflict is preserved before all mutation"
+else
+  fail "managed regular-file conflict was not safely rejected"
+fi
+rm -f "$tc57_local/ahr"
+mkdir "$tc57_local/ahr"
+tc57_directory_rc=0; run_restore_component "$tc57_home" namespace-links --backup managed-file-conflict --apply >/dev/null 2>&1 || tc57_directory_rc=$?
+if (( tc57_directory_rc != 0 )) && [[ -d "$tc57_local/ahr" ]]; then pass "managed directory conflict is preserved"; else fail "managed directory conflict was not safely rejected"; fi
+
+echo ""
+echo "=== TC58: Controlled post-activation health fault ==="
+
+tc58_normal_home="$tmp_root/tc58_normal"
+tc58_normal_repo="$(create_test_repo "$tmp_root/tc58_normal_repo" "0.2.0")"
+setup_installed_framework "$tc58_normal_home" "file://$tc58_normal_repo"
+tc58_normal_exit=0
+AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_normal_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc58_normal_exit=$?
+if (( tc58_normal_exit == 0 )) && [[ "$(json_get "$tc58_normal_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then pass "unset health fault leaves successful apply unchanged"; else fail "unset health fault changed normal apply behavior"; fi
+
+tc58_home="$tmp_root/tc58"
+tc58_repo="$(create_test_repo "$tmp_root/tc58_repo" "0.2.0")"
+setup_installed_framework "$tc58_home" "file://$tc58_repo"
+tc58_staged="$tc58_repo/artix-hypr-remix/config/artix-hypr-remix"
+cat > "$tc58_staged/bin/namespace-install.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/namespace-before-health.marker"
+EOF
+cat > "$tc58_staged/bin/migrate.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/migration-before-health.marker"
+EOF
+cat > "$tc58_staged/bin/ahr-doctor" <<'EOF'
+#!/usr/bin/env bash
+touch "${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/real-doctor-ran.marker"
+printf 'real doctor passed\n'
+exit 0
+EOF
+chmod +x "$tc58_staged/bin/namespace-install.sh" "$tc58_staged/bin/migrate.sh" "$tc58_staged/bin/ahr-doctor"
+(cd "$tc58_repo" && git add -A && git commit -q -m "health fault fixture" >/dev/null)
+tc58_staged_doctor_sum="$(sha256sum "$tc58_staged/bin/ahr-doctor" | awk '{print $1}')"
+
+tc58_apply_exit=0
+tc58_apply_output="$(AHR_TEST_FAIL_HEALTH_CHECK=1 run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --apply 2>&1)" || tc58_apply_exit=$?
+(( tc58_apply_exit != 0 )) && pass "enabled health fault exits nonzero" || fail "enabled health fault exited zero"
+grep -q 'real doctor passed' <<<"$tc58_apply_output" && pass "real doctor runs before injected failure" || fail "real doctor output missing before injected failure"
+grep -q 'TEST FAULT: forcing post-activation health-check failure' <<<"$tc58_apply_output" && pass "injected health fault is clearly logged" || fail "injected health-fault log missing"
+
+tc58_state="$(find "$tc58_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"
+tc58_txdir="$(dirname "$tc58_state")"
+tc58_backup="$(awk -F= '$1 == "backup_path" { print substr($0, 13); exit }' "$tc58_state")"
+tc58_manifest="$tc58_backup/manifest.txt"
+[[ -f "$tc58_state" && -d "$tc58_backup" && -f "$tc58_manifest" ]] && pass "backup and transaction exist before injected health failure" || fail "injected health failure did not retain backup and transaction"
+grep -q '^phase=health_check_failed$' "$tc58_state" && pass "injected failure uses health_check_failed phase" || fail "injected failure phase was not health_check_failed"
+grep -q '^completion=health_check_failed$' "$tc58_state" && pass "injected failure uses health_check_failed completion" || fail "injected failure completion was not health_check_failed"
+grep -q '^failure_reason=test_fault_forced_health_check_failure$' "$tc58_state" && pass "injected failure reason is distinguishable" || fail "injected failure reason was not distinguishable"
+! grep -q '^completion=committed$' "$tc58_state" && pass "injected transaction is not committed" || fail "injected transaction was committed"
+
+tc58_txid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc58_state")"
+tc58_backup_id="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc58_state")"
+tc58_manifest_txid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc58_manifest")"
+tc58_manifest_backup_id="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc58_manifest")"
+if [[ "$tc58_txid" == "$(basename "$tc58_txdir")" && "$tc58_backup_id" == "$(basename "$tc58_backup")" && "$tc58_txid" == "$tc58_manifest_txid" && "$tc58_backup_id" == "$tc58_manifest_backup_id" ]]; then pass "injected failure preserves exact transaction and backup provenance"; else fail "injected failure changed transaction or backup provenance"; fi
+
+[[ "$(json_get "$tc58_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]] && pass "activation completed before injected failure" || fail "activation did not complete before injected failure"
+[[ -f "$tc58_home/.config/artix-hypr-remix/namespace-before-health.marker" ]] && pass "namespace completed before injected failure" || fail "namespace did not complete before injected failure"
+[[ -f "$tc58_home/.config/artix-hypr-remix/migration-before-health.marker" ]] && pass "migration completed before injected failure" || fail "migration did not complete before injected failure"
+[[ -f "$tc58_home/.config/artix-hypr-remix/real-doctor-ran.marker" ]] && pass "real doctor succeeded before updater fault" || fail "real doctor marker missing"
+tc58_installed_doctor_sum="$(sha256sum "$tc58_home/.config/artix-hypr-remix/bin/ahr-doctor" | awk '{print $1}')"
+[[ "$tc58_installed_doctor_sum" == "$tc58_staged_doctor_sum" ]] && pass "hook does not modify doctor executable" || fail "hook modified doctor executable"
+
+tc58_tx_count_before_invalid="$(find "$tc58_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc58_backup_count_before_invalid="$(find "$tc58_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc58_invalid_exit=0
+tc58_invalid_output="$(AHR_TEST_FAIL_HEALTH_CHECK=true run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc58_invalid_exit=$?
+tc58_tx_count_after_invalid="$(find "$tc58_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc58_backup_count_after_invalid="$(find "$tc58_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+if (( tc58_invalid_exit != 0 )) && grep -q "Invalid AHR_TEST_FAIL_HEALTH_CHECK value: expected exactly '1' when set" <<<"$tc58_invalid_output" && [[ "$tc58_tx_count_before_invalid" == "$tc58_tx_count_after_invalid" && "$tc58_backup_count_before_invalid" == "$tc58_backup_count_after_invalid" ]]; then pass "invalid health-fault value is rejected before mutation"; else fail "invalid health-fault value was not strictly rejected"; fi
+
+# Existing --recover preserves a completed-but-unhealthy apply and directs its
+# exact rollback. A deliberately invalid newer backup must not be selected.
+cp "$tc58_state" "$tc58_state.before-recover"
+tc58_unrelated="$tc58_home/.local/state/artix-hypr-remix/framework-backups/unrelated-newer"
+cp -a "$tc58_backup" "$tc58_unrelated"
+sed -i 's/^backup_id=.*/backup_id=unrelated-newer/; s/^transaction_id=.*/transaction_id=tx-unrelated-newer/' "$tc58_unrelated/manifest.txt"
+rm -rf "$tc58_unrelated/docs"
+tc58_recover_exit=0
+tc58_recover_output="$(AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc58_recover_exit=$?
+if (( tc58_recover_exit != 0 )) && grep -q 'Recovery does not erase this failure. Run: ahr update-framework --rollback' <<<"$tc58_recover_output" && cmp -s "$tc58_state.before-recover" "$tc58_state"; then pass "existing recovery path preserves and directs injected health failure"; else fail "recovery path did not preserve injected health failure"; fi
+tc58_rollback_exit=0
+AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc58_rollback_exit=$?
+if (( tc58_rollback_exit == 0 )) && [[ "$(json_get "$tc58_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" ]]; then pass "exact recorded backup resolves injected health failure over unrelated backup"; else fail "rollback did not use the injected transaction's exact backup"; fi
+tc58_followup_exit=0
+AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc58_followup_exit=$?
+(( tc58_followup_exit == 0 )) && pass "later unset invocation does not inherit health fault" || fail "later unset invocation inherited health fault"
+
+echo ""
+echo "=== TC59: Controlled post-activation migration fault ==="
+
+tc59_normal_home="$tmp_root/tc59_normal"
+tc59_normal_repo="$(create_test_repo "$tmp_root/tc59_normal_repo" "0.2.0")"
+setup_installed_framework "$tc59_normal_home" "file://$tc59_normal_repo"
+tc59_normal_exit=0
+AHR_TEST_FAIL_MIGRATION= run_ahr "$tc59_normal_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc59_normal_exit=$?
+(( tc59_normal_exit == 0 )) && pass "unset migration fault leaves successful apply unchanged" || fail "unset migration fault changed normal apply behavior"
+
+tc59_home="$tmp_root/tc59"
+tc59_repo="$(create_test_repo "$tmp_root/tc59_repo" "0.2.0")"
+setup_installed_framework "$tc59_home" "file://$tc59_repo"
+tc59_staged="$tc59_repo/artix-hypr-remix/config/artix-hypr-remix"
+
+# Use the real migration runner with its sole staged migration already marked
+# applied. This proves the runner reaches its normal no-op result before the
+# process-local updater fault is injected.
+cp "$FRAMEWORK_BIN/migrate.sh" "$tc59_staged/bin/migrate.sh"
+cat > "$tc59_staged/migrations/20260819-already-applied.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}/unexpected-migration-script-ran"
+EOF
+cat > "$tc59_staged/bin/namespace-install.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "$HOME/namespace-before-migration.marker"
+EOF
+chmod +x "$tc59_staged/bin/migrate.sh" "$tc59_staged/migrations/20260819-already-applied.sh" "$tc59_staged/bin/namespace-install.sh"
+mkdir -p "$tc59_home/.local/state/artix-hypr-remix/migrations/skipped"
+touch "$tc59_home/.local/state/artix-hypr-remix/migrations/20260819-already-applied.sh"
+(cd "$tc59_repo" && git add -A && git commit -q -m "already-applied migration fixture" >/dev/null)
+
+tc59_marker_before="$(find "$tc59_home/.local/state/artix-hypr-remix/migrations" -type f -name '*.sh' -print0 | sort -z | xargs -0 -r sha256sum)"
+tc59_skipped_before="$(find "$tc59_home/.local/state/artix-hypr-remix/migrations/skipped" -type f -name '*.sh' -print0 | sort -z | xargs -0 -r sha256sum)"
+tc59_staged_migration_sum="$(sha256sum "$tc59_staged/migrations/20260819-already-applied.sh" | awk '{print $1}')"
+tc59_apply_exit=0
+tc59_apply_output="$(AHR_TEST_FAIL_MIGRATION=1 run_ahr "$tc59_home" "$UPDATE_FRAMEWORK" --apply 2>&1)" || tc59_apply_exit=$?
+(( tc59_apply_exit != 0 )) && pass "enabled migration fault exits nonzero" || fail "enabled migration fault exited zero"
+grep -q 'Migration status: total=1 applied=1 skipped=0 pending=0' <<<"$tc59_apply_output" && grep -q 'No pending migrations' <<<"$tc59_apply_output" && pass "already-applied migration runner completes no-op before fault" || fail "migration no-op was not observed before fault"
+grep -q 'TEST FAULT: forcing migration failure' <<<"$tc59_apply_output" && pass "injected migration fault is clearly logged" || fail "injected migration-fault log missing"
+grep -q 'Runtime smoke test passed.' <<<"$tc59_apply_output" && [[ -f "$tc59_home/namespace-before-migration.marker" ]] && pass "activation namespace and runtime smoke complete before migration fault" || fail "pre-migration lifecycle did not complete"
+[[ ! -e "$tc59_home/.config/artix-hypr-remix/unexpected-migration-script-ran" ]] && pass "already-applied migration script was not rerun" || fail "already-applied migration script ran"
+
+tc59_state="$(find "$tc59_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"
+tc59_txdir="$(dirname "$tc59_state")"
+tc59_backup="$(awk -F= '$1 == "backup_path" { print substr($0, 13); exit }' "$tc59_state")"
+tc59_manifest="$tc59_backup/manifest.txt"
+grep -q '^phase=migration_failed$' "$tc59_state" && grep -q '^completion=migration_failed$' "$tc59_state" && pass "injected migration uses migration_failed state" || fail "injected migration state was not migration_failed"
+grep -q '^failure_reason=test_fault_forced_migration_failure$' "$tc59_state" && pass "injected migration reason is distinguishable" || fail "injected migration reason was not distinguishable"
+! grep -q '^completion=committed$' "$tc59_state" && pass "injected migration transaction is not committed" || fail "injected migration transaction was committed"
+tc59_txid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc59_state")"
+tc59_bid="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc59_state")"
+tc59_mtxid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc59_manifest")"
+tc59_mbid="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc59_manifest")"
+if [[ "$tc59_txid" == "$(basename "$tc59_txdir")" && "$tc59_bid" == "$(basename "$tc59_backup")" && "$tc59_txid" == "$tc59_mtxid" && "$tc59_bid" == "$tc59_mbid" ]]; then pass "migration fault preserves exact transaction and backup provenance"; else fail "migration fault changed transaction or backup provenance"; fi
+tc59_marker_after="$(find "$tc59_home/.local/state/artix-hypr-remix/migrations" -type f -name '*.sh' -print0 | sort -z | xargs -0 -r sha256sum)"
+tc59_skipped_after="$(find "$tc59_home/.local/state/artix-hypr-remix/migrations/skipped" -type f -name '*.sh' -print0 | sort -z | xargs -0 -r sha256sum)"
+[[ "$tc59_marker_before" == "$tc59_marker_after" && "$tc59_skipped_before" == "$tc59_skipped_after" ]] && pass "injection preserves applied and skipped migration markers" || fail "injection changed migration markers"
+[[ "$(sha256sum "$tc59_home/.config/artix-hypr-remix/migrations/20260819-already-applied.sh" | awk '{print $1}')" == "$tc59_staged_migration_sum" ]] && pass "hook does not modify migration scripts" || fail "hook modified migration script"
+
+tc59_count_before_invalid="$(find "$tc59_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc59_invalid_exit=0
+tc59_invalid_output="$(AHR_TEST_FAIL_MIGRATION=true run_ahr "$tc59_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc59_invalid_exit=$?
+tc59_count_after_invalid="$(find "$tc59_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+if (( tc59_invalid_exit != 0 )) && grep -q "Invalid AHR_TEST_FAIL_MIGRATION value: expected exactly '1' when set" <<<"$tc59_invalid_output" && [[ "$tc59_count_before_invalid" == "$tc59_count_after_invalid" ]]; then pass "invalid migration-fault value is rejected before mutation"; else fail "invalid migration-fault value was not strictly rejected"; fi
+
+cp "$tc59_state" "$tc59_state.before-recover"
+tc59_unrelated="$tc59_home/.local/state/artix-hypr-remix/framework-backups/unrelated-newer"
+cp -a "$tc59_backup" "$tc59_unrelated"
+sed -i 's/^backup_id=.*/backup_id=unrelated-newer/; s/^transaction_id=.*/transaction_id=tx-unrelated-newer/' "$tc59_unrelated/manifest.txt"
+rm -rf "$tc59_unrelated/docs"
+tc59_recover_exit=0
+tc59_recover_output="$(AHR_TEST_FAIL_MIGRATION= run_ahr "$tc59_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc59_recover_exit=$?
+if (( tc59_recover_exit != 0 )) && grep -q 'Recovery does not erase this failure. Run: ahr update-framework --rollback' <<<"$tc59_recover_output" && cmp -s "$tc59_state.before-recover" "$tc59_state"; then pass "recover preserves and directs injected migration failure"; else fail "recover did not preserve migration failure"; fi
+tc59_rollback_exit=0
+AHR_TEST_FAIL_MIGRATION= run_ahr "$tc59_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc59_rollback_exit=$?
+if (( tc59_rollback_exit == 0 )) && [[ "$(json_get "$tc59_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" ]] && [[ "$(find "$tc59_home/.local/state/artix-hypr-remix/migrations" -type f -name '*.sh' -print0 | sort -z | xargs -0 -r sha256sum)" == "$tc59_marker_before" ]]; then pass "exact rollback restores baseline and migration markers over unrelated backup"; else fail "rollback did not restore exact migration-failure backup"; fi
+tc59_followup_exit=0
+AHR_TEST_FAIL_MIGRATION= run_ahr "$tc59_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc59_followup_exit=$?
+(( tc59_followup_exit == 0 )) && pass "later unset invocation does not inherit migration fault" || fail "later unset invocation inherited migration fault"
+
 # ── Results ────────────────────────────────────────────────────────
 echo ""
+echo "=== TC60: Controlled post-activation namespace fault ==="
+tc60_normal_home="$tmp_root/tc60_normal"; tc60_normal_repo="$(create_test_repo "$tmp_root/tc60_normal_repo" "0.2.0")"; setup_installed_framework "$tc60_normal_home" "file://$tc60_normal_repo"
+tc60_normal_exit=0; AHR_TEST_FAIL_NAMESPACE_INSTALL= run_ahr "$tc60_normal_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc60_normal_exit=$?
+(( tc60_normal_exit == 0 )) && pass "unset namespace fault leaves successful apply unchanged" || fail "unset namespace fault changed normal apply behavior"
+tc60_home="$tmp_root/tc60"; tc60_repo="$(create_test_repo "$tmp_root/tc60_repo" "0.2.0")"; setup_installed_framework "$tc60_home" "file://$tc60_repo"; tc60_staged="$tc60_repo/artix-hypr-remix/config/artix-hypr-remix"; tc60_local="$tc60_home/.local/bin"; mkdir -p "$tc60_local"
+ln -s "$tc60_home/.config/artix-hypr-remix/bin/ahr" "$tc60_local/ahr"; printf 'unrelated regular data\n' >"$tc60_local/unrelated-regular"; ln -s /usr/bin/true "$tc60_local/unrelated-symlink"; cp "$FRAMEWORK_BIN/namespace-install.sh" "$tc60_staged/bin/namespace-install.real.sh"
+# The fixture begins with a minimal staged tree, so supply the canonical source
+# inventory required by the unmodified production namespace installer.
+mapfile -t tc60_commands < <(bash -c 'source "$1"; printf "%s\n" "${AHR_NAMESPACE_COMMANDS[@]}"' _ "$FRAMEWORK_BIN/ahr-lib.sh")
+for tc60_command in "${tc60_commands[@]}"; do
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$tc60_staged/bin/$tc60_command"
+  chmod +x "$tc60_staged/bin/$tc60_command"
+done
+cat > "$tc60_staged/bin/namespace-install.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+bash "$HOME/.config/artix-hypr-remix/bin/namespace-install.real.sh" --quiet
+ln -sfn "$HOME/.config/artix-hypr-remix/bin/ahr-update" "$HOME/.local/bin/ahr"
+touch "$HOME/.config/artix-hypr-remix/real-namespace-success.marker"
+printf 'real namespace installer succeeded\n'
+EOF
+cat > "$tc60_staged/bin/migrate.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "$HOME/.config/artix-hypr-remix/migration-after-namespace.marker"
+EOF
+cat > "$tc60_staged/bin/ahr-doctor" <<'EOF'
+#!/usr/bin/env bash
+touch "$HOME/.config/artix-hypr-remix/doctor-after-namespace.marker"
+exit 0
+EOF
+chmod +x "$tc60_staged/bin/namespace-install.sh" "$tc60_staged/bin/namespace-install.real.sh" "$tc60_staged/bin/migrate.sh" "$tc60_staged/bin/ahr-doctor"; (cd "$tc60_repo" && git add -A && git commit -q -m "namespace fault fixture" >/dev/null)
+tc60_apply_exit=0; tc60_apply_output="$(AHR_TEST_FAIL_NAMESPACE_INSTALL=1 run_ahr "$tc60_home" "$UPDATE_FRAMEWORK" --apply 2>&1)" || tc60_apply_exit=$?
+(( tc60_apply_exit != 0 )) && pass "enabled namespace fault exits nonzero" || fail "enabled namespace fault exited zero"
+grep -q 'real namespace installer succeeded' <<<"$tc60_apply_output" && grep -q 'TEST FAULT: forcing namespace-install failure' <<<"$tc60_apply_output" && pass "real namespace install succeeds before injected fault" || fail "namespace success or fault evidence missing" "$tc60_apply_output"
+[[ -f "$tc60_home/.config/artix-hypr-remix/real-namespace-success.marker" ]] && pass "real namespace installer completed before failure" || fail "real namespace installer did not complete"
+[[ "$(readlink "$tc60_local/ahr")" == "$tc60_home/.config/artix-hypr-remix/bin/ahr-update" ]] && pass "injected failure retains namespace target B" || fail "namespace target B missing"
+[[ "$(cat "$tc60_local/unrelated-regular")" == "unrelated regular data" && "$(readlink "$tc60_local/unrelated-symlink")" == "/usr/bin/true" ]] && pass "unrelated namespace entries remain unchanged" || fail "unrelated namespace entry changed"
+! grep -q 'Running post-activation runtime smoke test...' <<<"$tc60_apply_output" && [[ ! -e "$tc60_home/.config/artix-hypr-remix/migration-after-namespace.marker" && ! -e "$tc60_home/.config/artix-hypr-remix/doctor-after-namespace.marker" ]] && pass "runtime smoke migrations and doctor do not run after namespace fault" || fail "namespace fault reached a successor phase"
+tc60_state="$(find "$tc60_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"; tc60_txdir="$(dirname "$tc60_state")"; tc60_backup="$(awk -F= '$1 == "backup_path" { print substr($0, 13); exit }' "$tc60_state")"; tc60_manifest="$tc60_backup/manifest.txt"
+[[ -d "$tc60_backup" && -f "$tc60_manifest" ]] && pass "backup exists before injected namespace failure" || fail "namespace fault backup missing"
+grep -q '^phase=namespace_failed$' "$tc60_state" && grep -q '^completion=namespace_failed$' "$tc60_state" && pass "injected namespace uses namespace_failed state" || fail "namespace fault state was not namespace_failed"
+grep -q '^failure_reason=test_fault_forced_namespace_install_failure$' "$tc60_state" && pass "namespace fault reason is distinguishable" || fail "namespace fault reason missing"
+! grep -q '^completion=committed$' "$tc60_state" && pass "injected namespace transaction is not committed" || fail "namespace transaction was committed"
+tc60_txid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc60_state")"; tc60_bid="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc60_state")"; tc60_mtxid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); exit }' "$tc60_manifest")"; tc60_mbid="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc60_manifest")"
+[[ "$tc60_txid" == "$(basename "$tc60_txdir")" && "$tc60_bid" == "$(basename "$tc60_backup")" && "$tc60_txid" == "$tc60_mtxid" && "$tc60_bid" == "$tc60_mbid" ]] && pass "namespace fault preserves exact transaction and backup provenance" || fail "namespace fault provenance changed"
+[[ "$(json_get "$tc60_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]] && pass "activation completed before namespace fault" || fail "activation did not complete"
+tc60_tx_before_invalid="$(find "$tc60_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"; tc60_invalid_exit=0; tc60_invalid_output="$(AHR_TEST_FAIL_NAMESPACE_INSTALL=true run_ahr "$tc60_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc60_invalid_exit=$?; tc60_tx_after_invalid="$(find "$tc60_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+if (( tc60_invalid_exit != 0 )) && grep -q "Invalid AHR_TEST_FAIL_NAMESPACE_INSTALL value: expected exactly '1' when set" <<<"$tc60_invalid_output" && [[ "$tc60_tx_before_invalid" == "$tc60_tx_after_invalid" ]]; then pass "invalid namespace-fault value is rejected before mutation"; else fail "invalid namespace-fault value was not strictly rejected"; fi
+cp "$tc60_state" "$tc60_state.before-recover"; tc60_unrelated="$tc60_home/.local/state/artix-hypr-remix/framework-backups/unrelated-newer"; cp -a "$tc60_backup" "$tc60_unrelated"; sed -i 's/^backup_id=.*/backup_id=unrelated-newer/; s/^transaction_id=.*/transaction_id=tx-unrelated-newer/' "$tc60_unrelated/manifest.txt"; rm -rf "$tc60_unrelated/docs"
+tc60_recover_exit=0; tc60_recover_output="$(AHR_TEST_FAIL_NAMESPACE_INSTALL= run_ahr "$tc60_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc60_recover_exit=$?
+if (( tc60_recover_exit != 0 )) && grep -q 'Recovery does not erase this failure. Run: ahr update-framework --rollback' <<<"$tc60_recover_output" && cmp -s "$tc60_state.before-recover" "$tc60_state" && [[ "$(readlink "$tc60_local/ahr")" == "$tc60_home/.config/artix-hypr-remix/bin/ahr-update" ]]; then pass "recover preserves and directs injected namespace failure"; else fail "recover did not preserve namespace failure" "$tc60_recover_output"; fi
+tc60_rollback_exit=0; tc60_rollback_output="$(AHR_TEST_FAIL_NAMESPACE_INSTALL= run_ahr "$tc60_home" "$UPDATE_FRAMEWORK" --rollback 2>&1)" || tc60_rollback_exit=$?
+if (( tc60_rollback_exit == 0 )) && [[ "$(json_get "$tc60_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" ]] && [[ "$(readlink "$tc60_local/ahr")" == "$tc60_home/.config/artix-hypr-remix/bin/ahr" ]] && [[ "$(cat "$tc60_local/unrelated-regular")" == "unrelated regular data" && "$(readlink "$tc60_local/unrelated-symlink")" == "/usr/bin/true" ]]; then pass "exact rollback restores namespace target A over unrelated backup"; else fail "rollback did not restore exact namespace baseline" "$tc60_rollback_output"; fi
+grep -q '^phase=resolved_by_rollback$' "$tc60_state" && grep -q '^completion=resolved_by_rollback$' "$tc60_state" && grep -q "^transaction_id=$tc60_txid$" "$tc60_state" && grep -q "^backup_id=$tc60_bid$" "$tc60_state" && pass "namespace failure resolves with immutable provenance" || fail "namespace terminal provenance was not preserved"
+tc60_followup_exit=0; AHR_TEST_FAIL_NAMESPACE_INSTALL= run_ahr "$tc60_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc60_followup_exit=$?
+(( tc60_followup_exit == 0 )) && pass "later unset invocation does not inherit namespace fault" || fail "later unset invocation inherited namespace fault"
+
+echo ""
+echo ""
+echo "=== TC61: Controlled pre-activation backup fault ==="
+
+tc61_snapshot() {
+  local root="$1"
+  [[ -e "$root" || -L "$root" ]] || return 0
+  find "$root" -xdev -printf "%y %m %s %p -> %l\n" | sort
+  find "$root" -xdev -type f -print0 | sort -z | xargs -0 -r sha256sum
+}
+
+tc61_normal_home="$tmp_root/tc61_normal"
+tc61_normal_repo="$(create_test_repo "$tmp_root/tc61_normal_repo" "0.2.0")"
+setup_installed_framework "$tc61_normal_home" "file://$tc61_normal_repo"
+tc61_normal_exit=0
+AHR_TEST_FAIL_BACKUP= run_ahr "$tc61_normal_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc61_normal_exit=$?
+if (( tc61_normal_exit == 0 )) && [[ "$(json_get "$tc61_normal_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then pass "unset backup fault leaves successful apply unchanged"; else fail "unset backup fault changed normal apply behavior"; fi
+
+tc61_home="$tmp_root/tc61"
+tc61_repo="$(create_test_repo "$tmp_root/tc61_repo" "0.2.0")"
+setup_installed_framework "$tc61_home" "file://$tc61_repo"
+mkdir -p "$tc61_home/.local/bin"
+mkdir -p "$tc61_home/.local/state/artix-hypr-remix/framework-transactions" "$tc61_home/.local/state/artix-hypr-remix/framework-backups"
+printf "unrelated namespace entry\n" > "$tc61_home/.local/bin/unrelated"
+ln -s "$tc61_home/.config/artix-hypr-remix/bin/ahr-doctor" "$tc61_home/.local/bin/ahr"
+
+tc61_dry_tx_before="$(find "$tc61_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+tc61_dry_backup_before="$(find "$tc61_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+tc61_dry_exit=0
+tc61_dry_output="$(AHR_TEST_FAIL_BACKUP=1 run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc61_dry_exit=$?
+tc61_dry_tx_after="$(find "$tc61_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+tc61_dry_backup_after="$(find "$tc61_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+if (( tc61_dry_exit == 0 )) && ! grep -q "TEST FAULT: forcing backup failure" <<<"$tc61_dry_output" && [[ "$tc61_dry_tx_before" == "$tc61_dry_tx_after" && "$tc61_dry_backup_before" == "$tc61_dry_backup_after" ]]; then pass "backup hook does not enter backup lifecycle during dry-run"; else fail "backup hook affected dry-run"; fi
+
+tc61_invalid_exit=0
+tc61_invalid_output="$(AHR_TEST_FAIL_BACKUP=true run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc61_invalid_exit=$?
+if (( tc61_invalid_exit != 0 )) && grep -q "Invalid AHR_TEST_FAIL_BACKUP value: expected exactly 1 when set" <<<"${tc61_invalid_output//\'/}" && [[ "$tc61_dry_tx_after" == "$(find "$tc61_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)" && "$tc61_dry_backup_after" == "$(find "$tc61_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)" ]]; then pass "invalid backup-fault value is rejected before mutation"; else fail "invalid backup-fault value was not strictly rejected"; fi
+
+tc61_framework_before="$(tc61_snapshot "$tc61_home/.config/artix-hypr-remix")"
+tc61_namespace_before="$(tc61_snapshot "$tc61_home/.local/bin")"
+tc61_migrations_before="$(tc61_snapshot "$tc61_home/.local/state/artix-hypr-remix/migrations")"
+tc61_config_before="$(sha256sum "$tc61_home/.config/artix-hypr-remix/framework.json" | awk "{print \$1}")"
+tc61_apply_exit=0
+tc61_apply_output="$(AHR_TEST_FAIL_BACKUP=1 run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --apply 2>&1)" || tc61_apply_exit=$?
+(( tc61_apply_exit != 0 )) && pass "enabled backup fault exits nonzero" || fail "enabled backup fault exited zero"
+if grep -q "Cloning and pinning update source" <<<"$tc61_apply_output" && grep -q "Backing up to:" <<<"$tc61_apply_output" && grep -q "Snapshotting managed components" <<<"$tc61_apply_output" && grep -q "TEST FAULT: forcing backup failure" <<<"$tc61_apply_output"; then pass "staging validation backup and fault lifecycle reached"; else fail "backup fault did not reach required lifecycle boundary"; fi
+if ! grep -q "Activating framework" <<<"$tc61_apply_output" && ! grep -q "Running namespace installation" <<<"$tc61_apply_output" && ! grep -q "Running post-activation runtime smoke test" <<<"$tc61_apply_output" && ! grep -q "Running migrations" <<<"$tc61_apply_output" && ! grep -q "Running health check" <<<"$tc61_apply_output"; then pass "backup fault prevents every successor lifecycle phase"; else fail "backup fault reached activation or successor phase"; fi
+
+tc61_state="$(find "$tc61_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"
+tc61_txdir="$(dirname "$tc61_state")"
+tc61_backup="$(awk -F= '$1 == "backup_path" { print substr($0, 13); exit }' "$tc61_state")"
+tc61_manifest="$tc61_backup/manifest.txt"
+if [[ -f "$tc61_state" && -d "$tc61_backup" && -f "$tc61_manifest" && -f "$tc61_backup/component-manifest.txt" ]]; then pass "failed backup and transaction evidence are retained"; else fail "backup fault did not retain expected evidence"; fi
+tc61_txid="$(transaction_exact_field "$tc61_state" transaction_id 2>/dev/null || true)"
+ tc61_backup_id="$(transaction_exact_field "$tc61_state" backup_id 2>/dev/null || true)"
+ if [[ "$tc61_txid" == "$(basename "$tc61_txdir")" && "$tc61_backup_id" == "$(basename "$tc61_backup")" && "$(manifest_exact_field "$tc61_manifest" transaction_id 2>/dev/null || true)" == "$tc61_txid" && "$(manifest_exact_field "$tc61_manifest" backup_id 2>/dev/null || true)" == "$tc61_backup_id" ]]; then pass "failed backup retains exact transaction and backup identity"; else fail "failed backup identity is incomplete or ambiguous"; fi
+grep -q "^phase=snapshot_failed$" "$tc61_state" && grep -q "^completion=failed$" "$tc61_state" && grep -q "^failure_reason=test_fault_forced_backup_failure$" "$tc61_state" && pass "backup fault records existing snapshot failure state and reason" || fail "backup fault state or reason is wrong"
+! grep -q "^completed=true$" "$tc61_manifest" && grep -q "^completed=in_progress$" "$tc61_manifest" && pass "failed backup primary manifest remains incomplete" || fail "failed backup manifest completion is misleading"
+! grep -q "^activated_" "$tc61_state" && ! grep -q "^completion=committed$" "$tc61_state" && pass "backup failure transaction never activates or commits" || fail "backup failure transaction activated or committed"
+if [[ "$(tc61_snapshot "$tc61_home/.config/artix-hypr-remix")" == "$tc61_framework_before" && "$(tc61_snapshot "$tc61_home/.local/bin")" == "$tc61_namespace_before" && "$(tc61_snapshot "$tc61_home/.local/state/artix-hypr-remix/migrations")" == "$tc61_migrations_before" && "$(sha256sum "$tc61_home/.config/artix-hypr-remix/framework.json" | awk "{print \$1}")" == "$tc61_config_before" ]]; then pass "backup fault leaves framework namespace migration and managed config unchanged"; else fail "backup fault mutated installed state"; fi
+
+tc61_unrelated="$tc61_home/.local/state/artix-hypr-remix/framework-backups/unrelated-valid"
+cp -a "$tc61_backup" "$tc61_unrelated"
+sed -i "s/^completed=.*/completed=true/; s/^backup_id=.*/backup_id=unrelated-valid/; s/^transaction_id=.*/transaction_id=tx-unrelated-valid/" "$tc61_unrelated/manifest.txt"
+tc61_unrelated_before="$(sha256sum "$tc61_unrelated/manifest.txt" | awk "{print \$1}")"
+tc61_rollback_exit=0
+tc61_rollback_output="$(AHR_TEST_FAIL_BACKUP= run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --rollback 2>&1)" || tc61_rollback_exit=$?
+if (( tc61_rollback_exit != 0 )) && grep -q "Backup manifest incomplete" <<<"$tc61_rollback_output" && [[ "$(sha256sum "$tc61_unrelated/manifest.txt" | awk "{print \$1}")" == "$tc61_unrelated_before" ]]; then pass "rollback refuses exact incomplete backup without selecting unrelated valid backup"; else fail "rollback selected an unsafe backup source"; fi
+
+tc61_recover_exit=0
+tc61_recover_output="$(AHR_TEST_FAIL_BACKUP= run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc61_recover_exit=$?
+if (( tc61_recover_exit == 0 )) && grep -q "Transaction in phase .*snapshot_failed.* Attempting recovery..." <<<"$tc61_recover_output" && grep -q "^phase=recovered$" "$tc61_state" && grep -q "^completion=recovered$" "$tc61_state"; then pass "recover resolves pre-activation backup failure without rollback"; else fail "recover did not follow backup-failure contract"; fi
+if [[ "$(tc61_snapshot "$tc61_home/.config/artix-hypr-remix")" == "$tc61_framework_before" && "$(tc61_snapshot "$tc61_home/.local/bin")" == "$tc61_namespace_before" && "$(tc61_snapshot "$tc61_home/.local/state/artix-hypr-remix/migrations")" == "$tc61_migrations_before" ]]; then pass "recover preserves contained installed state"; else fail "recover changed contained installed state"; fi
+tc61_followup_exit=0
+AHR_TEST_FAIL_BACKUP= run_ahr "$tc61_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc61_followup_exit=$?
+(( tc61_followup_exit == 0 )) && pass "later unset invocation does not inherit backup fault" || fail "later unset invocation inherited backup fault"
+
+echo ""
+echo "=== TC62: Candidate-direct library bootstrap ==="
+
+tc62_run_direct() {
+  local home="$1"
+  shift
+  HOME="$home" XDG_STATE_HOME="$home/.local/state" XDG_CACHE_HOME="$home/.cache" AHR_FRAMEWORK_ROOT="$home/.config/artix-hypr-remix" bash "$UPDATE_FRAMEWORK" "$@"
+}
+
+tc62_installed_home="$tmp_root/tc62_installed"
+tc62_installed_repo="$(create_test_repo "$tmp_root/tc62_installed_repo" "0.2.0")"
+setup_installed_framework "$tc62_installed_home" "file://$tc62_installed_repo"
+cp "$UPDATE_FRAMEWORK" "$tc62_installed_home/.config/artix-hypr-remix/bin/ahr-update-framework"
+chmod +x "$tc62_installed_home/.config/artix-hypr-remix/bin/ahr-update-framework"
+tc62_installed_exit=0
+HOME="$tc62_installed_home" XDG_STATE_HOME="$tc62_installed_home/.local/state" XDG_CACHE_HOME="$tc62_installed_home/.cache" AHR_FRAMEWORK_ROOT="$tc62_installed_home/.config/artix-hypr-remix" bash "$tc62_installed_home/.config/artix-hypr-remix/bin/ahr-update-framework" --apply >/dev/null 2>&1 || tc62_installed_exit=$?
+if (( tc62_installed_exit == 0 )) && [[ "$(json_get "$tc62_installed_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]]; then pass "installed updater remains self-contained with matching installed library"; else fail "installed updater lost matching-library compatibility"; fi
+
+tc62_home="$tmp_root/tc62_candidate"
+tc62_repo="$(create_test_repo "$tmp_root/tc62_candidate_repo" "0.2.0")"
+setup_installed_framework "$tc62_home" "file://$tc62_repo"
+mkdir -p "$tc62_home/.local/state/artix-hypr-remix/framework-transactions" "$tc62_home/.local/state/artix-hypr-remix/framework-backups"
+sed -i "/^ahr_validate_backup_id()/,/^}/d" "$tc62_home/.config/artix-hypr-remix/bin/ahr-lib.sh"
+! grep -q "^ahr_validate_backup_id()" "$tc62_home/.config/artix-hypr-remix/bin/ahr-lib.sh" && pass "mixed-version fixture installed library lacks candidate helper" || fail "mixed-version fixture did not remove installed helper"
+tc62_candidate_exit=0
+tc62_candidate_output="$(AHR_TEST_FAIL_BACKUP=1 tc62_run_direct "$tc62_home" --apply 2>&1)" || tc62_candidate_exit=$?
+(( tc62_candidate_exit != 0 )) && pass "candidate-direct backup fault exits nonzero" || fail "candidate-direct backup fault exited zero"
+grep -q "TEST FAULT: forcing backup failure" <<<"$tc62_candidate_output" && pass "candidate-direct updater uses its matching library through snapshot fault" || fail "candidate-direct updater sourced old installed library"
+tc62_state="$(find "$tc62_home/.local/state/artix-hypr-remix/framework-transactions" -name state -type f -print -quit)"
+tc62_backup="$(grep "^backup_path=" "$tc62_state" | head -n1 | cut -d= -f2-)"
+tc62_manifest="$tc62_backup/manifest.txt"
+if grep -qx "phase=snapshot_failed" "$tc62_state" && grep -qx "completion=failed" "$tc62_state" && grep -qx "failure_reason=test_fault_forced_backup_failure" "$tc62_state" && [[ -f "$tc62_manifest" && -f "$tc62_backup/component-manifest.txt" ]] && grep -qx "completed=in_progress" "$tc62_manifest" && ! grep -qx "completed=true" "$tc62_manifest"; then pass "candidate-direct fault reaches retained TC61 snapshot failure evidence"; else fail "candidate-direct fault did not reach TC61 state"; fi
+if [[ "$(json_get "$tc62_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" ]] && ! grep -q "Activating framework" <<<"$tc62_candidate_output"; then pass "candidate-direct snapshot fault never activates installed framework"; else fail "candidate-direct snapshot fault activated framework"; fi
+
+tc62_residue_home="$tmp_root/tc62_residue"
+tc62_residue_repo="$(create_test_repo "$tmp_root/tc62_residue_repo" "0.2.0")"
+setup_installed_framework "$tc62_residue_home" "file://$tc62_residue_repo"
+mkdir -p "$tc62_residue_home/.local/state/artix-hypr-remix/framework-transactions" "$tc62_residue_home/.local/state/artix-hypr-remix/framework-backups"
+sed -i "/^ahr_validate_backup_id()/,/^}/d" "$tc62_residue_home/.config/artix-hypr-remix/bin/ahr-lib.sh"
+tc62_residue_exit=0
+tc62_residue_output="$(AHR_LIB_PATH="$tc62_residue_home/.config/artix-hypr-remix/bin/ahr-lib.sh" tc62_run_direct "$tc62_residue_home" --apply 2>&1)" || tc62_residue_exit=$?
+tc62_residue_tx="$(find "$tc62_residue_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc62_residue_backup="$(find "$tc62_residue_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+if (( tc62_residue_exit != 0 && tc62_residue_tx == 0 && tc62_residue_backup == 0 )) && grep -q "Required transaction helper missing from framework library" <<<"$tc62_residue_output"; then pass "incompatible explicit library fails before transaction and backup residue"; else fail "pre-initialization failure left residue or wrong error"; fi
+
+echo ""
+echo "=== TC63: Deterministic interruption pause boundaries ==="
+
+# The pause hooks are parsed before every mode, but dry-run never reaches a
+# pause boundary. Invalid input and mutually-exclusive hooks must fail before
+# creating fixture transaction or backup state.
+tc63_parse_home="$tmp_root/tc63_parse"
+tc63_parse_repo="$(create_current_tree_repo "$tmp_root/tc63_parse_repo" "0.2.0")"
+setup_installed_framework "$tc63_parse_home" "file://$tc63_parse_repo"
+mkdir -p "$tc63_parse_home/.local/state/artix-hypr-remix/framework-transactions" "$tc63_parse_home/.local/state/artix-hypr-remix/framework-backups"
+for tc63_hook in AHR_TEST_PAUSE_AFTER_BACKUP AHR_TEST_PAUSE_AFTER_ACTIVATION; do
+  tc63_before_tx="$(find "$tc63_parse_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  tc63_before_backup="$(find "$tc63_parse_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  tc63_invalid_exit=0
+  tc63_invalid_output="$(env "$tc63_hook=invalid" HOME="$tc63_parse_home" XDG_STATE_HOME="$tc63_parse_home/.local/state" XDG_CACHE_HOME="$tc63_parse_home/.cache" AHR_FRAMEWORK_ROOT="$tc63_parse_home/.config/artix-hypr-remix" AHR_LIB_PATH="$tc63_parse_home/.config/artix-hypr-remix/bin/ahr-lib.sh" bash "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc63_invalid_exit=$?
+  tc63_after_tx="$(find "$tc63_parse_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  tc63_after_backup="$(find "$tc63_parse_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  if (( tc63_invalid_exit != 0 )) && grep -q "Invalid $tc63_hook value: expected exactly '1' when set" <<<"$tc63_invalid_output" && [[ "$tc63_before_tx" == "$tc63_after_tx" && "$tc63_before_backup" == "$tc63_after_backup" ]]; then pass "$tc63_hook rejects invalid value before mutation"; else fail "$tc63_hook invalid value was not rejected safely"; fi
+done
+tc63_both_exit=0
+tc63_both_output="$(AHR_TEST_PAUSE_AFTER_BACKUP=1 AHR_TEST_PAUSE_AFTER_ACTIVATION=1 run_ahr "$tc63_parse_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc63_both_exit=$?
+if (( tc63_both_exit != 0 )) && grep -q 'cannot both be enabled' <<<"$tc63_both_output"; then pass "both pause hooks are rejected before operation"; else fail "both pause hooks were accepted"; fi
+for tc63_hook in AHR_TEST_PAUSE_AFTER_BACKUP AHR_TEST_PAUSE_AFTER_ACTIVATION; do
+  tc63_dry_exit=0
+  tc63_dry_output="$(env "$tc63_hook=1" HOME="$tc63_parse_home" XDG_STATE_HOME="$tc63_parse_home/.local/state" XDG_CACHE_HOME="$tc63_parse_home/.cache" AHR_FRAMEWORK_ROOT="$tc63_parse_home/.config/artix-hypr-remix" AHR_LIB_PATH="$tc63_parse_home/.config/artix-hypr-remix/bin/ahr-lib.sh" bash "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc63_dry_exit=$?
+  if (( tc63_dry_exit == 0 )) && ! grep -q 'TEST PAUSE:' <<<"$tc63_dry_output"; then pass "$tc63_hook is accepted but dry-run never pauses"; else fail "$tc63_hook dry-run paused or failed"; fi
+done
+
+# Launch with reset INT/TERM dispositions: non-interactive background shells
+# otherwise inherit ignored INT. The updater itself receives the real signal.
+tc63_launch_paused() {
+  local hook="$1" home="$2" log_file="$3"
+  env --default-signal=INT --default-signal=TERM --default-signal=HUP \
+    "$hook=1" HOME="$home" XDG_STATE_HOME="$home/.local/state" XDG_CACHE_HOME="$home/.cache" \
+    AHR_FRAMEWORK_ROOT="$home/.config/artix-hypr-remix" \
+    AHR_LIB_PATH="$home/.config/artix-hypr-remix/bin/ahr-lib.sh" \
+    bash "$UPDATE_FRAMEWORK" --apply >"$log_file" 2>&1 &
+  TC63_PAUSE_PID="$!"
+}
+
+tc63_wait_marker() {
+  local marker="$1" log_file="$2" pid="$3" attempt
+  for attempt in $(seq 1 200); do
+    grep -qx "$marker" "$log_file" 2>/dev/null && return 0
+    kill -0 "$pid" 2>/dev/null || return 1
+    sleep 0.05
+  done
+  return 1
+}
+
+tc63_make_unrelated_backup() {
+  local home="$1"
+  local backup="$home/.local/state/artix-hypr-remix/framework-backups/unrelated-valid"
+  mkdir -p "$backup"
+  printf 'manifest_version=1\ncompleted=true\nbackup_id=unrelated-valid\ntransaction_id=tx-unrelated-valid\n' > "$backup/manifest.txt"
+  sha256sum "$backup/manifest.txt" | awk '{print $1}'
+}
+
+# Pre-activation INT: a valid completed backup exists, but no archive or
+# replacement has begun. The existing handler leaves this recoverable state
+# intact; a fresh --recover finalizes it without changing installed content.
+tc63_pre_home="$tmp_root/tc63_pre"
+tc63_pre_repo="$(create_current_tree_repo "$tmp_root/tc63_pre_repo" "0.2.0")"
+setup_installed_framework "$tc63_pre_home" "file://$tc63_pre_repo"
+tc63_pre_framework_before="$(tc61_snapshot "$tc63_pre_home/.config/artix-hypr-remix")"
+tc63_pre_namespace_before="$(tc61_snapshot "$tc63_pre_home/.local/bin")"
+tc63_pre_migrations_before="$(tc61_snapshot "$tc63_pre_home/.local/state/artix-hypr-remix/migrations")"
+tc63_pre_unrelated_sum="$(tc63_make_unrelated_backup "$tc63_pre_home")"
+tc63_pre_log="$tmp_root/tc63-pre.log"
+tc63_launch_paused AHR_TEST_PAUSE_AFTER_BACKUP "$tc63_pre_home" "$tc63_pre_log"
+tc63_pre_pid="$TC63_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: after backup, before activation' "$tc63_pre_log" "$tc63_pre_pid"; then pass "pre-activation readiness marker is deterministic"; else fail "pre-activation readiness marker was not observed"; fi
+tc63_pre_state="$(find "$tc63_pre_home/.local/state/artix-hypr-remix/framework-transactions" -name state -print -quit)"
+tc63_pre_backup="$(transaction_exact_field "$tc63_pre_state" backup_path 2>/dev/null || true)"
+tc63_pre_manifest="$tc63_pre_backup/manifest.txt"
+if grep -qx 'phase=backup_in_progress' "$tc63_pre_state" && grep -qx 'completion=in_progress' "$tc63_pre_state" && grep -qx 'completed=true' "$tc63_pre_manifest" && ! grep -q '^activated_' "$tc63_pre_state"; then pass "pre-activation pause follows completed-backup existing state"; else fail "pre-activation pause state is not safely pre-activation"; fi
+kill -INT "$tc63_pre_pid" 2>/dev/null
+tc63_pre_int_exit=0; wait "$tc63_pre_pid" || tc63_pre_int_exit=$?
+if (( tc63_pre_int_exit != 0 )) && [[ "$(tc61_snapshot "$tc63_pre_home/.config/artix-hypr-remix")" == "$tc63_pre_framework_before" && "$(tc61_snapshot "$tc63_pre_home/.local/bin")" == "$tc63_pre_namespace_before" && "$(tc61_snapshot "$tc63_pre_home/.local/state/artix-hypr-remix/migrations")" == "$tc63_pre_migrations_before" ]]; then pass "real INT leaves pre-activation fixture unactivated"; else fail "pre-activation INT mutated fixture state"; fi
+tc63_pre_recover_exit=0; tc63_pre_recover_output="$(run_ahr "$tc63_pre_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc63_pre_recover_exit=$?
+if (( tc63_pre_recover_exit == 0 )) && grep -q 'Incomplete backup detected. No activation to reverse.' <<<"$tc63_pre_recover_output" && grep -qx 'phase=recovered' "$tc63_pre_state" && grep -qx 'completion=recovered' "$tc63_pre_state"; then pass "pre-activation INT follows existing recovery contract"; else fail "pre-activation INT recovery contract changed"; fi
+if [[ "$(transaction_exact_field "$tc63_pre_state" transaction_id 2>/dev/null || true)" == "$(manifest_exact_field "$tc63_pre_manifest" transaction_id 2>/dev/null || true)" && "$(sha256sum "$tc63_pre_home/.local/state/artix-hypr-remix/framework-backups/unrelated-valid/manifest.txt" | awk '{print $1}')" == "$tc63_pre_unrelated_sum" ]]; then pass "pre-activation recovery preserves exact backup provenance and unrelated backup"; else fail "pre-activation recovery selected an ambiguous backup"; fi
+
+# Post-activation TERM: the updater has changed the framework and metadata,
+# but has not begun namespace, migrations, or doctor. Signal handling restores
+# archives and atomically records the terminal recovered state.
+tc63_post_home="$tmp_root/tc63_post"
+tc63_post_repo="$(create_current_tree_repo "$tmp_root/tc63_post_repo" "0.2.0")"
+setup_installed_framework "$tc63_post_home" "file://$tc63_post_repo"
+cat > "$tc63_post_home/.config/artix-hypr-remix/bin/ahr-update-framework" <<'EOF'
+#!/usr/bin/env bash
+# Deliberately old recovery behavior: it would replay archives only for the
+# intermediate interrupted state and has no interrupted-state guard.
+if [[ "$1" == "--recover" ]]; then
+  state="$(find "${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix/framework-transactions" -name state -print -quit)"
+  if grep -qx 'phase=interrupted' "$state"; then
+    rm -rf "$AHR_FRAMEWORK_ROOT"/{bin,migrations,docs,hooks,first-run.d,default,framework.json}
+    echo "old updater replayed interrupted archives"
+  fi
+fi
+exit 0
+EOF
+chmod +x "$tc63_post_home/.config/artix-hypr-remix/bin/ahr-update-framework"
+cat > "$tc63_post_repo/artix-hypr-remix/config/artix-hypr-remix/bin/namespace-install.sh" <<'EOF'
+#!/usr/bin/env bash
+touch "$HOME/namespace-ran"
+EOF
+chmod +x "$tc63_post_repo/artix-hypr-remix/config/artix-hypr-remix/bin/namespace-install.sh"
+(cd "$tc63_post_repo" && git add -A && git commit -q -m 'post-pause fixture' >/dev/null)
+tc63_post_framework_before="$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")"
+tc63_post_namespace_before="$(tc61_snapshot "$tc63_post_home/.local/bin")"
+tc63_post_migrations_before="$(tc61_snapshot "$tc63_post_home/.local/state/artix-hypr-remix/migrations")"
+tc63_post_log="$tmp_root/tc63-post.log"
+tc63_launch_paused AHR_TEST_PAUSE_AFTER_ACTIVATION "$tc63_post_home" "$tc63_post_log"
+tc63_post_pid="$TC63_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: after activation, before namespace installation' "$tc63_post_log" "$tc63_post_pid"; then pass "post-activation readiness marker is deterministic"; else fail "post-activation readiness marker was not observed"; fi
+tc63_post_state="$(find "$tc63_post_home/.local/state/artix-hypr-remix/framework-transactions" -name state -print -quit)"
+tc63_post_backup="$(transaction_exact_field "$tc63_post_state" backup_path 2>/dev/null || true)"
+tc63_post_manifest="$tc63_post_backup/manifest.txt"
+if grep -qx 'phase=activation_in_progress' "$tc63_post_state" && [[ "$(json_get "$tc63_post_home/.config/artix-hypr-remix/framework.json" version)" == 0.2.0 ]] && [[ ! -e "$tc63_post_home/namespace-ran" ]] && [[ "$(tc61_snapshot "$tc63_post_home/.local/state/artix-hypr-remix/migrations")" == "$tc63_post_migrations_before" ]]; then pass "post-activation pause precedes namespace and successors"; else fail "post-activation pause boundary is incorrect"; fi
+kill -TERM "$tc63_post_pid" 2>/dev/null
+tc63_post_term_exit=0; wait "$tc63_post_pid" || tc63_post_term_exit=$?
+tc63_post_tx_count="$(find "$tc63_post_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+tc63_post_backup_count="$(find "$tc63_post_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+if (( tc63_post_term_exit != 0 )) && grep -qx 'phase=recovered' "$tc63_post_state" && grep -qx 'completion=recovered' "$tc63_post_state" && [[ "$(transaction_exact_field "$tc63_post_state" transaction_id 2>/dev/null || true)" == "$(manifest_exact_field "$tc63_post_manifest" transaction_id 2>/dev/null || true)" && "$(transaction_exact_field "$tc63_post_state" backup_id 2>/dev/null || true)" == "$(manifest_exact_field "$tc63_post_manifest" backup_id 2>/dev/null || true)" && "$(transaction_exact_field "$tc63_post_state" backup_path 2>/dev/null || true)" == "$tc63_post_backup" && "$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")" == "$tc63_post_framework_before" && "$(tc61_snapshot "$tc63_post_home/.local/bin")" == "$tc63_post_namespace_before" ]]; then pass "real TERM atomically restores and finalizes exact provenance"; else fail "post-activation TERM did not finalize restored transaction"; fi
+tc63_post_status_exit=0; run_ahr "$tc63_post_home" "$UPDATE_FRAMEWORK" --status >/dev/null 2>&1 || tc63_post_status_exit=$?
+if (( tc63_post_status_exit == 0 )) && [[ "$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")" == "$tc63_post_framework_before" ]]; then pass "post-activation TERM status read is non-mutating"; else fail "post-activation TERM status read mutated baseline"; fi
+tc63_post_old_recover_exit=0; tc63_post_old_recover_output="$(run_ahr "$tc63_post_home" "$tc63_post_home/.config/artix-hypr-remix/bin/ahr-update-framework" --recover 2>&1)" || tc63_post_old_recover_exit=$?
+if (( tc63_post_old_recover_exit == 0 )) && ! grep -q 'replayed interrupted archives' <<<"$tc63_post_old_recover_output" && [[ "$(tc61_snapshot "$tc63_post_home/.config/artix-hypr-remix")" == "$tc63_post_framework_before" && "$(tc61_snapshot "$tc63_post_home/.local/bin")" == "$tc63_post_namespace_before" && "$(find "$tc63_post_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d | wc -l)" == "$tc63_post_tx_count" && "$(find "$tc63_post_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)" == "$tc63_post_backup_count" ]]; then pass "restored older updater cannot replay finalized TERM recovery"; else fail "restored older updater replayed or mutated finalized recovery"; fi
+
+# Post-activation INT shares the TERM handler and must finalize immediately.
+tc63_int_home="$tmp_root/tc63_int"
+tc63_int_repo="$(create_current_tree_repo "$tmp_root/tc63_int_repo" "0.2.0")"
+setup_installed_framework "$tc63_int_home" "file://$tc63_int_repo"
+tc63_int_framework_before="$(tc61_snapshot "$tc63_int_home/.config/artix-hypr-remix")"
+tc63_int_log="$tmp_root/tc63-int.log"
+tc63_launch_paused AHR_TEST_PAUSE_AFTER_ACTIVATION "$tc63_int_home" "$tc63_int_log"
+tc63_int_pid="$TC63_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: after activation, before namespace installation' "$tc63_int_log" "$tc63_int_pid"; then pass "post-activation INT reaches shared pause boundary"; else fail "post-activation INT did not reach pause boundary"; fi
+tc63_int_state="$(find "$tc63_int_home/.local/state/artix-hypr-remix/framework-transactions" -name state -print -quit)"
+kill -INT "$tc63_int_pid" 2>/dev/null
+tc63_int_exit=0; wait "$tc63_int_pid" || tc63_int_exit=$?
+if (( tc63_int_exit != 0 )) && grep -qx 'phase=recovered' "$tc63_int_state" && grep -qx 'completion=recovered' "$tc63_int_state" && [[ "$(tc61_snapshot "$tc63_int_home/.config/artix-hypr-remix")" == "$tc63_int_framework_before" ]]; then pass "post-activation INT shares terminal recovered restoration"; else fail "post-activation INT did not finalize restored transaction"; fi
+
+# SIGKILL bypasses every shell trap. A fresh updater must detect the persisted
+# in-progress transaction and recover using its recorded archive association.
+tc63_kill_home="$tmp_root/tc63_kill"
+tc63_kill_repo="$(create_current_tree_repo "$tmp_root/tc63_kill_repo" "0.2.0")"
+setup_installed_framework "$tc63_kill_home" "file://$tc63_kill_repo"
+tc63_kill_framework_before="$(tc61_snapshot "$tc63_kill_home/.config/artix-hypr-remix")"
+tc63_kill_unrelated_sum="$(tc63_make_unrelated_backup "$tc63_kill_home")"
+tc63_kill_log="$tmp_root/tc63-kill.log"
+tc63_launch_paused AHR_TEST_PAUSE_AFTER_ACTIVATION "$tc63_kill_home" "$tc63_kill_log"
+tc63_kill_pid="$TC63_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: after activation, before namespace installation' "$tc63_kill_log" "$tc63_kill_pid"; then pass "SIGKILL fixture reaches post-activation boundary"; else fail "SIGKILL fixture did not reach pause boundary"; fi
+tc63_kill_state="$(find "$tc63_kill_home/.local/state/artix-hypr-remix/framework-transactions" -name state -print -quit)"
+tc63_kill_backup="$(transaction_exact_field "$tc63_kill_state" backup_path 2>/dev/null || true)"
+tc63_kill_manifest="$tc63_kill_backup/manifest.txt"
+kill -KILL "$tc63_kill_pid" 2>/dev/null
+tc63_kill_exit=0; wait "$tc63_kill_pid" || tc63_kill_exit=$?
+if (( tc63_kill_exit != 0 )) && grep -qx 'phase=activation_in_progress' "$tc63_kill_state" && grep -qx 'completion=in_progress' "$tc63_kill_state" && [[ "$(json_get "$tc63_kill_home/.config/artix-hypr-remix/framework.json" version)" == 0.2.0 ]]; then pass "SIGKILL bypasses cleanup and leaves persisted active transaction"; else fail "SIGKILL unexpectedly ran cleanup"; fi
+tc63_kill_apply_exit=0; tc63_kill_apply_output="$(run_ahr "$tc63_kill_home" "$UPDATE_FRAMEWORK" --apply 2>&1)" || tc63_kill_apply_exit=$?
+if (( tc63_kill_apply_exit != 0 )) && grep -q 'Incomplete transaction detected' <<<"$tc63_kill_apply_output"; then pass "fresh process detects abandoned transaction without newest fallback"; else fail "fresh process did not detect abandoned transaction"; fi
+tc63_kill_recover_exit=0; tc63_kill_recover_output="$(run_ahr "$tc63_kill_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc63_kill_recover_exit=$?
+if (( tc63_kill_recover_exit == 0 )) && grep -q "Recovering transaction: $(dirname "$tc63_kill_state")" <<<"$tc63_kill_recover_output" && grep -qx 'phase=recovered' "$tc63_kill_state" && grep -qx 'completion=recovered' "$tc63_kill_state" && [[ "$(tc61_snapshot "$tc63_kill_home/.config/artix-hypr-remix")" == "$tc63_kill_framework_before" ]]; then pass "fresh recovery restores SIGKILL fixture baseline"; else fail "fresh SIGKILL recovery did not restore baseline"; fi
+if [[ "$(transaction_exact_field "$tc63_kill_state" transaction_id 2>/dev/null || true)" == "$(manifest_exact_field "$tc63_kill_manifest" transaction_id 2>/dev/null || true)" && "$(sha256sum "$tc63_kill_home/.local/state/artix-hypr-remix/framework-backups/unrelated-valid/manifest.txt" | awk '{print $1}')" == "$tc63_kill_unrelated_sum" ]]; then pass "SIGKILL recovery retains exact association and ignores unrelated backup"; else fail "SIGKILL recovery association was ambiguous"; fi
+
+tc63_unset_exit=0
+tc63_unset_output="$(AHR_TEST_PAUSE_AFTER_BACKUP= AHR_TEST_PAUSE_AFTER_ACTIVATION= run_ahr "$tc63_kill_home" "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc63_unset_exit=$?
+if (( tc63_unset_exit == 0 )) && ! grep -q 'TEST PAUSE:' <<<"$tc63_unset_output"; then pass "pause hooks do not persist into later unset process"; else fail "unset pause process did not complete normally"; fi
+
+echo ""
+echo "=== TC64: Restore-complete SIGKILL continuation ==="
+
+tc64_state_for_action() {
+  local home="$1" action="$2" state
+  for state in "$home/.local/state/artix-hypr-remix/framework-transactions"/*/state; do
+    [[ -f "$state" ]] || continue
+    grep -qx "action=$action" "$state" && { printf '%s\n' "$state"; return 0; }
+  done
+  return 1
+}
+
+tc64_launch_pause() {
+  local hook="$1" home="$2" log_file="$3" mode="$4"
+  env --default-signal=INT --default-signal=TERM --default-signal=HUP \
+    "$hook=1" HOME="$home" XDG_STATE_HOME="$home/.local/state" XDG_CACHE_HOME="$home/.cache" \
+    AHR_FRAMEWORK_ROOT="$home/.config/artix-hypr-remix" \
+    AHR_LIB_PATH="$home/.config/artix-hypr-remix/bin/ahr-lib.sh" \
+    bash "$UPDATE_FRAMEWORK" "$mode" >"$log_file" 2>&1 &
+  TC64_PAUSE_PID="$!"
+}
+
+# Invalid restore-complete hooks are parsed before every operation allocates or
+# mutates framework state.
+tc64_parse_home="$tmp_root/tc64_parse"
+tc64_parse_repo="$(create_current_tree_repo "$tmp_root/tc64_parse_repo" "0.2.0")"
+setup_installed_framework "$tc64_parse_home" "file://$tc64_parse_repo"
+mkdir -p "$tc64_parse_home/.local/state/artix-hypr-remix/framework-transactions"
+for tc64_hook in AHR_TEST_PAUSE_RECOVER_AFTER_RESTORE AHR_TEST_PAUSE_ROLLBACK_AFTER_RESTORE; do
+  tc64_before_tx="$(find "$tc64_parse_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  tc64_invalid_exit=0
+  tc64_invalid_output="$(env "$tc64_hook=x" HOME="$tc64_parse_home" XDG_STATE_HOME="$tc64_parse_home/.local/state" XDG_CACHE_HOME="$tc64_parse_home/.cache" AHR_FRAMEWORK_ROOT="$tc64_parse_home/.config/artix-hypr-remix" AHR_LIB_PATH="$tc64_parse_home/.config/artix-hypr-remix/bin/ahr-lib.sh" bash "$UPDATE_FRAMEWORK" --dry-run 2>&1)" || tc64_invalid_exit=$?
+  tc64_after_tx="$(find "$tc64_parse_home/.local/state/artix-hypr-remix/framework-transactions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  if (( tc64_invalid_exit != 0 )) && grep -q "Invalid $tc64_hook value: expected exactly '1' when set" <<<"$tc64_invalid_output" && [[ "$tc64_before_tx" == "$tc64_after_tx" ]]; then pass "$tc64_hook rejects invalid value before operation"; else fail "$tc64_hook invalid value was not rejected safely"; fi
+done
+
+# A. SIGKILL after recovery has restored transaction archives must leave an
+# authoritative checkpoint. A sentinel added after that checkpoint proves the
+# fresh process did not replay archive restoration (which would delete it).
+tc64_recover_home="$tmp_root/tc64_recover"
+tc64_recover_repo="$(create_current_tree_repo "$tmp_root/tc64_recover_repo" "0.2.0")"
+setup_installed_framework "$tc64_recover_home" "file://$tc64_recover_repo"
+tc64_recover_before="$(tc61_snapshot "$tc64_recover_home/.config/artix-hypr-remix")"
+tc64_recover_apply_log="$tmp_root/tc64-recover-apply.log"
+tc63_launch_paused AHR_TEST_PAUSE_AFTER_ACTIVATION "$tc64_recover_home" "$tc64_recover_apply_log"
+tc64_recover_apply_pid="$TC63_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: after activation, before namespace installation' "$tc64_recover_apply_log" "$tc64_recover_apply_pid"; then pass "recovery SIGKILL fixture reaches active transaction"; else fail "recovery SIGKILL fixture did not reach active transaction"; fi
+kill -KILL "$tc64_recover_apply_pid" 2>/dev/null
+wait "$tc64_recover_apply_pid" 2>/dev/null || true
+tc64_recover_state="$(tc64_state_for_action "$tc64_recover_home" apply)"
+tc64_recover_log="$tmp_root/tc64-recover.log"
+tc64_launch_pause AHR_TEST_PAUSE_RECOVER_AFTER_RESTORE "$tc64_recover_home" "$tc64_recover_log" --recover
+tc64_recover_pid="$TC64_PAUSE_PID"
+if tc63_wait_marker 'TEST PAUSE: recovery restore complete, before finalization' "$tc64_recover_log" "$tc64_recover_pid" && grep -qx 'phase=recovery_restore_completed' "$tc64_recover_state" && grep -qx 'completion=in_progress' "$tc64_recover_state" && grep -qx 'restore_completed=true' "$tc64_recover_state"; then pass "recovery writes durable restore-complete checkpoint"; else fail "recovery restore-complete checkpoint was not durable"; fi
+printf 'keep-after-recovery-checkpoint\n' > "$tc64_recover_home/.config/artix-hypr-remix/bin/tc64-recovery-sentinel"
+kill -KILL "$tc64_recover_pid" 2>/dev/null
+wait "$tc64_recover_pid" 2>/dev/null || true
+tc64_recover_resume_exit=0; tc64_recover_resume_output="$(run_ahr "$tc64_recover_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc64_recover_resume_exit=$?
+if (( tc64_recover_resume_exit == 0 )) && grep -qx 'phase=recovered' "$tc64_recover_state" && grep -qx 'completion=recovered' "$tc64_recover_state" && [[ -f "$tc64_recover_home/.config/artix-hypr-remix/bin/tc64-recovery-sentinel" && "$(tc61_snapshot "$tc64_recover_home/.config/artix-hypr-remix")" != "$tc64_recover_before" ]] && grep -q 'finalizing only' <<<"$tc64_recover_resume_output" && ! grep -q 'Restoring from transaction archives' <<<"$tc64_recover_resume_output"; then pass "fresh recovery finalizes checkpoint without replaying archives"; else fail "fresh recovery replayed archives or did not finalize" "$tc64_recover_resume_output"; fi
+
+# B. Rollback has the same checkpoint, with an immutable link to the failed
+# apply. The resumed rollback must resolve both records without restoring again.
+tc64_rollback_home="$tmp_root/tc64_rollback"
+tc64_rollback_repo="$(create_current_tree_repo "$tmp_root/tc64_rollback_repo" "0.2.0")"
+setup_installed_framework "$tc64_rollback_home" "file://$tc64_rollback_repo"
+tc64_failed_apply_exit=0; AHR_TEST_FAIL_NAMESPACE_INSTALL=1 run_ahr "$tc64_rollback_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc64_failed_apply_exit=$?
+tc64_rollback_apply_state="$(tc64_state_for_action "$tc64_rollback_home" apply)"
+tc64_rollback_log="$tmp_root/tc64-rollback.log"
+tc64_launch_pause AHR_TEST_PAUSE_ROLLBACK_AFTER_RESTORE "$tc64_rollback_home" "$tc64_rollback_log" --rollback
+tc64_rollback_pid="$TC64_PAUSE_PID"
+tc64_rollback_state=""
+for tc64_attempt in $(seq 1 200); do
+  tc64_rollback_state="$(tc64_state_for_action "$tc64_rollback_home" rollback 2>/dev/null || true)"
+  [[ -n "$tc64_rollback_state" ]] && break
+  sleep 0.05
+done
+if (( tc64_failed_apply_exit != 0 )) && tc63_wait_marker 'TEST PAUSE: rollback restore complete, before finalization' "$tc64_rollback_log" "$tc64_rollback_pid" && grep -qx 'phase=rollback_restore_completed' "$tc64_rollback_state" && grep -qx 'completion=in_progress' "$tc64_rollback_state" && grep -qx 'restore_completed=true' "$tc64_rollback_state"; then pass "rollback writes durable restore-complete checkpoint"; else fail "rollback restore-complete checkpoint was not durable"; fi
+printf 'keep-after-rollback-checkpoint\n' > "$tc64_rollback_home/.config/artix-hypr-remix/bin/tc64-rollback-sentinel"
+kill -KILL "$tc64_rollback_pid" 2>/dev/null
+wait "$tc64_rollback_pid" 2>/dev/null || true
+tc64_rollback_resume_exit=0; tc64_rollback_resume_output="$(run_ahr "$tc64_rollback_home" "$UPDATE_FRAMEWORK" --rollback 2>&1)" || tc64_rollback_resume_exit=$?
+if (( tc64_rollback_resume_exit == 0 )) && grep -qx 'phase=rolled_back' "$tc64_rollback_state" && grep -qx 'completion=rolled_back' "$tc64_rollback_state" && grep -qx 'phase=resolved_by_rollback' "$tc64_rollback_apply_state" && grep -qx 'completion=resolved_by_rollback' "$tc64_rollback_apply_state" && [[ -f "$tc64_rollback_home/.config/artix-hypr-remix/bin/tc64-rollback-sentinel" ]] && grep -q 'No archive restoration was replayed' <<<"$tc64_rollback_resume_output"; then pass "fresh rollback finalizes linked transactions without replaying restore"; else fail "fresh rollback replayed restore or missed terminal state" "$tc64_rollback_resume_output"; fi
+
+# C. A corrupted rollback link must fail before filesystem mutation, including
+# any archive replay or unrelated-backup selection.
+tc64_bad_home="$tmp_root/tc64_bad_link"
+tc64_bad_repo="$(create_current_tree_repo "$tmp_root/tc64_bad_repo" "0.2.0")"
+setup_installed_framework "$tc64_bad_home" "file://$tc64_bad_repo"
+AHR_TEST_FAIL_NAMESPACE_INSTALL=1 run_ahr "$tc64_bad_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || true
+tc64_bad_log="$tmp_root/tc64-bad-link.log"
+tc64_launch_pause AHR_TEST_PAUSE_ROLLBACK_AFTER_RESTORE "$tc64_bad_home" "$tc64_bad_log" --rollback
+tc64_bad_pid="$TC64_PAUSE_PID"
+tc64_bad_state=""
+for tc64_attempt in $(seq 1 200); do
+  tc64_bad_state="$(tc64_state_for_action "$tc64_bad_home" rollback 2>/dev/null || true)"
+  [[ -n "$tc64_bad_state" ]] && break
+  sleep 0.05
+done
+tc63_wait_marker 'TEST PAUSE: rollback restore complete, before finalization' "$tc64_bad_log" "$tc64_bad_pid" || true
+printf 'keep-after-malformed-link\n' > "$tc64_bad_home/.config/artix-hypr-remix/bin/tc64-bad-link-sentinel"
+tc64_bad_unrelated_sum="$(tc63_make_unrelated_backup "$tc64_bad_home")"
+sed -i 's/^resolved_apply_txid=.*/resolved_apply_txid=tx-missing-linked-apply/' "$tc64_bad_state"
+kill -KILL "$tc64_bad_pid" 2>/dev/null
+wait "$tc64_bad_pid" 2>/dev/null || true
+tc64_bad_exit=0; tc64_bad_output="$(run_ahr "$tc64_bad_home" "$UPDATE_FRAMEWORK" --rollback 2>&1)" || tc64_bad_exit=$?
+if (( tc64_bad_exit != 0 )) && grep -qx 'phase=rollback_restore_completed' "$tc64_bad_state" && [[ -f "$tc64_bad_home/.config/artix-hypr-remix/bin/tc64-bad-link-sentinel" && "$(sha256sum "$tc64_bad_home/.local/state/artix-hypr-remix/framework-backups/unrelated-valid/manifest.txt" | awk '{print $1}')" == "$tc64_bad_unrelated_sum" ]] && grep -q 'Rollback restore-complete checkpoint validation failed' <<<"$tc64_bad_output"; then pass "malformed rollback link is rejected before any replay or unrelated backup mutation"; else fail "malformed rollback link was not rejected safely" "$tc64_bad_output"; fi
+
+# D. Pre-checkpoint transaction records remain compatible with ordinary
+# recovery. No restore_completed field is required for those legacy states.
+tc64_legacy_home="$tmp_root/tc64_legacy"
+tc64_legacy_repo="$(create_current_tree_repo "$tmp_root/tc64_legacy_repo" "0.2.0")"
+setup_installed_framework "$tc64_legacy_home" "file://$tc64_legacy_repo"
+tc64_legacy_tx="$tc64_legacy_home/.local/state/artix-hypr-remix/framework-transactions/tx-legacy-restore"
+mkdir -p "$tc64_legacy_tx"
+printf 'format_version=1\ntxid=tx-legacy-restore\naction=apply\npid=1\ntarget_version=0.2.0\nstaging_commit=legacy\nbackup_dir=%s\nphase=activation_in_progress\ncompletion=in_progress\n' "$tc64_legacy_home/.local/state/artix-hypr-remix/framework-backups/legacy" > "$tc64_legacy_tx/state"
+tc64_legacy_exit=0; tc64_legacy_output="$(run_ahr "$tc64_legacy_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc64_legacy_exit=$?
+if (( tc64_legacy_exit == 0 )) && grep -qx 'phase=recovered' "$tc64_legacy_tx/state" && grep -qx 'completion=recovered' "$tc64_legacy_tx/state"; then pass "legacy pre-checkpoint transaction recovers normally"; else fail "legacy transaction did not retain normal recovery compatibility" "$tc64_legacy_output"; fi
+
 echo "========================================"
 echo "  Results: $PASS passed, $FAIL failed"
 echo "========================================"
