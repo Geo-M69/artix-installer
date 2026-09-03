@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# ahr-onlyoffice — opt-in OnlyOffice Flatpak profile for AHR (Phase 2).
+#
+# This is a SUPPORTED, OPT-IN office profile. It is NOT installed by the
+# default AHR install, is not used by first-login paths, recovery paths, or
+# framework update requirements. Users opt in explicitly via this command.
+#
+# Safety:
+#   - Removal never deletes user documents.
+#   - Removal never silently deletes application data; app data is kept
+#     unless the operator passes --purge, which is explicit and described.
+set -euo pipefail
+
+APP_ID="org.onlyoffice.desktopeditors"
+REMOTE="flathub"
+SCOPE="--system"
+
+DOCUMENT_MIMES=(
+  application/msword
+  application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  application/vnd.ms-excel
+  application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+  application/vnd.ms-powerpoint
+  application/vnd.openxmlformats-officedocument.presentationml.presentation
+  application/vnd.oasis.opendocument.text
+  application/vnd.oasis.opendocument.spreadsheet
+  application/vnd.oasis.opendocument.presentation
+  application/pdf
+)
+
+require_flatpak() {
+  command -v flatpak >/dev/null 2>&1 || {
+    echo "ERROR: flatpak is required for the OnlyOffice profile." >&2
+    exit 1
+  }
+}
+
+ahr_onlyoffice_installed() {
+  flatpak info "$SCOPE" "$APP_ID" >/dev/null 2>&1
+}
+
+cmd_install() {
+  require_flatpak
+  if ahr_onlyoffice_installed; then
+    echo "OnlyOffice ($APP_ID) is already installed."
+    return 0
+  fi
+  if ! flatpak remotes "$SCOPE" --columns=name 2>/dev/null | grep -Fxq "$REMOTE"; then
+    echo "Adding Flathub remote ($SCOPE)…"
+    flatpak remote-add --if-not-exists "$SCOPE" "$REMOTE" https://dl.flathub.org/repo/flathub.flatpakrepo
+  fi
+  echo "Installing OnlyOffice ($APP_ID) from $REMOTE…"
+  flatpak install "$SCOPE" --noninteractive "$REMOTE" "$APP_ID"
+  echo "OnlyOffice installed. Document MIME types handled: ${DOCUMENT_MIMES[*]}"
+  echo "Run 'ahr onlyoffice launch' to open it, or open a document from the file manager."
+}
+
+cmd_launch() {
+  require_flatpak
+  if ! ahr_onlyoffice_installed; then
+    echo "OnlyOffice is not installed. Run 'ahr onlyoffice install' first." >&2
+    exit 1
+  fi
+  local desktop_entry="$HOME/.local/share/flatpak/exports/share/applications/$APP_ID.desktop"
+  [[ -f "$desktop_entry" ]] || desktop_entry="/var/lib/flatpak/exports/share/applications/$APP_ID.desktop"
+  if [[ ! -f "$desktop_entry" ]]; then
+    echo "WARN: OnlyOffice desktop entry not found at $desktop_entry (launch validation incomplete)." >&2
+  else
+    echo "OK: OnlyOffice desktop entry present: $desktop_entry"
+  fi
+  if (($# > 0)); then
+    local file="$1"
+    [[ -f "$file" ]] || { echo "ERROR: file not found: $file" >&2; exit 1; }
+    echo "Launching OnlyOffice with: $file"
+    flatpak run "$APP_ID" "$(realpath "$file")"
+  else
+    echo "Launching OnlyOffice…"
+    flatpak run "$APP_ID"
+  fi
+}
+
+cmd_status() {
+  require_flatpak
+  if ahr_onlyoffice_installed; then
+    echo "OnlyOffice ($APP_ID): installed"
+    echo "Document MIME types handled:"
+    printf '  - %s\n' "${DOCUMENT_MIMES[@]}"
+  else
+    echo "OnlyOffice ($APP_ID): not installed (opt-in)"
+  fi
+}
+
+cmd_mimes() {
+  printf '%s\n' "${DOCUMENT_MIMES[@]}"
+}
+
+cmd_remove() {
+  require_flatpak
+  local purge=false
+  for arg in "$@"; do
+    case "$arg" in
+      --purge) purge=true ;;
+      -h|--help) echo "Usage: ahr onlyoffice remove [--purge]"; return 0 ;;
+      *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+    esac
+  done
+
+  if ! ahr_onlyoffice_installed; then
+    echo "OnlyOffice ($APP_ID) is not installed; nothing to remove."
+    return 0
+  fi
+
+  echo "OnlyOffice removal plan:"
+  echo "  - Application: $APP_ID (Flatpak app code) WILL be uninstalled."
+  echo "  - User documents: PRESERVED (e.g. ~/Documents is never touched)."
+  if $purge; then
+    echo "  - Application data: WILL be deleted from ~/.var/app/$APP_ID (explicit --purge)."
+    echo "    This includes OnlyOffice settings and locally cached files, but NOT your documents."
+  else
+    echo "  - Application data: PRESERVED at ~/.var/app/$APP_ID (pass --purge to also delete it)."
+  fi
+
+  flatpak uninstall "$SCOPE" --noninteractive "$APP_ID"
+  echo "OnlyOffice application removed."
+
+  if $purge; then
+    local data_dir="$HOME/.var/app/$APP_ID"
+    if [[ -d "$data_dir" ]]; then
+      echo "Deleting application data: $data_dir"
+      rm -rf "$data_dir"
+    fi
+    echo "OnlyOffice application data removed (user documents were not touched)."
+  else
+    echo "Done. User documents and application data were preserved."
+  fi
+}
+
+usage() {
+  cat <<'EOF'
+Usage: ahr onlyoffice <command>
+
+Opt-in OnlyOffice Flatpak profile (not part of the default install).
+
+Commands:
+  install     Install OnlyOffice from Flathub (system scope).
+  launch      Validate the desktop entry and launch OnlyOffice (optionally with a file).
+  status      Show install state and the document MIME types handled.
+  mimes       Print the document MIME types OnlyOffice handles.
+  remove      Uninstall OnlyOffice; preserves user documents and (by default) app data.
+              Pass --purge to also delete application data at ~/.var/app/<id>.
+
+Removal never deletes user documents.
+EOF
+}
+
+if (($# == 0)); then
+  usage
+  exit 1
+fi
+
+case "$1" in
+  install) shift; cmd_install "$@" ;;
+  launch) shift; cmd_launch "$@" ;;
+  status) cmd_status ;;
+  mimes) cmd_mimes ;;
+  remove) shift; cmd_remove "$@" ;;
+  -h|--help) usage; exit 0 ;;
+  *) echo "Unknown command: $1" >&2; usage >&2; exit 1 ;;
+esac

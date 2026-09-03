@@ -506,6 +506,97 @@ check_framework_runtime_commands() {
   fi
 }
 
+check_default_app_matrix() {
+  local matrix_lib mime handler found path category
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  matrix_lib="$script_dir/../config/artix-hypr-remix/bin/ahr-default-apps-matrix.sh"
+
+  echo "[7d/9] Validating default application MIME matrix"
+
+  if [[ "$user_context_ready" != "true" ]]; then
+    warn_msg "cannot validate default-app matrix: target user context unavailable"
+    return
+  fi
+
+  if [[ ! -f "$matrix_lib" ]]; then
+    warn_msg "matrix library missing: $matrix_lib"
+    return
+  fi
+
+  # shellcheck source=/dev/null
+  source "$matrix_lib"
+
+  while IFS= read -r mime; do
+    [[ -n "$mime" ]] || continue
+    category="$(ahr_matrix_category_for_mime "$mime")"
+    handler="$(run_as_target_user xdg-mime query default "$mime" 2>/dev/null || true)"
+    handler="${handler#"${handler%%[![:space:]]*}"}"
+    handler="${handler%"${handler##*[![:space:]]}"}"
+
+    if [[ -z "$handler" ]]; then
+      warn_msg "no default handler configured for $mime (category: $category)"
+      continue
+    fi
+
+    found=false
+    for path in \
+      "$target_home/.local/share/applications/$handler" \
+      "$target_home/.local/share/flatpak/exports/share/applications/$handler" \
+      "/var/lib/flatpak/exports/share/applications/$handler" \
+      "/usr/local/share/applications/$handler" \
+      "/usr/share/applications/$handler"; do
+      [[ -f "$path" ]] && found=true && break
+    done
+
+    if $found; then
+      pass "default handler for $mime ($category) → $handler"
+    else
+      warn_msg "default handler for $mime ($category) → $handler (desktop entry not found; stale or unsupported)"
+    fi
+  done < <(ahr_matrix_mimes)
+}
+
+check_advertised_actions() {
+  local framework_bin_dir
+  echo "[7e/9] Validating advertised Capture/Setup actions"
+
+  if [[ "$user_context_ready" != "true" ]]; then
+    warn_msg "cannot validate advertised actions: target user context unavailable"
+    return
+  fi
+
+  framework_bin_dir="$target_home/.config/artix-hypr-remix/bin"
+
+  # Capture: Color Picker depends on hyprpicker (installed by default).
+  if command -v hyprpicker >/dev/null 2>&1; then
+    pass "Capture action available: Color Picker (hyprpicker)"
+  else
+    warn_msg "Capture action Color Picker missing dependency: hyprpicker"
+  fi
+
+  # SwayOSD is optional; its absence must not be a health failure.
+  if command -v swayosd-server >/dev/null 2>&1; then
+    pass "optional OSD available: SwayOSD"
+  else
+    warn_msg "SwayOSD not installed (optional; volume/brightness/media controls do not depend on it)"
+  fi
+
+  # OnlyOffice is opt-in; absence is the expected default state.
+  if command -v flatpak >/dev/null 2>&1 && flatpak info --system org.onlyoffice.desktopeditors >/dev/null 2>&1; then
+    pass "opt-in office profile installed: OnlyOffice"
+  else
+    pass "opt-in office profile OnlyOffice not installed (expected default state)"
+  fi
+
+  # Setup: defaults command present.
+  if [[ -x "$framework_bin_dir/ahr-default-calculator" ]]; then
+    pass "Setup action available: default calculator command"
+  else
+    warn_msg "Setup action missing: ahr-default-calculator"
+  fi
+}
+
 check_wallpaper_backend() {
   echo "[7b/9] Validating wallpaper backend"
 
@@ -779,6 +870,8 @@ check_printing_services
 check_session_runtime_stack
 check_hyprland_command_dependencies
 check_framework_runtime_commands
+check_default_app_matrix
+check_advertised_actions
 check_wallpaper_backend
 check_wallpaper_runtime_state
 check_startup_state_and_launcher

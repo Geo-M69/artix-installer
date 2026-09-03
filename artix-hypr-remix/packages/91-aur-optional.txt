@@ -5,6 +5,7 @@ elephant-clipboard
 elephant-desktopapplications
 elephant-files
 elephant-websearch
+swayosd
 
 # AUR helper bootstrap is handled in lib/aur.sh.
 # paru
