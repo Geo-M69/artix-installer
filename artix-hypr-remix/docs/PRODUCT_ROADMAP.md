@@ -185,11 +185,11 @@ tasks without asking the user to assemble missing pieces.
 
 ### Phase 2 Implementation Summary
 
-**Status: implemented (isolated validation complete; clean-Artix live
-validation pending).** The default-app/MIME baseline is data-driven,
-idempotent, and choice-preserving. See `docs/DEFAULT_APPS.md` for the matrix,
-package → desktop-entry mapping, doctor validation, and live-validation
-procedure; see `docs/FLATPAK_PROFILES.md` for the opt-in OnlyOffice profile.
+**Status: complete (implementation and clean-Artix live validation).** The
+default-app/MIME baseline is data-driven, idempotent, and choice-preserving.
+See `docs/DEFAULT_APPS.md` for the matrix, package → desktop-entry mapping,
+doctor validation, and live-validation procedure; see
+`docs/FLATPAK_PROFILES.md` for the opt-in OnlyOffice profile.
 
 Implemented in this phase:
 
@@ -212,22 +212,41 @@ Implemented in this phase:
 
 #### Phase 2 Validation Status
 
-- **Isolated tests: PASS.** `scripts/test-default-apps.sh` (70 passed, 0
-  failed) covers the MIME/default matrix, default preservation (no handler,
-  valid user-selected native and Flatpak handlers, stale entry, missing entry,
-  multiple candidates), desktop-entry discovery (user + Flatpak), idempotency,
-  optional-component absence (SwayOSD/OnlyOffice), package consistency, and
-  diagnostics (validation does not mutate defaults). `scripts/test-ahr-doctor.sh`
-  (28 passed) and `scripts/test-framework-check.sh` (18 passed) remain green.
-- **Live Artix validation: PENDING.** The clean-session matrix (real files),
-  removable-device mount/open/browse/unmount/safe-removal from a live Nautilus
-  session, and post-reboot / post-framework-update repeats require a booted
-  Artix desktop and are documented but not yet executed here. See
-  `docs/DEFAULT_APPS.md` § Live Validation for the exact commands and expected
-  evidence.
+- **Final verdict: COMPLETE.** Clean-host validation ran in an Artix/OpenRC
+  QEMU/KVM VM with a live Hyprland/Wayland session. Physical removable-device
+  evidence used USB passthrough; no virtual disk was substituted.
+- **Live default-app matrix: PASS.** All ten URL, directory, text, Markdown,
+  PDF, image, audio, video, and archive rows passed before reboot and again
+  after reboot with visible launches. MIME state was preserved byte-for-byte.
+- **Physical removable device: PASS.** Mount, Nautilus browse/read, unmount,
+  safe removal, physical removal/reinsertion, and integrity verification passed.
+- **Color Picker: PASS.** The advertised AHR Menu Color Picker launched
+  `hyprpicker`, and its clipboard value matched the selected on-screen color.
+- **Framework update preservation: PASS.** The synthetic candidate passed
+  preflight, apply, rollback, exact outer restoration, MIME preservation, and
+  transaction/backup-residue checks.
+- **Privileged gates: PASS.** `bash scripts/quality-gate.sh --no-aur` and
+  `sudo ./scripts/post-install-smoke.sh --user geo` both exited `0` without
+  changing the installed framework or MIME preservation control and without
+  leaving updater transaction or backup residue.
+- **Current doctor: PASS.** The final read-only host-level `ahr doctor` exited
+  `0`.
+- **Automated regressions: PASS.** Synthetic harness tests: 13/13; updater
+  tests: 445/445; default-app tests: 70/70; doctor tests: 28/28;
+  framework-check tests: 18/18. The Artix framework smoke and relevant syntax
+  and diff checks also passed.
 
-The Phase 2 exit gate is satisfied for isolated validation; the live-session
-items are tracked as the remaining blocker in the final report.
+The Phase 2 exit gate is satisfied. Live validation evidence remains outside
+the repository and is intentionally not committed.
+
+Separately recorded, non-blocking findings:
+
+- The first-run lexical ordering/theme-state lifecycle defect predates Phase 2
+  and is not a Phase 2 regression. It remains out of scope for this phase.
+- SwayOSD remains optional; its absence does not fail doctor, smoke, or the
+  underlying volume, brightness, and media controls.
+- Docker is not a Phase 2 requirement; its absence does not block the Phase 2
+  quality gate or post-install smoke contract.
 
 Implementation decisions:
 

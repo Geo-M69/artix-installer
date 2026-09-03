@@ -104,8 +104,8 @@ container, upgrade-in-place system, or session with pre-existing defaults is
 ### Clean-host requirements
 
 Perform this procedure as the non-root desktop user on a fresh Artix OpenRC
-installation of the Phase 2 candidate (`7bacf80` or its exact release
-artifact). Before recording any result, capture the output of:
+installation of the Phase 2 candidate or its exact release artifact. Before
+recording any result, capture the output of:
 
 ```bash
 pacman -Q nautilus gvfs gvfs-mtp udisks2 file-roller evince imv mpv \
@@ -189,8 +189,10 @@ disk.
 
 ### Capture and optional-component evidence
 
-1. Run the visible Color Picker action (`ahr-capture-picker`, or Capture →
-   Color Picker). `hyprpicker` must open.
+1. Run **AHR Menu → Trigger → Capture → Color Picker**, or use
+   `hyprpicker -az` as the direct command-level equivalent. `hyprpicker` must
+   open. Do not use `ahr-capture-picker`; that command opens the screenshot
+   mode picker.
 2. Select a known on-screen color, then run `wl-paste`. Record both the command
    output and the copied color value.
 3. With SwayOSD absent, run `ahr doctor` and the relevant post-install smoke
