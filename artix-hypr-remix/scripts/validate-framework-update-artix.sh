@@ -1,24 +1,5 @@
 #!/usr/bin/env bash
-# validate-framework-update-artix.sh
-#
 # On-machine validation for the AHR framework update pipeline.
-# Must be run on a real Artix installation with a live AHR user session.
-#
-# Default mode is non-destructive: prerequisite checks and status only.
-# --apply-test enables destructive testing (applies a test framework update).
-#
-# This script has multiple safety layers:
-#   1. Positive Artix host guard (refuses --apply-test on non-Artix)
-#   2. Complete backup before any mutation
-#   3. Restoration traps on EXIT/INT/TERM/HUP
-#   4. Idempotent restoration handler
-#
-# Usage:
-#   bash scripts/validate-framework-update-artix.sh
-#   bash scripts/validate-framework-update-artix.sh --apply-test
-#   bash scripts/validate-framework-update-artix.sh --apply-test --user geo
-#
-# Exit status: 0 if all tests pass, 1 otherwise.
 
 set -euo pipefail
 
@@ -39,54 +20,130 @@ TEST_MODE="non-destructive"
 APPLY_USER="${APPLY_USER:-}"
 FRAMEWORK_TARGET="$HOME/.config/artix-hypr-remix"
 STATE_TARGET="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
+NAMESPACE_TARGET="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
 
-# Artix host guard
-is_artix() {
-  [[ -f /etc/artix-release ]]
-}
-
-# Backup location
 BACKUP_ROOT="/tmp/ahr-validate-$$"
-LOG_FILE=""
 BACKUP_DIR=""
-
-# Restoration state
+FRAMEWORK_BACKUP=""
+STATE_BACKUP=""
+NAMESPACE_BACKUP=""
+METADATA_DIR=""
+LOG_DIR=""
+PREFLIGHT_LOG=""
+APPLY_LOG=""
+ROLLBACK_LOG=""
+TEST_REMOTE=""
+PRETEST_FRAMEWORK_PRESENT=false
+PRETEST_STATE_PRESENT=false
+PRETEST_NAMESPACE_PRESENT=false
 RESTORE_DONE=0
-RESTORE_TRAP_INSTALLED=0
-
-# ── Output helpers ─────────────────────────────────────────────────
 
 pass() { echo -e "  ${GREEN}PASS${RESET}: $1"; ((PASS+=1)); }
 fail() { echo -e "  ${RED}FAIL${RESET}: $1" >&2; [[ -n "${2:-}" ]] && echo "    $2" >&2; ((FAIL+=1)); }
 warn() { echo -e "  ${YELLOW}WARN${RESET}: $1"; }
 section() { echo -e "\n${CYAN}${BOLD}=== $1 ===${RESET}"; }
 
-# ── Backup functions ──────────────────────────────────────────────
-
-backup_framework() {
-  local target="$1"
-  local dest="$2"
-  if [[ ! -d "$target" ]]; then
-    warn "Framework not deployed at $target — skipping backup"
-    return 0
-  fi
-  mkdir -p "$dest"
-  cp -a "$target"/. "$dest"/ 2>/dev/null || true
-  # Also backup state
-  local state_src="$STATE_TARGET"
-  if [[ -d "$state_src" ]]; then
-    mkdir -p "$dest/.state"
-    cp -a "$state_src"/. "$dest/.state/" 2>/dev/null || true
-  fi
-  # Save original update source if available
-  local fw_json="$target/framework.json"
-  if [[ -f "$fw_json" ]] && command -v jq >/dev/null 2>&1; then
-    jq -r '.update_source // ""' "$fw_json" 2>/dev/null > "$dest/.original-update-source" || true
-  fi
-  return 0
+is_artix() {
+  [[ -f /etc/artix-release ]]
 }
 
-# ── Restoration handler (idempotent) ─────────────────────────────
+tree_digest() {
+  local root="$1"
+  if [[ ! -d "$root" ]]; then
+    printf 'ABSENT\n'
+    return 0
+  fi
+  tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+    -C "$root" -cf - . | sha256sum | awk '{print $1}'
+}
+
+copy_tree() {
+  local source="$1" destination="$2"
+  mkdir -p "$destination"
+  cp -a "$source"/. "$destination"/
+}
+
+configure_artifacts() {
+  BACKUP_DIR="$BACKUP_ROOT/backup-$(date +%s)"
+  FRAMEWORK_BACKUP="$BACKUP_DIR/framework"
+  STATE_BACKUP="$BACKUP_DIR/state"
+  NAMESPACE_BACKUP="$BACKUP_DIR/namespace"
+  METADATA_DIR="$BACKUP_DIR/metadata"
+  LOG_DIR="$BACKUP_ROOT/logs"
+  PREFLIGHT_LOG="$LOG_DIR/preflight.log"
+  APPLY_LOG="$LOG_DIR/apply.log"
+  ROLLBACK_LOG="$LOG_DIR/rollback.log"
+  mkdir -p "$FRAMEWORK_BACKUP" "$STATE_BACKUP" "$NAMESPACE_BACKUP" "$METADATA_DIR" "$LOG_DIR"
+}
+
+backup_pretest_baseline() {
+  [[ -n "$BACKUP_DIR" ]] || return 1
+
+  if [[ -d "$FRAMEWORK_TARGET" ]]; then
+    PRETEST_FRAMEWORK_PRESENT=true
+    copy_tree "$FRAMEWORK_TARGET" "$FRAMEWORK_BACKUP"
+  fi
+  if [[ -d "$STATE_TARGET" ]]; then
+    PRETEST_STATE_PRESENT=true
+    copy_tree "$STATE_TARGET" "$STATE_BACKUP"
+  fi
+  if [[ -d "$NAMESPACE_TARGET" ]]; then
+    PRETEST_NAMESPACE_PRESENT=true
+    copy_tree "$NAMESPACE_TARGET" "$NAMESPACE_BACKUP"
+  fi
+
+  printf '%s\n' "$PRETEST_FRAMEWORK_PRESENT" > "$METADATA_DIR/framework-present"
+  printf '%s\n' "$PRETEST_STATE_PRESENT" > "$METADATA_DIR/state-present"
+  printf '%s\n' "$PRETEST_NAMESPACE_PRESENT" > "$METADATA_DIR/namespace-present"
+  tree_digest "$FRAMEWORK_TARGET" > "$METADATA_DIR/framework.digest"
+  tree_digest "$STATE_TARGET" > "$METADATA_DIR/state.digest"
+  tree_digest "$NAMESPACE_TARGET" > "$METADATA_DIR/namespace.digest"
+}
+
+restore_tree() {
+  local was_present="$1" source="$2" destination="$3"
+
+  if [[ "$was_present" == "true" ]]; then
+    rm -rf "$destination"
+    mkdir -p "$destination"
+    copy_tree "$source" "$destination"
+  else
+    rm -rf "$destination"
+  fi
+}
+
+verify_pretest_baseline() {
+  local expected_framework expected_state expected_namespace actual_framework actual_state actual_namespace
+  expected_framework="$(<"$METADATA_DIR/framework.digest")"
+  expected_state="$(<"$METADATA_DIR/state.digest")"
+  expected_namespace="$(<"$METADATA_DIR/namespace.digest")"
+  actual_framework="$(tree_digest "$FRAMEWORK_TARGET")"
+  actual_state="$(tree_digest "$STATE_TARGET")"
+  actual_namespace="$(tree_digest "$NAMESPACE_TARGET")"
+
+  [[ "$actual_framework" == "$expected_framework" ]] || return 1
+  [[ "$actual_state" == "$expected_state" ]] || return 1
+  [[ "$actual_namespace" == "$expected_namespace" ]] || return 1
+
+  if [[ "$PRETEST_FRAMEWORK_PRESENT" == "true" ]]; then
+    diff -qr "$FRAMEWORK_BACKUP" "$FRAMEWORK_TARGET" >/dev/null
+  else
+    [[ ! -e "$FRAMEWORK_TARGET" ]]
+  fi
+  if [[ "$PRETEST_NAMESPACE_PRESENT" == "true" ]]; then
+    diff -qr "$NAMESPACE_BACKUP" "$NAMESPACE_TARGET" >/dev/null
+  else
+    [[ ! -e "$NAMESPACE_TARGET" ]]
+  fi
+  if [[ "$PRETEST_STATE_PRESENT" == "true" ]]; then
+    diff -qr "$STATE_BACKUP" "$STATE_TARGET" >/dev/null
+  else
+    [[ ! -e "$STATE_TARGET" ]]
+  fi
+
+  [[ ! -e "$FRAMEWORK_TARGET/.state" ]]
+  [[ ! -e "$FRAMEWORK_TARGET/.original-update-source" ]]
+}
 
 perform_restoration() {
   if [[ "$RESTORE_DONE" == "1" ]]; then
@@ -95,69 +152,150 @@ perform_restoration() {
   RESTORE_DONE=1
 
   if [[ -z "$BACKUP_DIR" || ! -d "$BACKUP_DIR" ]]; then
-    warn "No backup to restore from"
+    warn "No pre-test baseline is available for restoration"
     return 1
   fi
 
   echo ""
-  echo -e "${YELLOW}${BOLD}=== Restoring framework from backup ===${RESET}"
+  echo -e "${YELLOW}${BOLD}=== Restoring pre-test framework and state ===${RESET}"
   echo "Backup: $BACKUP_DIR"
-  echo "Target: $FRAMEWORK_TARGET"
 
-  # Remove current framework
-  if [[ -d "$FRAMEWORK_TARGET" ]]; then
-    rm -rf "$FRAMEWORK_TARGET"
-  fi
+  restore_tree "$PRETEST_FRAMEWORK_PRESENT" "$FRAMEWORK_BACKUP" "$FRAMEWORK_TARGET" || return 1
+  restore_tree "$PRETEST_STATE_PRESENT" "$STATE_BACKUP" "$STATE_TARGET" || return 1
+  restore_tree "$PRETEST_NAMESPACE_PRESENT" "$NAMESPACE_BACKUP" "$NAMESPACE_TARGET" || return 1
 
-  # Restore from backup
-  if ! cp -a "$BACKUP_DIR"/. "$FRAMEWORK_TARGET"/ 2>/dev/null; then
-    echo -e "${RED}${BOLD}RESTORATION FAILED${RESET}" >&2
-    echo "Manual recovery required:" >&2
-    echo "  cp -a $BACKUP_DIR/. $FRAMEWORK_TARGET/" >&2
+  # Do not run namespace-install here: it regenerates namespace state and does
+  # not prove the prior namespace was restored exactly.
+  if ! verify_pretest_baseline; then
+    echo -e "${RED}${BOLD}RESTORATION BASELINE MISMATCH${RESET}" >&2
     return 1
   fi
 
-  # Restore state
-  if [[ -d "$BACKUP_DIR/.state" ]]; then
-    mkdir -p "$STATE_TARGET"
-    if ! cp -a "$BACKUP_DIR/.state"/. "$STATE_TARGET"/ 2>/dev/null; then
-      echo -e "${YELLOW}WARN${RESET}: State restoration partially failed" >&2
-    fi
-  fi
-
-  # Reinstall namespace
-  if [[ -f "$FRAMEWORK_TARGET/bin/namespace-install.sh" ]]; then
-    bash "$FRAMEWORK_TARGET/bin/namespace-install.sh" --quiet 2>/dev/null || true
-  fi
-
-  echo -e "${GREEN}${BOLD}Restoration complete${RESET}"
+  echo -e "${GREEN}${BOLD}Restoration matches the pre-test baseline${RESET}"
   return 0
 }
 
-# Install restoration traps
-install_restoration_trap() {
-  if [[ "$RESTORE_TRAP_INSTALLED" == "1" ]]; then
-    return 0
+handle_exit() {
+  local status=$?
+  trap - EXIT
+  if ! perform_restoration; then
+    status=1
   fi
-  RESTORE_TRAP_INSTALLED=1
-  trap 'perform_restoration' EXIT
-  trap 'perform_restoration; exit 130' INT
-  trap 'perform_restoration; exit 143' TERM
-  trap 'perform_restoration; exit 129' HUP
+  exit "$status"
 }
 
-# ── Usage ──────────────────────────────────────────────────────────
+handle_signal() {
+  local status="$1"
+  perform_restoration || true
+  exit "$status"
+}
+
+install_restoration_traps() {
+  trap handle_exit EXIT
+  trap 'handle_signal 130' INT
+  trap 'handle_signal 143' TERM
+  trap 'handle_signal 129' HUP
+}
+
+set_update_source() {
+  local framework_json="$1" source="$2" tmp
+  tmp="$(mktemp "${framework_json}.tmp.XXXXXX")"
+  jq --arg source "$source" '.update_source = $source' "$framework_json" > "$tmp"
+  mv -f "$tmp" "$framework_json"
+}
+
+build_test_remote() {
+  TEST_REMOTE="$BACKUP_ROOT/test-remote"
+  local candidate="$TEST_REMOTE/artix-hypr-remix/config/artix-hypr-remix"
+  mkdir -p "$candidate"
+  copy_tree "$FRAMEWORK_SOURCE" "$candidate"
+
+  local metadata_tmp
+  metadata_tmp="$(mktemp "$candidate/framework.json.tmp.XXXXXX")"
+  jq --arg source "file://$TEST_REMOTE" \
+    '.version = "99.99.99" | .revision = null | .channel = "stable" | .update_source = $source | .updated_at = null' \
+    "$candidate/framework.json" > "$metadata_tmp"
+  mv -f "$metadata_tmp" "$candidate/framework.json"
+
+  git -C "$TEST_REMOTE" init -q
+  git -C "$TEST_REMOTE" config user.email "ahr-validation@localhost"
+  git -C "$TEST_REMOTE" config user.name "AHR validation"
+  git -C "$TEST_REMOTE" add -A
+  git -C "$TEST_REMOTE" commit -q -m "synthetic framework update"
+}
+
+preflight_test_remote() {
+  local preflight_root="$BACKUP_ROOT/preflight"
+  local preflight_framework="$preflight_root/framework"
+  local preflight_state="$preflight_root/state"
+  local preflight_cache="$preflight_root/cache"
+
+  rm -rf "$preflight_root"
+  mkdir -p "$preflight_framework"
+  copy_tree "$FRAMEWORK_TARGET" "$preflight_framework"
+  set_update_source "$preflight_framework/framework.json" "file://$TEST_REMOTE"
+
+  HOME="$preflight_root/home" \
+  XDG_STATE_HOME="$preflight_state" \
+  XDG_CACHE_HOME="$preflight_cache" \
+  AHR_FRAMEWORK_ROOT="$preflight_framework" \
+  AHR_LIB_PATH="$preflight_framework/bin/ahr-lib.sh" \
+    bash "$preflight_framework/bin/ahr-update-framework" --dry-run > "$PREFLIGHT_LOG" 2>&1
+}
+
+valid_new_updater_rollback_target_exists() {
+  local backup_root="$STATE_TARGET/framework-backups"
+  local backup manifest backup_id transaction_id transaction_state transaction_backup transaction_backup_id
+  [[ -d "$backup_root" ]] || return 1
+
+  for backup in "$backup_root"/*; do
+    [[ -d "$backup" ]] || continue
+    # A prior completed backup is not evidence that this synthetic apply made
+    # progress. Only a backup absent from the sealed pre-test state is eligible.
+    [[ ! -e "$STATE_BACKUP/framework-backups/$(basename "$backup")" ]] || continue
+    manifest="$backup/manifest.txt"
+    [[ -f "$manifest" ]] || continue
+    backup_id="$(awk -F= '$1 == "backup_id" { count++; value=$2 } END { if (count == 1) print value; else exit 1 }' "$manifest" 2>/dev/null)" || continue
+    transaction_id="$(awk -F= '$1 == "transaction_id" { count++; value=$2 } END { if (count == 1) print value; else exit 1 }' "$manifest" 2>/dev/null)" || continue
+    [[ "$backup_id" == "$(basename "$backup")" ]] || continue
+    [[ -n "$transaction_id" ]] || continue
+    grep -qx 'manifest_version=1' "$manifest" || continue
+    grep -qx 'completed=true' "$manifest" || continue
+    transaction_state="$STATE_TARGET/framework-transactions/$transaction_id/state"
+    [[ -f "$transaction_state" ]] || continue
+    transaction_backup="$(awk -F= '$1 == "backup_path" { count++; value=$2 } END { if (count == 1) print value; else exit 1 }' "$transaction_state" 2>/dev/null)" || continue
+    transaction_backup_id="$(awk -F= '$1 == "backup_id" { count++; value=$2 } END { if (count == 1) print value; else exit 1 }' "$transaction_state" 2>/dev/null)" || continue
+    [[ "$transaction_backup" == "$backup" && "$transaction_backup_id" == "$backup_id" ]] || continue
+    return 0
+  done
+  return 1
+}
+
+run_updater() {
+  local mode="$1" log_file="$2"
+  HOME="$HOME" \
+  XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}" \
+  XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}" \
+  AHR_FRAMEWORK_ROOT="$FRAMEWORK_TARGET" \
+  AHR_LIB_PATH="$FRAMEWORK_TARGET/bin/ahr-lib.sh" \
+  AHR_LOCAL_BIN="$NAMESPACE_TARGET" \
+    bash "$FRAMEWORK_TARGET/bin/ahr-update-framework" "$mode" > "$log_file" 2>&1
+}
+
+if [[ "${AHR_VALIDATE_HARNESS_LIB_ONLY:-}" == "1" ]]; then
+  return 0 2>/dev/null || exit 0
+fi
 
 usage() {
   cat <<'EOF'
 Usage: bash scripts/validate-framework-update-artix.sh [options]
 
 Options:
-  --apply-test    Enable destructive test (applies a test framework update)
-  --user <name>   Target user (for multi-user systems)
+  --apply-test    Enable destructive test (applies a synthetic framework update)
+  --user <name>   Require the command to run as this desktop user
   -h, --help      Show this help
 
-Default mode performs non-destructive prerequisite and status checks.
+Default mode performs non-destructive prerequisite checks.
 --apply-test requires Artix Linux (checks /etc/artix-release).
 EOF
 }
@@ -167,76 +305,33 @@ while (( $# > 0 )); do
     --apply-test) TEST_MODE="destructive" ;;
     --user) shift; APPLY_USER="$1" ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
 
-# ── Prerequisites ─────────────────────────────────────────────────
+if [[ -n "$APPLY_USER" && "$APPLY_USER" != "$(id -un)" ]]; then
+  echo "Run this harness as the requested desktop user: $APPLY_USER" >&2
+  exit 2
+fi
 
 section "Prerequisite checks"
-
-# Test 1: Artix host
 if is_artix; then
   pass "Artix host detected (/etc/artix-release present)"
 else
   fail "Not running on Artix (/etc/artix-release missing)"
-  if [[ "$TEST_MODE" == "destructive" ]]; then
-    echo ""
-    echo -e "${RED}${BOLD}ERROR${RESET}: --apply-test requires Artix Linux."
-    echo "This script refuses to run destructive tests on non-Artix hosts."
-    echo "Run without --apply-test for non-destructive prerequisite checks only."
-    exit 1
-  else
-    warn "Non-Artix host — destructive mode will be refused"
-  fi
+  [[ "$TEST_MODE" == "destructive" ]] && exit 1
 fi
 
-# Test 2: Required commands
 for cmd in git jq vercmp sudo pacman; do
-  if command -v "$cmd" >/dev/null 2>&1; then
-    pass "$cmd available"
-  else
-    fail "$cmd missing"
-  fi
+  command -v "$cmd" >/dev/null 2>&1 && pass "$cmd available" || fail "$cmd missing"
 done
-
-# Test 3: OpenRC services (non-destructive, check only)
 for svc in dbus elogind NetworkManager; do
-  if [[ -x "/etc/init.d/$svc" ]] 2>/dev/null; then
-    pass "OpenRC service present: $svc"
-  else
-    warn "OpenRC service not found: $svc"
-  fi
+  [[ -x "/etc/init.d/$svc" ]] && pass "OpenRC service present: $svc" || warn "OpenRC service not found: $svc"
 done
-
-# Test 4: Framework source
-if [[ -d "$FRAMEWORK_SOURCE/bin" ]]; then
-  pass "Framework source available at $FRAMEWORK_SOURCE"
-else
-  fail "Framework source missing at $FRAMEWORK_SOURCE"
-fi
-
-# Test 5: Framework not deployed
-if [[ -d "$FRAMEWORK_TARGET/bin" ]]; then
-  pass "Framework deployed at $FRAMEWORK_TARGET"
-else
-  warn "Framework not deployed at $FRAMEWORK_TARGET"
-fi
-
-# Test 6: ahr-doctor
-if [[ -f "$FRAMEWORK_TARGET/bin/ahr-doctor" ]]; then
-  pass "ahr-doctor deployed"
-  if [[ -x "$FRAMEWORK_TARGET/bin/ahr-doctor" ]]; then
-    pass "ahr-doctor executable"
-  else
-    fail "ahr-doctor not executable"
-  fi
-else
-  warn "ahr-doctor not deployed"
-fi
-
-# Test 7: ahr-update-available JSON
+[[ -d "$FRAMEWORK_SOURCE/bin" ]] && pass "Framework source available at $FRAMEWORK_SOURCE" || fail "Framework source missing at $FRAMEWORK_SOURCE"
+[[ -d "$FRAMEWORK_TARGET/bin" ]] && pass "Framework deployed at $FRAMEWORK_TARGET" || fail "Framework not deployed at $FRAMEWORK_TARGET"
+[[ -x "$FRAMEWORK_TARGET/bin/ahr-doctor" ]] && pass "ahr-doctor deployed and executable" || fail "ahr-doctor not deployed or executable"
 if [[ -f "$FRAMEWORK_TARGET/bin/ahr-update-available" ]]; then
   section "ahr-update-available JSON test"
   ahr_json="$(HOME="$HOME" bash "$FRAMEWORK_TARGET/bin/ahr-update-available" --json 2>/dev/null || true)"
@@ -247,133 +342,60 @@ if [[ -f "$FRAMEWORK_TARGET/bin/ahr-update-available" ]]; then
   fi
 fi
 
-# ── Destructive tests ─────────────────────────────────────────────
-
 if [[ "$TEST_MODE" != "destructive" ]]; then
   section "Summary (non-destructive)"
-  echo "All prerequisite checks complete."
   echo "Pass: $PASS | Fail: $FAIL"
-  echo ""
-  echo "To run destructive tests, use: --apply-test (requires Artix)"
-  if (( FAIL > 0 )); then
-    exit 1
-  fi
-  exit 0
+  (( FAIL == 0 ))
+  exit $?
 fi
 
-# ── Destructive mode ─────────────────────────────────────────────
+is_artix || exit 1
 
-# Refuse if not on Artix
-if ! is_artix; then
-  echo ""
-  echo -e "${RED}${BOLD}ERROR${RESET}: --apply-test requires Artix Linux." >&2
-  echo "Refusing to run destructive tests on non-Artix host." >&2
-  exit 1
-fi
-
-echo ""
-echo -e "${RED}${BOLD}=== DESTRUCTIVE TEST MODE ===${RESET}"
-echo "This will modify the installed framework. A complete backup will be created."
-echo "All changes will be automatically restored on exit."
-echo ""
-
-# Create backup
-BACKUP_DIR="$BACKUP_ROOT/backup-$(date +%s)"
-LOG_FILE="$BACKUP_ROOT/validate.log"
+section "Synthetic candidate preflight"
 mkdir -p "$BACKUP_ROOT"
-
-echo "Creating backup at: $BACKUP_DIR"
-if ! backup_framework "$FRAMEWORK_TARGET" "$BACKUP_DIR"; then
-  echo -e "${RED}${BOLD}BACKUP FAILED${RESET}" >&2
-  exit 1
-fi
-if [[ -d "$BACKUP_DIR" ]]; then
-  pass "Backup created at $BACKUP_DIR"
+configure_artifacts
+build_test_remote
+if preflight_test_remote; then
+  pass "Complete synthetic candidate passed staged validation before host mutation"
 else
-  fail "Backup failed"
+  fail "Synthetic candidate preflight failed; no live framework mutation was attempted" "See $PREFLIGHT_LOG"
   exit 1
 fi
 
-# Install restoration traps
-install_restoration_trap
-echo "Restoration traps installed (EXIT, INT, TERM, HUP)"
+section "Destructive test mode"
+backup_pretest_baseline
+pass "Pre-test framework and state baseline saved at $BACKUP_DIR"
+install_restoration_traps
+set_update_source "$FRAMEWORK_TARGET/framework.json" "file://$TEST_REMOTE"
 
-# Test 8: Create test remote
-section "Test 8: Create test framework remote"
-TEST_REMOTE="$BACKUP_ROOT/test-remote"
-mkdir -p "$TEST_REMOTE/artix-hypr-remix/config/artix-hypr-remix/bin"
-for f in ahr ahr-update-framework ahr-update ahr-update-available ahr-lib.sh ahr-version.sh migrate.sh namespace-install.sh; do
-  echo '#!/usr/bin/env bash' > "$TEST_REMOTE/artix-hypr-remix/config/artix-hypr-remix/bin/$f"
-done
-chmod +x "$TEST_REMOTE/artix-hypr-remix/config/artix-hypr-remix/bin/"*
-echo '{"version":"99.99.99","revision":null,"channel":"stable","update_source":"file://'"$TEST_REMOTE"'","updated_at":null}' > "$TEST_REMOTE/artix-hypr-remix/config/artix-hypr-remix/framework.json"
-(cd "$TEST_REMOTE" && git init -q && git config user.email "t@t" && git config user.name T && git add -A && git commit -q -m "test" >/dev/null)
-pass "Test remote created at $TEST_REMOTE"
-
-# Test 9: Apply test update
-section "Test 9: Apply test framework update"
-# Temporarily set update_source to test remote
-ORIG_SOURCE="$(cat "$FRAMEWORK_TARGET/framework.json" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('update_source',''))" 2>/dev/null || echo "")"
-python3 -c "
-import json
-with open('$FRAMEWORK_TARGET/framework.json') as f: d = json.load(f)
-d['update_source'] = 'file://$TEST_REMOTE'
-with open('$FRAMEWORK_TARGET/framework.json', 'w') as f: json.dump(d, f, indent=2)
-" 2>/dev/null
-
+section "Apply synthetic framework update"
 apply_exit=0
-HOME="$HOME" bash "$FRAMEWORK_TARGET/bin/ahr-update-framework" --apply >"$LOG_FILE" 2>&1 || apply_exit=$?
-if [[ "$apply_exit" == 0 ]]; then
-  pass "Test apply succeeded"
+run_updater --apply "$APPLY_LOG" || apply_exit=$?
+if (( apply_exit == 0 )); then
+  pass "Synthetic apply succeeded"
 else
-  warn "Test apply exited $apply_exit (may be expected for test version 99.99.99)"
+  fail "Synthetic apply failed (exit $apply_exit)" "See $APPLY_LOG"
 fi
 
-# Test 10: Rollback test
-section "Test 10: Test rollback"
-rb_exit=0
-HOME="$HOME" bash "$FRAMEWORK_TARGET/bin/ahr-update-framework" --rollback >"$LOG_FILE" 2>&1 || rb_exit=$?
-if [[ "$rb_exit" == 0 ]]; then
-  pass "Test rollback succeeded"
+section "Rollback synthetic framework update"
+if valid_new_updater_rollback_target_exists; then
+  rollback_exit=0
+  run_updater --rollback "$ROLLBACK_LOG" || rollback_exit=$?
+  (( rollback_exit == 0 )) && pass "Synthetic rollback succeeded" || fail "Synthetic rollback failed (exit $rollback_exit)" "See $ROLLBACK_LOG"
+elif (( apply_exit == 0 )); then
+  fail "Synthetic apply succeeded but did not create a valid updater rollback target"
 else
-  fail "Test rollback failed (exit $rb_exit)"
+  pass "Pre-backup apply failure created no valid rollback target; rollback was not invoked"
 fi
 
-# Test 11: Check framework health after rollback
-section "Test 11: Post-rollback framework health"
-if [[ -x "$FRAMEWORK_TARGET/bin/ahr-doctor" ]]; then
-  doctor_exit=0
-  bash "$FRAMEWORK_TARGET/bin/ahr-doctor" >/dev/null 2>&1 || doctor_exit=$?
-  if [[ "$doctor_exit" == 0 ]]; then
-    pass "ahr-doctor passes after rollback"
-  else
-    warn "ahr-doctor reports issues after rollback (exit $doctor_exit)"
-  fi
+if ! perform_restoration; then
+  fail "Outer restoration failed baseline verification"
 fi
-
-# Restore original update source
-if [[ -n "$ORIG_SOURCE" ]]; then
-  python3 -c "
-import json
-with open('$FRAMEWORK_TARGET/framework.json') as f: d = json.load(f)
-d['update_source'] = '$ORIG_SOURCE'
-with open('$FRAMEWORK_TARGET/framework.json', 'w') as f: json.dump(d, f, indent=2)
-" 2>/dev/null
-  pass "Original update source restored"
-fi
-
-# ── Summary ────────────────────────────────────────────────────────
 
 section "Summary"
-echo "Backup: $BACKUP_DIR"
-echo "Log:    $LOG_FILE"
+echo "Evidence root: $BACKUP_ROOT"
+echo "Preflight log: $PREFLIGHT_LOG"
+echo "Apply log: $APPLY_LOG"
+echo "Rollback log: $ROLLBACK_LOG"
 echo "Pass: $PASS | Fail: $FAIL"
-
-# The restoration trap will restore the framework on exit
-echo ""
-echo "Framework will be restored from backup on exit."
-
-if (( FAIL > 0 )); then
-  exit 1
-fi
-exit 0
+(( FAIL == 0 ))
