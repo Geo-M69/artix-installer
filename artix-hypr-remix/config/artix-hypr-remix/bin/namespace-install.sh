@@ -245,6 +245,153 @@ prevalidate_plan() {
   return 0
 }
 
+# Read one exact key from a framework transaction or backup manifest.  These
+# records are data, never shell input; duplicates are rejected.
+read_unique_record_field() {
+  local record="$1" key="$2"
+  [[ -f "$record" && ! -L "$record" ]] || return 1
+  awk -v key="$key" '
+    index($0, key "=") == 1 { count++; value=substr($0, length(key) + 2) }
+    END { if (count == 1) print value; else exit 1 }
+  ' "$record"
+}
+
+# Updaters predating namespace snapshot format 2 omitted a bare compatibility
+# alias whose target was the exact local-bin `ahr` entry.  The newly activated
+# namespace installer is the first candidate code that runs in that transition,
+# and it runs before any namespace path is changed.  Upgrade only the backup
+# bound to the one active apply transaction, using the live pre-mutation link as
+# evidence.  An absent alias stays absent; an unrelated target is never claimed.
+upgrade_legacy_framework_namespace_snapshot() {
+  local transactions_root="$STATE_ROOT/framework-transactions"
+  local backups_root="$STATE_ROOT/framework-backups"
+  [[ -d "$transactions_root" ]] || return 0
+
+  local state action phase completion
+  local -a active_states=()
+  while IFS= read -r -d '' state; do
+    grep -qx 'action=apply' "$state" 2>/dev/null || continue
+    grep -qx 'phase=namespace_install' "$state" 2>/dev/null || continue
+    grep -qx 'completion=in_progress' "$state" 2>/dev/null || continue
+    active_states+=("$state")
+  done < <(find "$transactions_root" -mindepth 2 -maxdepth 2 -type f -name state -print0 2>/dev/null || true)
+
+  (( ${#active_states[@]} > 0 )) || return 0
+  if (( ${#active_states[@]} != 1 )); then
+    echo "Error: ambiguous active framework transaction for namespace snapshot upgrade" >&2
+    return 1
+  fi
+
+  state="${active_states[0]}"
+  local txdir txid transaction_id backup_id backup_dir backup_path manifest snapshot
+  txdir="$(dirname "$state")"
+  action="$(read_unique_record_field "$state" action 2>/dev/null || true)"
+  phase="$(read_unique_record_field "$state" phase 2>/dev/null || true)"
+  completion="$(read_unique_record_field "$state" completion 2>/dev/null || true)"
+  txid="$(read_unique_record_field "$state" txid 2>/dev/null || true)"
+  transaction_id="$(read_unique_record_field "$state" transaction_id 2>/dev/null || true)"
+  backup_id="$(read_unique_record_field "$state" backup_id 2>/dev/null || true)"
+  backup_dir="$(read_unique_record_field "$state" backup_dir 2>/dev/null || true)"
+  backup_path="$(read_unique_record_field "$state" backup_path 2>/dev/null || true)"
+
+  [[ "$action" == apply && "$phase" == namespace_install && "$completion" == in_progress ]] || return 1
+  ahr_validate_transaction_id "$txid" && [[ "$transaction_id" == "$txid" && "$(basename "$txdir")" == "$txid" ]] || {
+    echo "Error: invalid framework transaction identity for namespace snapshot upgrade" >&2
+    return 1
+  }
+  ahr_validate_backup_id "$backup_id" && \
+    [[ "$backup_dir" == "$backup_path" && "$backup_dir" == "$backups_root/$backup_id" ]] || {
+    echo "Error: invalid framework backup identity for namespace snapshot upgrade" >&2
+    return 1
+  }
+
+  manifest="$backup_dir/manifest.txt"
+  snapshot="$backup_dir/derived-namespace-links"
+  [[ -f "$manifest" && ! -L "$manifest" && -f "$snapshot" && ! -L "$snapshot" ]] || {
+    echo "Error: framework namespace snapshot artifacts are missing or unsafe" >&2
+    return 1
+  }
+  ahr_parse_primary_manifest "$manifest" "$backup_id" true || return 1
+  [[ "$AHR_PRIMARY_MANIFEST_BACKUP_ID" == "$backup_id" && \
+     "$AHR_PRIMARY_MANIFEST_TRANSACTION_ID" == "$transaction_id" ]] || return 1
+  [[ "$(read_unique_record_field "$manifest" completed 2>/dev/null || true)" == true ]] || return 1
+
+  local snapshot_version_count snapshot_version
+  snapshot_version_count="$(awk 'index($0, "namespace_snapshot_version=") == 1 { count++ } END { print count + 0 }' "$manifest")"
+  if (( snapshot_version_count == 1 )); then
+    snapshot_version="$(read_unique_record_field "$manifest" namespace_snapshot_version 2>/dev/null || true)"
+    [[ "$snapshot_version" == 2 ]] || {
+      echo "Error: unsupported namespace snapshot version: $snapshot_version" >&2
+      return 1
+    }
+    return 0
+  fi
+  (( snapshot_version_count == 0 )) || {
+    echo "Error: duplicate namespace snapshot version metadata" >&2
+    return 1
+  }
+
+  local line name target
+  local -A snapshot_names=()
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -n "$line" && "$line" == *$'\t'* ]] || return 1
+    name="${line%%$'\t'*}"
+    target="${line#*$'\t'}"
+    [[ "$target" != *$'\t'* && -n "$name" && -n "$target" ]] || return 1
+    [[ "$name" != */* && "$name" != . && "$name" != .. ]] || return 1
+    [[ "$name" =~ ^(ahr|omarchy)-[a-zA-Z0-9_.-]+$|^ahr$|^omarchy$ ]] || return 1
+    case "$target" in
+      "$source_dir/"*|"$target_dir/ahr-"*|"$target_dir/omarchy-"*|"$target_dir/ahr"|"$target_dir/omarchy") ;;
+      *) return 1 ;;
+    esac
+    [[ -z "${snapshot_names[$name]+x}" ]] || return 1
+    snapshot_names["$name"]=1
+  done < "$snapshot"
+
+  local alias_spec alias_name alias_target alias_path alias_link_target
+  local snapshot_tmp=""
+  for alias_spec in "${aliases[@]}"; do
+    alias_name="${alias_spec%%:*}"
+    alias_target="${alias_spec##*:}"
+    [[ "$alias_name" == ahr || "$alias_name" == omarchy ]] || continue
+    [[ -z "${snapshot_names[$alias_name]+x}" ]] || continue
+    alias_path="$target_dir/$alias_name"
+    [[ -L "$alias_path" ]] || continue
+    is_ahr_owned "$alias_path" || continue
+    alias_link_target="$(readlink "$alias_path" 2>/dev/null)" || return 1
+    case "$alias_link_target" in
+      "$source_dir/"*|"$target_dir/ahr-"*|"$target_dir/omarchy-"*|"$target_dir/ahr"|"$target_dir/omarchy") ;;
+      *) continue ;;
+    esac
+    if [[ -z "$snapshot_tmp" ]]; then
+      snapshot_tmp="$(mktemp "$backup_dir/.derived-namespace-links.tmp.XXXXXX")" || return 1
+      chmod --reference="$snapshot" "$snapshot_tmp" 2>/dev/null || true
+      cp "$snapshot" "$snapshot_tmp" || { rm -f "$snapshot_tmp"; return 1; }
+    fi
+    printf '%s\t%s\n' "$alias_name" "$alias_link_target" >> "$snapshot_tmp" || {
+      rm -f "$snapshot_tmp"
+      return 1
+    }
+    snapshot_names["$alias_name"]=1
+  done
+  if [[ -n "$snapshot_tmp" ]]; then
+    mv -f "$snapshot_tmp" "$snapshot" || { rm -f "$snapshot_tmp"; return 1; }
+  fi
+
+  # Mark the backup only after its namespace snapshot is complete.  A crash
+  # before this atomic write leaves an unversioned snapshot that can be checked
+  # and upgraded idempotently on retry.
+  local manifest_tmp
+  manifest_tmp="$(mktemp "$backup_dir/.manifest.tmp.XXXXXX")" || return 1
+  chmod --reference="$manifest" "$manifest_tmp" 2>/dev/null || true
+  cp "$manifest" "$manifest_tmp" || { rm -f "$manifest_tmp"; return 1; }
+  printf 'namespace_snapshot_version=2\n' >> "$manifest_tmp" || {
+    rm -f "$manifest_tmp"
+    return 1
+  }
+  mv -f "$manifest_tmp" "$manifest"
+}
+
 # ── Transactional installation ─────────────────────────────────────
 
 # Parallel arrays for names, states, targets, and types.
@@ -417,6 +564,11 @@ if ! prevalidate_plan; then
     echo "  $_conflict" >&2
   done
   echo "No changes made." >&2
+  exit 1
+fi
+
+if ! upgrade_legacy_framework_namespace_snapshot; then
+  echo "Namespace snapshot compatibility upgrade failed. No namespace changes made." >&2
   exit 1
 fi
 

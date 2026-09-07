@@ -298,6 +298,14 @@ not a fictional directory under the framework root. Each
 `derived-namespace-links` record is exactly `name<TAB>target`; dry-run and
 `--apply` validate that same complete snapshot before any namespace link is
 changed. A snapshot name must also be in the canonical command/alias inventory.
+Current backups record `namespace_snapshot_version=2` in the primary manifest.
+When a pre-versioned updater creates a legacy snapshot, the newly activated
+namespace installer binds to the one active apply transaction and, before
+changing any namespace path, adds only a missing bare alias whose live target
+proves AHR ownership. An alias absent at that boundary remains absent from the
+snapshot and is therefore removed by rollback if the candidate introduces it.
+The compatibility upgrade fails closed when transaction/backup association is
+missing or ambiguous and atomically marks the upgraded snapshot as version 2.
 For such a managed namespace slot, a symlink with a stale, broken, or foreign
 current target is repairable; a regular file, directory, or special path still
 rejects the complete restore before mutation. Migration state is restored exactly by

@@ -1704,6 +1704,7 @@ cmd_apply() {
     echo "managed_files=$(printf '%s\n' "${FRAMEWORK_MANAGED_FILES[@]}")"
     echo "derived_components=$(printf '%s\n' "${FRAMEWORK_DERIVED_COMPONENTS[@]}")"
     echo "migration_snapshot=$backup_dir/migration-snapshot"
+    echo "namespace_snapshot_version=2"
   } > "$manifest_tmp"
   mv -f "$manifest_tmp" "$backup_dir/manifest.txt"
 
@@ -1776,6 +1777,7 @@ cmd_apply() {
     echo "managed_files=$(printf '%s\n' "${FRAMEWORK_MANAGED_FILES[@]}")"
     echo "derived_components=$(printf '%s\n' "${FRAMEWORK_DERIVED_COMPONENTS[@]}")"
     echo "migration_snapshot=$backup_dir/migration-snapshot"
+    echo "namespace_snapshot_version=2"
     echo "snapshot_errors=$_snap_errors"
     echo "required_snapshot_errors=$_required_snap_errors"
   } > "$final_manifest_tmp"

@@ -3204,6 +3204,109 @@ run_ahr "$tc65_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc65_reapply
 (( tc65_reapply_exit == 0 )) && pass "reapply after rollback succeeds" || fail "reapply after rollback failed (exit $tc65_reapply_exit)"
 [[ "$(readlink "$tc65_local/omarchy" 2>/dev/null || true)" == "$tc65_local/ahr" ]] && pass "omarchy alias remains exact across reapply" || fail "reapply disturbed the exact-target omarchy alias"
 
+echo ""
+echo "=== TC66: Legacy updater bootstrap snapshot compatibility ==="
+
+make_legacy_snapshot_updater() {
+  local updater="$1"
+  # Model the updater that performed the real failing transition: its snapshot
+  # target filter omitted exact local-bin aliases and its primary manifest had
+  # no namespace snapshot version.  Keep the rest of the production updater so
+  # this is an old-updater -> candidate apply, not a hand-built rollback file.
+  sed -i '/^snapshot_namespace_links()/,/^restore_namespace_links()/ s/|"\$local_bin\/ahr"|"\$local_bin\/omarchy"//' "$updater"
+  sed -i '/echo "namespace_snapshot_version=2"/d' "$updater"
+  ! sed -n '/^snapshot_namespace_links()/,/^restore_namespace_links()/p' "$updater" | grep -Fq '"$local_bin/ahr"|"$local_bin/omarchy"' && \
+    ! grep -Fq 'echo "namespace_snapshot_version=2"' "$updater"
+}
+
+prepare_tc66_candidate() {
+  local parent="$1"
+  local repo candidate_doctor
+  repo="$(create_current_tree_repo "$parent" "0.2.0")"
+  candidate_doctor="$repo/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-doctor"
+  cat > "$candidate_doctor" <<'EOF'
+#!/usr/bin/env bash
+echo "All checks passed."
+exit 0
+EOF
+  chmod +x "$candidate_doctor"
+  commit_test_repo "$repo" "stub candidate doctor"
+  printf '%s' "$repo"
+}
+
+# A. The bare alias genuinely existed before the legacy updater took its
+# incomplete snapshot.  Candidate namespace installation must upgrade that
+# exact transaction's backup before replacing any links.
+tc66_home="$tmp_root/tc66-present"
+tc66_repo="$(prepare_tc66_candidate "$tmp_root/tc66-present-repo")"
+setup_installed_framework "$tc66_home" "file://$tc66_repo"
+tc66_fw="$tc66_home/.config/artix-hypr-remix"
+tc66_local="$tc66_home/.local/bin"
+mkdir -p "$tc66_local"
+cp -a "$FRAMEWORK_BIN/." "$tc66_fw/bin/"
+cat > "$tc66_fw/bin/ahr-doctor" <<'EOF'
+#!/usr/bin/env bash
+echo "All checks passed."
+exit 0
+EOF
+chmod +x "$tc66_fw/bin/ahr-doctor"
+run_namespace_install "$tc66_home" --quiet >/dev/null 2>&1
+make_legacy_snapshot_updater "$tc66_fw/bin/ahr-update-framework" && pass "legacy installed updater fixture omits exact aliases and snapshot version" || fail "legacy updater fixture was not constructed"
+
+tc66_forward_name="ahr-voxtype-config"
+rm -f "$tc66_local/$tc66_forward_name"
+ln -s /usr/bin/true "$tc66_local/user-unrelated"
+ln -s "$tc66_fw/bin/ahr" "$tc66_local/not-ahr-owned"
+[[ "$(readlink "$tc66_local/omarchy")" == "$tc66_local/ahr" ]] && pass "legacy transition begins with pre-existing bare alias" || fail "legacy transition bare alias setup failed"
+
+tc66_apply_exit=0
+run_ahr "$tc66_home" "$tc66_fw/bin/ahr-update-framework" --apply >/dev/null 2>&1 || tc66_apply_exit=$?
+(( tc66_apply_exit == 0 )) && pass "legacy installed updater applies candidate" || fail "legacy installed updater apply failed (exit $tc66_apply_exit)"
+tc66_backup="$(find "$tc66_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+grep -qx 'namespace_snapshot_version=2' "$tc66_backup/manifest.txt" && pass "candidate upgrades legacy namespace snapshot format" || fail "legacy namespace snapshot was not versioned"
+grep -qxF "omarchy	$tc66_local/ahr" "$tc66_backup/derived-namespace-links" && pass "candidate reconstructs pre-existing bare alias before mutation" || fail "candidate did not reconstruct pre-existing bare alias"
+! grep -q "^$tc66_forward_name"$'\t' "$tc66_backup/derived-namespace-links" && pass "legacy snapshot retains genuine forward-link absence" || fail "legacy snapshot incorrectly claimed absent forward link"
+! grep -qxF "not-ahr-owned	$tc66_fw/bin/ahr" "$tc66_backup/derived-namespace-links" && pass "legacy upgrade does not claim non-canonical user link" || fail "legacy upgrade claimed non-canonical user link"
+
+tc66_rb_exit=0
+run_ahr "$tc66_home" "$tc66_fw/bin/ahr-update-framework" --rollback >/dev/null 2>&1 || tc66_rb_exit=$?
+(( tc66_rb_exit == 0 )) && pass "candidate rolls back legacy-updater apply" || fail "legacy-updater rollback failed (exit $tc66_rb_exit)"
+[[ "$(readlink "$tc66_local/omarchy" 2>/dev/null || true)" == "$tc66_local/ahr" ]] && pass "legacy-updater rollback restores pre-existing bare alias" || fail "legacy-updater rollback lost pre-existing bare alias"
+[[ ! -e "$tc66_local/$tc66_forward_name" && ! -L "$tc66_local/$tc66_forward_name" ]] && pass "legacy-updater rollback removes forward-added managed link" || fail "legacy-updater rollback retained forward-added managed link"
+[[ "$(readlink "$tc66_local/not-ahr-owned" 2>/dev/null || true)" == "$tc66_fw/bin/ahr" && "$(readlink "$tc66_local/user-unrelated" 2>/dev/null || true)" == /usr/bin/true ]] && pass "legacy-updater rollback preserves unrelated links" || fail "legacy-updater rollback changed unrelated links"
+
+# B. If the bare alias was genuinely absent at the same pre-mutation boundary,
+# the compatibility rule must not invent it.  Candidate apply creates it and
+# rollback removes it as forward-added state.
+tc66_absent_home="$tmp_root/tc66-absent"
+tc66_absent_repo="$(prepare_tc66_candidate "$tmp_root/tc66-absent-repo")"
+setup_installed_framework "$tc66_absent_home" "file://$tc66_absent_repo"
+tc66_absent_fw="$tc66_absent_home/.config/artix-hypr-remix"
+tc66_absent_local="$tc66_absent_home/.local/bin"
+mkdir -p "$tc66_absent_local"
+cp -a "$FRAMEWORK_BIN/." "$tc66_absent_fw/bin/"
+cat > "$tc66_absent_fw/bin/ahr-doctor" <<'EOF'
+#!/usr/bin/env bash
+echo "All checks passed."
+exit 0
+EOF
+chmod +x "$tc66_absent_fw/bin/ahr-doctor"
+run_namespace_install "$tc66_absent_home" --quiet >/dev/null 2>&1
+rm -f "$tc66_absent_local/omarchy"
+make_legacy_snapshot_updater "$tc66_absent_fw/bin/ahr-update-framework" || fail "absent-alias legacy updater fixture was not constructed"
+
+tc66_absent_apply=0
+run_ahr "$tc66_absent_home" "$tc66_absent_fw/bin/ahr-update-framework" --apply >/dev/null 2>&1 || tc66_absent_apply=$?
+(( tc66_absent_apply == 0 )) && pass "legacy updater applies candidate with bare alias initially absent" || fail "absent-alias apply failed (exit $tc66_absent_apply)"
+tc66_absent_backup="$(find "$tc66_absent_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+grep -qx 'namespace_snapshot_version=2' "$tc66_absent_backup/manifest.txt" && ! grep -q '^omarchy'$'\t' "$tc66_absent_backup/derived-namespace-links" && pass "legacy upgrade records genuine bare-alias absence" || fail "legacy upgrade invented an absent bare alias"
+[[ "$(readlink "$tc66_absent_local/omarchy" 2>/dev/null || true)" == "$tc66_absent_local/ahr" ]] && pass "candidate introduces missing bare alias during apply" || fail "candidate did not introduce bare alias"
+
+tc66_absent_rb=0
+run_ahr "$tc66_absent_home" "$tc66_absent_fw/bin/ahr-update-framework" --rollback >/dev/null 2>&1 || tc66_absent_rb=$?
+(( tc66_absent_rb == 0 )) && pass "absent-alias legacy transition rolls back" || fail "absent-alias rollback failed (exit $tc66_absent_rb)"
+[[ ! -e "$tc66_absent_local/omarchy" && ! -L "$tc66_absent_local/omarchy" ]] && pass "rollback removes genuinely forward-added bare alias" || fail "rollback retained genuinely forward-added bare alias"
+
 echo "========================================"
 echo "  Results: $PASS passed, $FAIL failed"
 echo "========================================"
