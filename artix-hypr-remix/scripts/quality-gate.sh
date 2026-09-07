@@ -63,7 +63,7 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-echo "[1/16] Shell syntax check"
+echo "[1/18] Shell syntax check"
 mapfile -t shell_files < <(find "$REPO_ROOT" -type f -name '*.sh' | sort)
 if [[ "${#shell_files[@]}" -eq 0 ]]; then
   echo "No shell files found" >&2
@@ -71,49 +71,55 @@ if [[ "${#shell_files[@]}" -eq 0 ]]; then
 fi
 bash -n "${shell_files[@]}"
 
-echo "[2/16] OpenRC portability check"
+echo "[2/18] OpenRC portability check"
 "$SCRIPT_DIR/check-openrc-portability.sh"
 
-echo "[3/16] First-run idempotency check"
+echo "[3/18] First-run idempotency check"
 "$SCRIPT_DIR/check-first-run-idempotency.sh"
 
-echo "[4/16] Docker profile check"
+echo "[4/18] Docker profile check"
 "$SCRIPT_DIR/check-docker-profile.sh"
 
-echo "[5/16] Flatpak catalog foundation check"
+echo "[5/18] Flatpak catalog foundation check"
 "$SCRIPT_DIR/test-flatpak-catalog.sh"
 
-echo "[6/16] Flatpak catalog entry validation (offline)"
+echo "[6/18] Flatpak catalog entry validation (offline)"
 "$SCRIPT_DIR/validate-flatpak-catalog-entries.sh"
 
-echo "[7/16] Flatpak catalog CLI check"
+echo "[7/18] Flatpak catalog CLI check"
 "$SCRIPT_DIR/test-flatpak-cli.sh"
 
-echo "[8/16] Flatpak catalog operation check"
+echo "[8/18] Flatpak catalog operation check"
 "$SCRIPT_DIR/test-flatpak-operations.sh"
 
-echo "[9/16] Flatpak catalog lifecycle check"
+echo "[9/18] Flatpak catalog lifecycle check"
 "$SCRIPT_DIR/test-flatpak-lifecycle.sh"
 
-echo "[10/16] Flatpak out-of-band drift check"
+echo "[10/18] Flatpak out-of-band drift check"
 "$SCRIPT_DIR/test-flatpak-drift.sh"
 
-echo "[11/16] Flatpak catalog menu check"
+echo "[11/18] Flatpak catalog menu check"
 "$SCRIPT_DIR/test-flatpak-menu.sh"
 
-echo "[12/16] update-available Flatpak reporting check"
+echo "[12/18] update-available Flatpak reporting check"
 "$SCRIPT_DIR/test-update-available-flatpak.sh"
 
-echo "[13/16] Hyprland window-rule check"
+echo "[13/18] Hyprland window-rule check"
 "$SCRIPT_DIR/test-hyprland-window-rules.sh"
 
-echo "[14/16] Hyprland share-picker migration check"
+echo "[14/18] Hyprland share-picker migration check"
 "$SCRIPT_DIR/test-hyprland-share-picker-migration.sh"
 
-echo "[15/16] Config dependency check (core)"
+echo "[15/18] ahr-doctor service-policy check"
+"$SCRIPT_DIR/test-ahr-doctor.sh"
+
+echo "[16/18] Post-install smoke service-policy check"
+"$SCRIPT_DIR/test-post-install-smoke.sh"
+
+echo "[17/18] Config dependency check (core)"
 run_core_dependency_check
 
-echo "[16/16] Config dependency check (full)"
+echo "[18/18] Config dependency check (full)"
 if [[ "$include_aur" == "true" ]]; then
   "$SCRIPT_DIR/check-config-deps.sh"
 else

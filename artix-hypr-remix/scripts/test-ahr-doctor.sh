@@ -30,7 +30,7 @@ make_fixture() {
   printf '[Desktop Entry]\nName=Valid\n' > "$home/.local/share/applications/valid.desktop"
 
   local service cmd
-  for service in dbus elogind bluetoothd NetworkManager connmand; do
+  for service in dbus elogind bluetoothd NetworkManager connmand cupsd avahi-daemon; do
     : > "$dir/init.d/$service"
     chmod +x "$dir/init.d/$service"
   done
@@ -50,7 +50,7 @@ make_fixture() {
     printf '#!/usr/bin/env bash\n# sourced test library\n' > "$root/bin/$cmd"
     chmod 0644 "$root/bin/$cmd"
   done
-  for service in dbus elogind bluetoothd; do
+  for service in dbus elogind NetworkManager; do
     : > "$dir/runlevels/default/$service"
   done
   for cmd in ahr ahr-flatpak ahr-update ahr-update-framework ahr-update-available ahr-restore-component ahr-doctor; do
@@ -90,12 +90,12 @@ run_case() {
   local dir="$tmp_root/${label//[^A-Za-z0-9]/_}"
   make_fixture "$dir"
   local home="$dir/home" root="$dir/framework" stub="$dir/stub"
-  local active="connmand dbus elogind bluetoothd" video="" webm="" rc_cmd="rc-service" has_address=1
+  local active="NetworkManager dbus elogind" video="" webm="" rc_cmd="rc-service" has_address=1
   case "$mode" in
-    networkmanager) active="NetworkManager dbus elogind bluetoothd" ;;
-    both) active="NetworkManager connmand dbus elogind bluetoothd" ;;
+    both) active="NetworkManager connmand dbus elogind" ;;
     noaddress) has_address=0 ;;
-    none) active="dbus elogind bluetoothd" ;;
+    none) active="dbus elogind" ;;
+    core-inactive) active="dbus elogind" ;;
     unavailable-service) rc_cmd="missing-rc-service" ;;
     legacy) rm -rf "$root/current/theme"; ln -s "$root/themes/tokyo-night" "$root/current/theme" ;;
     missing-name) rm -f "$root/current/theme.name" ;;
@@ -128,11 +128,12 @@ run_case() {
   fi
 }
 
-run_case connman-active 0 'supported network manager active: connmand' base
-run_case networkmanager-active 0 'supported network manager active: NetworkManager' networkmanager
+run_case optional-bluetooth-inactive 0 'optional service bluetoothd is installed but not enabled or running' base
+run_case networkmanager-active 0 'supported network manager active: NetworkManager' base
 run_case both-active 0 'multiple supported network managers are active' both
-run_case connman-no-address 1 'no non-loopback address' noaddress
+run_case networkmanager-no-address 1 'no non-loopback address' noaddress
 run_case no-supported-manager 1 'no supported network manager is active' none
+run_case required-core-inactive 1 'NetworkManager installed but not running' core-inactive
 run_case service-command-unavailable 1 'missing-rc-service unavailable' unavailable-service
 run_case theme-directory 0 'current theme directory matches tokyo-night' base
 run_case theme-legacy-symlink 0 'current theme legacy symlink' legacy

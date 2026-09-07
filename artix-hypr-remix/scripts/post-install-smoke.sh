@@ -5,7 +5,8 @@ STARTUP_MODE_STATE_REL=".local/state/artix-hypr-remix/startup.mode"
 TTY_BLOCK_BEGIN="# >>> artix-hypr-remix tty hyprland >>>"
 
 declare -a REQUIRED_COMMANDS=(id getent rc-update rc-service pgrep)
-declare -a REQUIRED_SERVICES=(dbus elogind NetworkManager bluetoothd)
+declare -a REQUIRED_SERVICES=(dbus elogind NetworkManager)
+declare -a OPTIONAL_SERVICES=(bluetoothd)
 declare -a REQUIRED_DESKTOP_COMMANDS=(
   polkit-gnome-authentication-agent-1
   xdg-desktop-portal
@@ -91,12 +92,12 @@ warn_msg() {
 
 service_enabled_in_default_runlevel() {
   local service="$1"
-  [[ -e "/etc/runlevels/default/$service" ]]
+  [[ -e "${AHR_RUNLEVELS_DIR:-/etc/runlevels}/default/$service" ]]
 }
 
 service_script_present() {
   local service="$1"
-  [[ -x "/etc/init.d/$service" ]]
+  [[ -x "${AHR_INITD_DIR:-/etc/init.d}/$service" ]]
 }
 
 run_as_target_user() {
@@ -316,6 +317,32 @@ check_required_openrc_services() {
   done
 }
 
+check_optional_openrc_services() {
+  local service
+
+  echo "[3a/9] Reporting optional OpenRC services"
+
+  if [[ "$openrc_commands_ok" != "true" ]]; then
+    warn_msg "cannot validate optional OpenRC services because rc-update/rc-service checks failed"
+    return
+  fi
+
+  for service in "${OPTIONAL_SERVICES[@]}"; do
+    if ! service_script_present "$service"; then
+      warn_msg "optional service script missing: ${AHR_INITD_DIR:-/etc/init.d}/$service"
+      continue
+    fi
+
+    if ! service_enabled_in_default_runlevel "$service"; then
+      warn_msg "optional service not enabled in default runlevel: $service"
+    fi
+
+    if ! rc-service "$service" status >/dev/null 2>&1; then
+      warn_msg "optional service not running: $service"
+    fi
+  done
+}
+
 check_desktop_runtime_commands() {
   local cmd
 
@@ -331,32 +358,19 @@ check_desktop_runtime_commands() {
 
 check_printing_services() {
   local service
-  local enforce_printing=false
-  local all_scripts_present=true
 
   echo "[5/9] Validating optional printing service state"
 
   case "$expect_printing" in
     on)
-      enforce_printing=true
       ;;
     off)
       pass "printing validation skipped by --expect-printing off"
       return
       ;;
     auto)
-      for service in "${PRINTING_SERVICES[@]}"; do
-        if ! service_script_present "$service"; then
-          all_scripts_present=false
-        fi
-      done
-
-      if [[ "$all_scripts_present" == "true" ]]; then
-        enforce_printing=true
-      else
-        pass "printing services not detected; skipping printing service checks"
-        return
-      fi
+      pass "printing validation skipped by --expect-printing auto (profile selection is not inferred)"
+      return
       ;;
     *)
       fail "invalid --expect-printing mode: $expect_printing"
@@ -366,10 +380,6 @@ check_printing_services() {
 
   if [[ "$openrc_commands_ok" != "true" ]]; then
     fail "cannot validate printing services because rc-update/rc-service checks failed"
-    return
-  fi
-
-  if [[ "$enforce_printing" != "true" ]]; then
     return
   fi
 
@@ -862,9 +872,14 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
+if [[ "${AHR_SMOKE_LIBRARY_ONLY:-false}" == "true" ]]; then
+  return 0 2>/dev/null || exit 0
+fi
+
 check_required_commands
 resolve_target_user
 check_required_openrc_services
+check_optional_openrc_services
 check_desktop_runtime_commands
 check_printing_services
 check_session_runtime_stack

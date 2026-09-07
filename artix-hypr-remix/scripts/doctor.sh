@@ -22,8 +22,8 @@ declare -a REQUIRED_DESKTOP_COMMANDS=(
   xdg-desktop-portal
   xdg-desktop-portal-hyprland
 )
-declare -a REQUIRED_OPENRC_SERVICES=(dbus elogind NetworkManager bluetoothd)
-declare -a OPTIONAL_PRINTING_SERVICES=(cupsd avahi-daemon)
+declare -a REQUIRED_OPENRC_SERVICES=(dbus elogind NetworkManager)
+declare -a OPTIONAL_OPENRC_SERVICES=(bluetoothd cupsd avahi-daemon)
 declare -a REQUIRED_FRAMEWORK_COMMANDS=(
   ahr-menu
   ahr-menu-keybindings
@@ -612,10 +612,8 @@ for service in "${REQUIRED_OPENRC_SERVICES[@]}"; do
   check_openrc_service_health "$service" "true"
 done
 
-for service in "${OPTIONAL_PRINTING_SERVICES[@]}"; do
-  if [[ -x "/etc/init.d/$service" ]]; then
-    check_openrc_service_health "$service" "false"
-  fi
+for service in "${OPTIONAL_OPENRC_SERVICES[@]}"; do
+  check_openrc_service_health "$service" "false"
 done
 
 check_framework_runtime_commands

@@ -1066,7 +1066,7 @@ run_post_install_validation() {
 	fi
 
 	info "Running post-install validation checks"
-	if ! bash "$SCRIPT_DIR/scripts/post-install-smoke.sh" --user "$TARGET_USER"; then
+	if ! bash "$SCRIPT_DIR/scripts/post-install-smoke.sh" --user "$TARGET_USER" --expect-printing "$PRINTING_PROFILE"; then
 		error "Post-install validation failed. Review the reported checks above, fix the issue, then re-run the required phases."
 	fi
 }

@@ -75,9 +75,11 @@ Required services (default profile):
 - `dbus`
 - `elogind`
 - `NetworkManager`
-- `bluetoothd`
 
-Optional printing services (when profile enabled):
+Optional baseline service:
+- `bluetoothd` (warn if inactive; it is not a release-blocking failure)
+
+Printing-profile services (required only when `--printing-profile on` was selected):
 - `cupsd`
 - `avahi-daemon`
 
@@ -103,8 +105,9 @@ Checks:
 ### 5) Doctor/Smoke Coverage Validation
 
 - [ ] `doctor.sh` checks required OpenRC services and desktop runtime commands.
-- [ ] `post-install-smoke.sh` checks required OpenRC services including bluetooth.
-- [ ] `post-install-smoke.sh` validates optional printing services when expected.
+- [ ] `post-install-smoke.sh` fails only for missing/inactive required core OpenRC services; inactive Bluetooth is a warning.
+- [ ] Baseline smoke (`--expect-printing auto` or `off`) does not require printing services, even when their packages/init scripts exist.
+- [ ] `post-install-smoke.sh --expect-printing on` requires active `cupsd` and `avahi-daemon`.
 
 ## Signoff Criteria
 

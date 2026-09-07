@@ -144,10 +144,15 @@ service_check() {
     fi
     doctor_pass "$service (default runlevel, running)"
   else
-    printf '  OK: /etc/init.d/%s' "$service"
-    $enabled && printf ' (default runlevel)'
-    $running && printf ' (running)' || printf ' (not running)'
-    printf '\n'
+    if ! $enabled && ! $running; then
+      doctor_warn "optional service $service is installed but not enabled or running"
+    elif ! $enabled; then
+      doctor_warn "optional service $service is running but not enabled in the default runlevel"
+    elif ! $running; then
+      doctor_warn "optional service $service is enabled but not running"
+    else
+      doctor_pass "optional service $service (default runlevel, running)"
+    fi
   fi
 }
 
@@ -354,8 +359,9 @@ fi
 printf '\n=== OpenRC Services ===\n'
 service_check dbus true
 service_check elogind true
+service_check NetworkManager true
 network_stack_check
-service_check bluetoothd true
+service_check bluetoothd false
 check_optional docker docker docker
 service_check cupsd false
 service_check avahi-daemon false
