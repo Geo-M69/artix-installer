@@ -772,17 +772,30 @@ restore_migration_state() {
 
 # Snapshot only namespace links owned by AHR. Never copy unrelated user files
 # from ~/.local/bin. Each line is link-name<TAB>target.
+#
+# A link is captured only when its name is in the canonical namespace inventory
+# AND its symlink target proves AHR ownership: a command resolves inside the
+# framework bin, and a compatibility alias resolves to a namespace command entry
+# in the local bin, including the exact installed `ahr` and `omarchy` slots.
+# This is the same ownership rule used by namespace-install.sh,
+# restore_namespace_links, and ahr-restore-component; matching the exact targets
+# (not only `ahr-*`/`omarchy-*` prefixes) is what lets a pre-existing alias such
+# as `omarchy -> ~/.local/bin/ahr` be captured and later restored exactly.
 snapshot_namespace_links() {
   local output="$1"
   local local_bin="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
   : > "$output"
   [[ -d "$local_bin" ]] || return 0
-  local link target
+  local link target name
   while IFS= read -r -d '' link; do
+    name="$(basename "$link")"
+    # A filename outside the canonical inventory is never AHR-owned, even when
+    # it happens to point at an AHR namespace entry.
+    ahr_namespace_name_is_managed "$name" || continue
     target="$(readlink "$link" 2>/dev/null || true)"
     case "$target" in
-      "$FRAMEWORK_ROOT/bin/"*|"$local_bin/ahr-"*|"$local_bin/omarchy-"*)
-        printf '%s\t%s\n' "$(basename "$link")" "$target" >> "$output"
+      "$FRAMEWORK_ROOT/bin/"*|"$local_bin/ahr-"*|"$local_bin/omarchy-"*|"$local_bin/ahr"|"$local_bin/omarchy")
+        printf '%s\t%s\n' "$name" "$target" >> "$output"
         ;;
     esac
   done < <(find "$local_bin" -maxdepth 1 -type l -print0 2>/dev/null || true)

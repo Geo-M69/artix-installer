@@ -3111,6 +3111,99 @@ printf 'format_version=1\ntxid=tx-legacy-restore\naction=apply\npid=1\ntarget_ve
 tc64_legacy_exit=0; tc64_legacy_output="$(run_ahr "$tc64_legacy_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc64_legacy_exit=$?
 if (( tc64_legacy_exit == 0 )) && grep -qx 'phase=recovered' "$tc64_legacy_tx/state" && grep -qx 'completion=recovered' "$tc64_legacy_tx/state"; then pass "legacy pre-checkpoint transaction recovers normally"; else fail "legacy transaction did not retain normal recovery compatibility" "$tc64_legacy_output"; fi
 
+echo ""
+echo "=== TC65: Rollback restores a pre-existing AHR-owned exact local-bin alias ==="
+
+# Reproduces the Phase 3 rollback defect: the installed command namespace
+# already contains `omarchy -> ~/.local/bin/ahr` (an alias whose target is the
+# exact installed `ahr` entry, not an `ahr-*`/`omarchy-*` prefix).  The backup
+# namespace snapshot must capture that alias and rollback must restore it
+# exactly, while preserving unrelated links and removing a link introduced
+# after the snapshot.
+tc65_home="$tmp_root/tc65"
+tc65_repo="$(create_test_repo "$tmp_root/tc65_repo" "0.2.0")"
+setup_installed_framework "$tc65_home" "file://$tc65_repo"
+tc65_fw="$tc65_home/.config/artix-hypr-remix"
+tc65_local="$tc65_home/.local/bin"
+
+# Build a realistic pre-apply namespace: install the full command tree into the
+# installed framework bin, then run the production installer so every canonical
+# command and compatibility alias link exists before the update.  Keep the
+# harmless stub doctor so this regression isolates namespace rollback instead of
+# the full installed-desktop health surface.
+mkdir -p "$tc65_local"
+cp -a "$FRAMEWORK_BIN/." "$tc65_fw/bin/"
+cat > "$tc65_fw/bin/ahr-doctor" <<'EOF'
+#!/usr/bin/env bash
+echo "All checks passed."
+exit 0
+EOF
+chmod +x "$tc65_fw/bin/ahr-doctor"
+tc65_setup=0
+run_namespace_install "$tc65_home" --quiet 2>/dev/null || tc65_setup=$?
+(( tc65_setup == 0 )) && pass "full namespace installed for rollback regression" || fail "namespace setup failed (exit $tc65_setup)"
+
+# The reported alias must be present, target the exact local-bin entry, and
+# every canonical record (63 commands + 48 aliases = 111) must be live.
+[[ "$(readlink "$tc65_local/omarchy")" == "$tc65_local/ahr" ]] && pass "pre-apply omarchy alias targets exact local-bin ahr" || fail "pre-apply omarchy alias missing or wrong target"
+tc65_live=0
+for tc65_name in "${AHR_NAMESPACE_COMMANDS[@]}" "${AHR_NAMESPACE_ALIASES[@]}"; do
+  [[ "${tc65_name}" == *:* ]] && tc65_name="${tc65_name%%:*}"
+  [[ -L "$tc65_local/$tc65_name" ]] && ((tc65_live+=1))
+done
+(( tc65_live == 111 )) && pass "pre-apply namespace has all 111 managed links" || fail "pre-apply namespace had $tc65_live links, expected 111"
+
+# Hold one canonical command slot back so it is absent from the pre-apply
+# namespace; it will be re-added after apply to prove rollback removes a
+# forward-added managed link.  Also plant an arbitrary non-canonical symlink
+# whose target happens to resolve inside the framework bin: name-bounded
+# ownership must exclude it from the snapshot (capturing it would otherwise
+# make the whole rollback fail the restore parser).
+tc65_forward_name="ahr-voxtype-config"
+rm -f "$tc65_local/$tc65_forward_name"
+ln -s /usr/bin/true "$tc65_local/user-unrelated"
+ln -s "$tc65_fw/bin/ahr" "$tc65_local/not-ahr-owned"
+
+tc65_apply_exit=0
+run_ahr "$tc65_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc65_apply_exit=$?
+(( tc65_apply_exit == 0 )) && pass "apply succeeds with pre-existing exact local-bin alias" || fail "apply failed (exit $tc65_apply_exit)"
+
+# The backup snapshot must have captured the alias record with its exact target.
+tc65_backup="$(find "$tc65_home/.local/state/artix-hypr-remix/framework-backups" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+tc65_snap="$tc65_backup/derived-namespace-links"
+if [[ -f "$tc65_snap" ]] && grep -qxF "omarchy	$tc65_local/ahr" "$tc65_snap"; then
+  pass "backup namespace snapshot captured the exact-target omarchy alias"
+else
+  fail "backup namespace snapshot missed the exact-target omarchy alias"
+fi
+if [[ -f "$tc65_snap" ]] && ! grep -qxF "not-ahr-owned	$tc65_fw/bin/ahr" "$tc65_snap"; then
+  pass "snapshot does not claim a non-canonical name targeting the framework bin"
+else
+  fail "snapshot over-broadly claimed a non-canonical local-bin link"
+fi
+
+# Simulate a managed link delivered by the candidate after the backup snapshot
+# was taken: rollback must remove it (it was absent at backup time).
+ln -s "$tc65_fw/bin/$tc65_forward_name" "$tc65_local/$tc65_forward_name"
+
+tc65_rb_exit=0
+run_ahr "$tc65_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc65_rb_exit=$?
+(( tc65_rb_exit == 0 )) && pass "rollback succeeds with exact local-bin alias in snapshot" || fail "rollback failed (exit $tc65_rb_exit)"
+
+[[ "$(readlink "$tc65_local/omarchy" 2>/dev/null || true)" == "$tc65_local/ahr" ]] && pass "rollback restores pre-existing omarchy alias exactly" || fail "rollback did not restore the exact-target omarchy alias"
+[[ "$(readlink "$tc65_local/ahr" 2>/dev/null || true)" == "$tc65_fw/bin/ahr" ]] && pass "rollback restores ahr command link exactly" || fail "rollback changed the ahr command link"
+[[ ! -e "$tc65_local/$tc65_forward_name" && ! -L "$tc65_local/$tc65_forward_name" ]] && pass "rollback removes forward-added managed link" || fail "forward-added managed link remained"
+[[ "$(readlink "$tc65_local/not-ahr-owned" 2>/dev/null || true)" == "$tc65_fw/bin/ahr" ]] && pass "rollback preserves a non-canonical link targeting ahr" || fail "rollback removed or changed a non-canonical local-bin link"
+[[ "$(readlink "$tc65_local/user-unrelated" 2>/dev/null || true)" == "/usr/bin/true" ]] && pass "rollback preserves unrelated namespace link" || fail "rollback changed unrelated namespace link"
+
+# Re-apply the same candidate after rollback.  With the alias now present from
+# the restored snapshot, installation must succeed and keep the compatibility
+# alias pointing at the exact installed `ahr` entry (apply -> rollback -> reapply).
+tc65_reapply_exit=0
+run_ahr "$tc65_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc65_reapply_exit=$?
+(( tc65_reapply_exit == 0 )) && pass "reapply after rollback succeeds" || fail "reapply after rollback failed (exit $tc65_reapply_exit)"
+[[ "$(readlink "$tc65_local/omarchy" 2>/dev/null || true)" == "$tc65_local/ahr" ]] && pass "omarchy alias remains exact across reapply" || fail "reapply disturbed the exact-target omarchy alias"
+
 echo "========================================"
 echo "  Results: $PASS passed, $FAIL failed"
 echo "========================================"
