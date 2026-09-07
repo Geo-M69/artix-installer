@@ -88,7 +88,7 @@ All destructive operations use an exclusive transaction model with:
 | `failed` | Operation failed at this phase |
 | `recovered` | Recovery completed by --recover |
 | `recovery_restore_completed` | Archives restored; only recovery finalization remains |
-| `rollback_restore_completed` | Rollback restore completed; only terminal bookkeeping remains |
+| `rollback_restore_completed` | Rollback content restored; validated finalization and health reporting remain |
 
 ### Controlled Validation Namespace Fault
 
@@ -351,6 +351,77 @@ the rollback transaction and `phase=resolved_by_rollback`,
 mismatched links fail safely before an archive is replayed or an unrelated
 backup can be selected.
 
+Rollback first archives the installed targets under `phase=backup_in_progress`.
+An archive failure stops before restoration starts. `--recover` prioritizes
+that pre-mutation rollback attempt, finalizes it as `recovered` without replaying
+its incomplete archives, and leaves the original failed apply unresolved for
+a fresh exact rollback. Only a complete archive set advances to
+`rollback_in_progress`.
+
+Rollback completion means the exact associated restoration is durably recorded,
+transaction and backup provenance validate, and restored runtime commands pass
+smoke checks. Doctor reports host health separately: a nonzero post-rollback
+result does not undo restoration or leave either transaction unresolved. Both
+healthy and degraded completed rollbacks exit 0. Restore, provenance, smoke,
+record-integrity, and evidence-persistence failures still exit nonzero and leave
+finalization pending.
+
+The shared initial/restart finalizer saves doctor stdout and stderr in
+`<transaction>/doctor.log`, records `doctor_exit` and
+`post_rollback_health=pass|degraded`, and logs the result in
+`framework-update.log`. Degraded health emits a warning even with `--quiet`.
+A restart reuses recorded doctor evidence; it does not silently replace the
+historical result with current host health. Runtime smoke is checked again on
+continuation, with diagnostics in `<transaction>/rollback-smoke.log`.
+
+The linked apply is written `resolved_by_rollback` only after the durable
+`restore_completed=true` checkpoint and successful finalization checks. It is
+written before the rollback's terminal state: interruption between these two
+writes leaves the rollback checkpoint discoverable, so a fresh process can
+finish the terminal write without replaying restoration. Missing, duplicated,
+or malformed transaction fields fail before either record is resolved.
+
+### Continuing A Legacy Rollback Stranded By Doctor
+
+Older updaters overwrote the rollback checkpoint phase with
+`phase=health_check_failed`, `completion=health_check_failed` after a nonzero
+doctor result. The corrected updater's `--recover` and `--rollback` accept only
+the exact legacy combination: `action=rollback`, `restore_completed=true`, a
+valid nonzero `doctor_exit`, and matching
+`failure_reason=rollback_doctor_exit_<exit>`. The same complete-record,
+backup/linked-apply provenance, restored metadata, and smoke checks still apply.
+Multiple eligible rollback records are ambiguous and rejected. An apply health
+failure or a rollback without the restoration checkpoint does not qualify.
+
+Once the fix is published, use a checkout pinned to the published fix commit
+and invoke its updater directly with `--recover`. The restored installed
+updater can predate the fix. Keep the normal HOME, XDG state, and installed
+framework target; clear stale library overrides so candidate code loads its
+matching libraries. For a default installation:
+
+```bash
+candidate_checkout=/path/to/published-checkout
+env -u AHR_LIB_PATH -u AHR_VERSION_LIB_PATH -u AHR_CACHE_LIB_PATH \
+  -u AHR_BACKUP_HELPER_PATH -u AHR_FLATPAK_CATALOG_LIB_PATH \
+  bash "$candidate_checkout/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-update-framework" --recover
+```
+
+This validates and finalizes the existing rollback; it does not create a new
+rollback or replay restoration. The legacy exit and failure reason are retained,
+with `post_rollback_health=degraded`. Because the old updater did not save doctor
+stdout/stderr in the transaction, `doctor_output_status=unavailable_legacy` and
+`doctor.log` explicitly record that limitation; retain the original live
+validation transcript. New rollbacks use `doctor_output_status=captured`.
+
+Check that the rollback is `rolled_back` and its exact linked apply is
+`resolved_by_rollback`, then run normal `ahr update-framework --apply` against
+the published source. Apply's existing health gate is unchanged: an unresolved
+host-health problem can still make that new apply fail. Do not alter transaction
+state by hand or change service policy to bypass validation. Repeat the live
+published-candidate apply → candidate-direct rollback → reapply campaign before
+claiming release validation; finalizing an older rollback alone is not evidence
+that the new rollback path has passed live validation.
+
 ## Signal Handling
 
 During the activation transaction, traps are installed for:
@@ -428,7 +499,9 @@ Failure and recovery keys:
 |-----|---------|
 | `added_markers` | Pipe-separated list of new migration markers |
 | `migration_exit` | Last `migrate.sh` exit code |
-| `doctor_exit` | Last `ahr-doctor` exit code |
+| `doctor_exit` | Recorded `ahr-doctor` exit code |
+| `post_rollback_health` | `pass` or `degraded`, independent of rollback completion |
+| `doctor_output_status` | `captured`, or `unavailable_legacy` for an old stranded rollback |
 | `failure_reason` | Short token describing the failure |
 | `recovery_command` | Suggested next command |
 | `restore_completed` | `true` only after the associated archive restoration is durable |
@@ -441,8 +514,8 @@ Phases emitted: `created`, `backup_in_progress`, `snapshot_failed`, `activation_
 `phase=snapshot_failed`, `completion=failed`, with an incomplete primary
 manifest (`completed=in_progress`); no framework activation has occurred.
 `--recover` marks that pre-activation transaction recovered without rollback,
-while `--rollback` rejects its incomplete backup. A failed migration or health
-check leaves `completion=*_failed` so the next `apply` or `rollback` refuses
+while `--rollback` rejects its incomplete backup. An apply migration or health
+check failure leaves `completion=*_failed` so the next `apply` or `rollback` refuses
 to start and `--recover` can inspect the state.
 
 ## Exit Codes
@@ -453,10 +526,10 @@ to start and `--recover` can inspect the state.
 | `--check` | Update available | Up to date, no update source, or check failed |
 | `--dry-run` | Update available, valid | Up to date or validation failed |
 | `--apply` | Success | Any phase failed (validation, backup, activation, migration, health check) |
-| `--rollback` | Success | No backup, backup incomplete, or rollback failed |
+| `--rollback` | Restoration finalized, including degraded doctor health | No backup, backup incomplete, or rollback/finalization failed |
 | `--recover` | Recovery succeeded | No incomplete transaction or recovery failed |
 
-A failed migration or health check leaves `completion=migration_failed` or
+An apply migration or health check failure leaves `completion=migration_failed` or
 `completion=health_check_failed` in the transaction state. A subsequent
 `--apply` or `--rollback` refuses to start while the failure is unresolved;
 use `--recover` to inspect, or `ahr-update-framework --rollback` after

@@ -1239,7 +1239,7 @@ archive_target_tx() {
   if [[ -e "$dst" ]]; then
     cp -a "$dst" "$archived_dir" || return 1
   fi
-  write_transaction_state "$txdir" "archived_${target}=$archived_dir" "current_target=$target"
+  write_transaction_state "$txdir" "archived_${target}=$archived_dir" "current_target=$target" || return 1
   echo "$archived_dir"
 }
 
@@ -1317,7 +1317,7 @@ checkpoint_rollback_restore_completed() {
 # prevents migrations, prevents final commit, returns nonzero, and preserves
 # rollback material.
 smoke_test_activated_framework() {
-  local fw_root="$1"
+  local fw_root="$1" strict_exit="${2:-false}"
   local errors=0
   local cmd
 
@@ -1341,11 +1341,21 @@ smoke_test_activated_framework() {
     local line_count
     line_count="$(wc -l < "$cmd_path" 2>/dev/null || echo 0)"
     line_count="${line_count%% *}"
-    if (( line_count <= 2 )); then
+    if [[ "$strict_exit" == false ]] && (( line_count <= 2 )); then
       continue
     fi
-    local output
-    output="$(bash $cmd 2>&1)" || true
+    local output command_exit=0
+    output="$(bash $cmd 2>&1)" || command_exit=$?
+    # Older namespace installers reject --help with this exact usage response.
+    # That is a successful startup probe, not a library/runtime failure.
+    if [[ "$cmd_path" == "$fw_root/bin/namespace-install.sh" && "$command_exit" == 1 &&
+          "$output" == 'Usage: namespace-install.sh [--quiet]' ]]; then
+      command_exit=0
+    fi
+    if [[ "$strict_exit" == "true" ]] && (( command_exit != 0 )); then
+      echo "SMOKE FAIL: $cmd_path exited $command_exit: $output" >&2
+      errors=$((errors + 1))
+    fi
     if [[ "$output" == *"No such file"* || "$output" == *"ahr-version.sh"* || "$output" == *"ahr-lib.sh"* || "$output" == *"ahr-cache.sh"* || "$output" == *"ahr-backup-helper.sh"* ]]; then
       echo "SMOKE FAIL: $cmd_path cannot load libraries: $output" >&2
       errors=$((errors + 1))
@@ -2247,20 +2257,23 @@ cmd_rollback() {
   # Link the rollback to the failed apply if found
   if [[ -n "$failed_apply_tx" ]]; then
     write_transaction_state "$txdir" \
-      "phase=rollback_in_progress" \
+      "phase=backup_in_progress" \
       "resolved_apply_txid=$(basename "$failed_apply_tx")" \
       "resolved_apply_backup=$apply_backup"
   else
-    write_transaction_state "$txdir" "phase=rollback_in_progress"
+    write_transaction_state "$txdir" "phase=backup_in_progress"
   fi
 
-  # Archive current installed targets
+  # Archive current installed targets. Until every archive is saved, recovery
+  # must treat this as pre-mutation work and leave installed targets alone.
   for target in "${FRAMEWORK_TARGETS[@]}"; do
-    archive_target_tx "$txdir" "$target" "$FRAMEWORK_ROOT/$target" >/dev/null 2>&1 || true
+    archive_target_tx "$txdir" "$target" "$FRAMEWORK_ROOT/$target" >/dev/null || die "Failed to archive rollback target: $target"
   done
   for mf in "${FRAMEWORK_MANAGED_FILES[@]}"; do
-    archive_target_tx "$txdir" "$mf" "$FRAMEWORK_ROOT/$mf" >/dev/null 2>&1 || true
+    archive_target_tx "$txdir" "$mf" "$FRAMEWORK_ROOT/$mf" >/dev/null || die "Failed to archive rollback file: $mf"
   done
+
+  write_transaction_state "$txdir" "phase=rollback_in_progress"
 
   # Restore targets from backup
   local rollback_ok=true
@@ -2325,48 +2338,10 @@ cmd_rollback() {
     esac
   done
 
-  # Run post-rollback health check
+  # Restoration is a durable fact independent of post-restore host health.
+  # Both initial completion and restart use the same validated finalizer.
   checkpoint_rollback_restore_completed "$txdir" || die "Failed to record rollback restore-complete checkpoint"
-  log "Running health checks..."
-  local doctor_exit=0
-  local doctor_cmd="$FRAMEWORK_ROOT/bin/ahr-doctor"
-  if [[ -f "$doctor_cmd" ]]; then
-    local doctor_output
-    doctor_output="$(bash "$doctor_cmd" 2>&1)" || doctor_exit=$?
-    [[ "$quiet" == "false" ]] && echo "$doctor_output"
-  else
-    doctor_exit=1
-  fi
-
-  local health_status="pass"
-  (( doctor_exit != 0 )) && health_status="rollback_unhealthy"
-
-  local final_phase="rolled_back"
-  (( doctor_exit != 0 )) && final_phase="rollback_failed"
-
-  if (( doctor_exit != 0 )); then
-    write_transaction_state "$txdir" \
-      "phase=health_check_failed" \
-      "completion=health_check_failed" \
-      "doctor_exit=$doctor_exit" \
-      "failure_reason=rollback_doctor_exit_$doctor_exit"
-  else
-    # Resolve the failed apply first. If SIGKILL lands between these terminal
-    # writes, the durable rollback restore checkpoint remains resumable and
-    # the next process can idempotently finalize only the rollback state.
-    if [[ -n "$failed_apply_tx" ]]; then
-      finalize_transaction "$failed_apply_tx" "resolved_by_rollback" "resolved_by_rollback" || die "Failed to finalize linked failed apply transaction"
-      log "Original failed apply resolved by rollback: $(basename "$failed_apply_tx")"
-    fi
-    finalize_transaction "$txdir" "rolled_back" "$final_phase" || die "Failed to finalize rollback transaction"
-  fi
-  invalidate_cache "$FRAMEWORK_CACHE"
-
-  if (( doctor_exit != 0 )); then
-    log "Rollback completed but health checks reported issues."
-    current_txdir=""
-    return 1
-  fi
+  finalize_rollback_restore_completed "$txdir" || die "Rollback finalization failed; transaction remains recoverable"
 
   log "Framework rolled back: → $prev_version"
   current_txdir=""
@@ -2440,7 +2415,7 @@ find_unresolved_apply_tx() {
 # checkpoint is authoritative only when it belongs to this exact transaction
 # directory; a malformed marker must never turn into a restore replay.
 validate_restore_checkpoint_identity() {
-  local txdir="$1" expected_action="$2" expected_phase="$3"
+  local txdir="$1" expected_action="$2" expected_phase="$3" expected_completion="${4:-in_progress}"
   local txid action phase completion restored
   txid="$(read_tx_field_unique "$txdir" "txid" 2>/dev/null || true)"
   action="$(read_tx_field_unique "$txdir" "action" 2>/dev/null || true)"
@@ -2450,7 +2425,7 @@ validate_restore_checkpoint_identity() {
   ahr_validate_transaction_id "$txid" || { echo "Restore checkpoint has invalid transaction ID" >&2; return 1; }
   [[ "$txid" == "$(basename "$txdir")" ]] || { echo "Restore checkpoint transaction ID does not match directory" >&2; return 1; }
   [[ "$action" == "$expected_action" ]] || { echo "Restore checkpoint action is invalid" >&2; return 1; }
-  [[ "$phase" == "$expected_phase" && "$completion" == "in_progress" && "$restored" == "true" ]] || {
+  [[ "$phase" == "$expected_phase" && "$completion" == "$expected_completion" && "$restored" == "true" ]] || {
     echo "Restore checkpoint is incomplete or malformed" >&2
     return 1
   }
@@ -2465,11 +2440,45 @@ finalize_recovery_restore_completed() {
 # The linked failed apply is part of a rollback's immutable provenance.  A
 # partially written link, a redirected backup, or a mismatched manifest is a
 # hard stop before any filesystem restoration is considered.
+# Validate the entire record before changing either linked transaction. Checking
+# only individual provenance fields could resolve the apply before a duplicate
+# or missing field makes the rollback's terminal write fail.
+validate_transaction_record() {
+  local txdir="$1" line key
+  local -A fields=()
+  [[ -f "$txdir/state" ]] || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == *=* && "$line" != *$'\r'* ]] || return 1
+    key="${line%%=*}"
+    [[ "$key" =~ ^[a-zA-Z0-9_.-]+$ && -z "${fields[$key]+x}" ]] || return 1
+    fields["$key"]="${line#*=}"
+  done < "$txdir/state"
+  for key in "${TX_REQUIRED_KEYS[@]}"; do
+    [[ -n "${fields[$key]+x}" ]] || return 1
+  done
+  [[ "${fields[format_version]:-}" == 1 ]] || return 1
+}
+
 AHR_ROLLBACK_LINKED_APPLY_TX=""
 validate_rollback_restore_completed() {
   local txdir="$1"
   local backup_dir backup_path backup_id transaction_id manifest
-  validate_restore_checkpoint_identity "$txdir" "rollback" "rollback_restore_completed" || return 1
+  validate_transaction_record "$txdir" || { echo "Malformed rollback transaction record" >&2; return 1; }
+  local phase completion doctor_exit reason
+  phase="$(read_tx_field_unique "$txdir" phase)" || return 1
+  completion=in_progress
+  if [[ "$phase" == health_check_failed ]]; then
+    # Compatibility with the old finalizer: only its exact post-restoration
+    # doctor failure qualifies. No inference from archives or current health.
+    doctor_exit="$(read_tx_field_unique "$txdir" doctor_exit)" || return 1
+    reason="$(read_tx_field_unique "$txdir" failure_reason)" || return 1
+    [[ "$doctor_exit" =~ ^[1-9][0-9]{0,2}$ ]] && (( doctor_exit <= 255 )) || return 1
+    [[ "$reason" == "rollback_doctor_exit_$doctor_exit" ]] || return 1
+    completion=health_check_failed
+  else
+    [[ "$phase" == rollback_restore_completed ]] || return 1
+  fi
+  validate_restore_checkpoint_identity "$txdir" rollback "$phase" "$completion" || return 1
 
   backup_dir="$(read_tx_field_unique "$txdir" "backup_dir" 2>/dev/null || true)"
   backup_path="$(read_tx_field_unique "$txdir" "backup_path" 2>/dev/null || true)"
@@ -2484,6 +2493,17 @@ validate_rollback_restore_completed() {
   path_under "$backup_path" "$FRAMEWORK_BACKUPS_DIR" || { echo "Rollback checkpoint backup is outside backup root" >&2; return 1; }
   manifest="$backup_path/manifest.txt"
   ahr_parse_primary_manifest "$manifest" "$backup_id" true || { echo "Rollback checkpoint backup manifest is invalid" >&2; return 1; }
+  [[ "$(read_manifest_field_unique "$manifest" completed)" == true ]] || return 1
+  local previous_revision previous_version
+  previous_revision="$(read_manifest_field_unique "$manifest" previous_revision)" || return 1
+  previous_version="$(read_manifest_field_unique "$manifest" previous_version)" || return 1
+  [[ "$(read_tx_field_unique "$txdir" staging_commit)" == "$previous_revision" &&
+     "$(read_tx_field_unique "$txdir" target_version)" == "$previous_version" &&
+     "$(read_json_value "$backup_path/framework.json" revision)" == "$previous_revision" ]] || return 1
+  cmp -s "$FRAMEWORK_JSON" "$backup_path/framework.json" || {
+    echo "Rollback checkpoint restored metadata differs from its backup" >&2
+    return 1
+  }
 
   local link_tx_count link_backup_count linked_txid linked_backup linked_tx linked_action linked_state_txid linked_backup_id linked_completion
   link_tx_count="$(grep -c '^resolved_apply_txid=' "$txdir/state" 2>/dev/null || true)"
@@ -2501,6 +2521,11 @@ validate_rollback_restore_completed() {
 
   linked_tx="$FRAMEWORK_TRANSACTIONS_DIR/$linked_txid"
   [[ -d "$linked_tx" && -f "$linked_tx/state" ]] || { echo "Rollback checkpoint linked failed apply is missing" >&2; return 1; }
+  validate_transaction_record "$linked_tx" || return 1
+  [[ "$(read_tx_field_unique "$linked_tx" txid)" == "$linked_txid" &&
+     "$(read_tx_field_unique "$linked_tx" backup_path)" == "$backup_path" &&
+     "$(read_tx_field_unique "$linked_tx" previous_version)" == "$previous_version" &&
+     "$(read_tx_field_unique "$linked_tx" staging_commit)" == "$(read_manifest_field_unique "$manifest" staging_commit)" ]] || return 1
   linked_action="$(read_tx_field_unique "$linked_tx" "action" 2>/dev/null || true)"
   linked_state_txid="$(read_tx_field_unique "$linked_tx" "transaction_id" 2>/dev/null || true)"
   linked_backup_id="$(read_tx_field_unique "$linked_tx" "backup_id" 2>/dev/null || true)"
@@ -2520,15 +2545,63 @@ validate_rollback_restore_completed() {
   AHR_ROLLBACK_LINKED_APPLY_TX="$linked_tx"
 }
 
+# Doctor is advisory for restoration, but its evidence must survive restarts.
+# Publish output before the atomic health record. If interrupted before that
+# record, a retry runs doctor again; it never replays restoration.
+record_rollback_health() {
+  local txdir="$1" doctor_exit health_status tmp
+  if [[ -n "$(read_tx_field_unique "$txdir" post_rollback_health 2>/dev/null || true)" ]]; then
+    doctor_exit="$(read_tx_field_unique "$txdir" doctor_exit)" || return 1
+    health_status="$(read_tx_field_unique "$txdir" post_rollback_health)" || return 1
+    [[ "$doctor_exit" =~ ^(0|[1-9][0-9]{0,2})$ ]] && (( doctor_exit <= 255 )) || return 1
+    [[ "$health_status" == pass && "$doctor_exit" == 0 || "$health_status" == degraded && "$doctor_exit" != 0 ]] || return 1
+    [[ -f "$txdir/doctor.log" ]] || return 1
+  elif [[ "$(read_tx_field_unique "$txdir" phase)" == health_check_failed ]]; then
+    # The old updater retained exit/reason but did not persist stdout/stderr.
+    # Keep that historical result; do not replace it with today's host health.
+    doctor_exit="$(read_tx_field_unique "$txdir" doctor_exit)" || return 1
+    health_status=degraded
+    tmp="$(mktemp "$txdir/doctor.log.XXXXXX")" || return 1
+    printf 'Legacy rollback doctor exited %s; original output was not saved by that updater. Consult the live validation log.\n' "$doctor_exit" > "$tmp" || return 1
+    mv -f "$tmp" "$txdir/doctor.log" || return 1
+    write_transaction_state "$txdir" "post_rollback_health=$health_status" "doctor_output_status=unavailable_legacy" || return 1
+  else
+    log "Running post-rollback health checks..."
+    tmp="$(mktemp "$txdir/doctor.log.XXXXXX")" || return 1
+    doctor_exit=0
+    bash "$FRAMEWORK_ROOT/bin/ahr-doctor" > "$tmp" 2>&1 || doctor_exit=$?
+    mv -f "$tmp" "$txdir/doctor.log" || return 1
+    health_status=pass
+    (( doctor_exit == 0 )) || health_status=degraded
+    write_transaction_state "$txdir" "doctor_exit=$doctor_exit" "post_rollback_health=$health_status" "doctor_output_status=captured" || return 1
+  fi
+  if [[ "$quiet" == false ]]; then cat "$txdir/doctor.log" || return 1; fi
+  if [[ "$health_status" == degraded ]]; then
+    echo "WARNING: Rollback restoration completed; post-rollback host health is degraded (doctor exit $doctor_exit). Evidence: $txdir/doctor.log" >&2
+  fi
+  log_line "rollback $(basename "$txdir"): restoration complete; post_rollback_health=$health_status doctor_exit=$doctor_exit evidence=$txdir/doctor.log"
+}
+
 finalize_rollback_restore_completed() {
   local txdir="$1"
   validate_rollback_restore_completed "$txdir" || return 1
+  # Smoke is a framework integrity gate, unlike the host-wide doctor result.
+  # Recheck on restart, including legacy checkpoints that predate this gate.
+  if ! smoke_test_activated_framework "$FRAMEWORK_ROOT" true > "$txdir/rollback-smoke.log" 2>&1; then
+    cat "$txdir/rollback-smoke.log" >&2
+    return 1
+  fi
+  record_rollback_health "$txdir" || return 1
+  validate_rollback_restore_completed "$txdir" || return 1
+  # The restore checkpoint is already durable. Resolve the apply first so a
+  # crash between terminal writes leaves the rollback discoverable for retry.
   if [[ -n "$AHR_ROLLBACK_LINKED_APPLY_TX" ]]; then
     if [[ "$(read_tx_field_unique "$AHR_ROLLBACK_LINKED_APPLY_TX" "completion" 2>/dev/null || true)" != "resolved_by_rollback" ]]; then
       finalize_transaction "$AHR_ROLLBACK_LINKED_APPLY_TX" "resolved_by_rollback" "resolved_by_rollback" || return 1
     fi
   fi
-  finalize_transaction "$txdir" "rolled_back" "rolled_back"
+  finalize_transaction "$txdir" "rolled_back" "rolled_back" || return 1
+  invalidate_cache "$FRAMEWORK_CACHE"
 }
 
 # Return the one rollback transaction whose archive restoration has completed
@@ -2540,7 +2613,10 @@ find_rollback_restore_completed_tx() {
   for txdir in "$FRAMEWORK_TRANSACTIONS_DIR"/*/; do
     [[ -f "$txdir/state" ]] || continue
     phase="$(read_tx_field_unique "${txdir%/}" "phase" 2>/dev/null || true)"
-    [[ "$phase" == "rollback_restore_completed" ]] || continue
+    if [[ "$phase" != rollback_restore_completed ]]; then
+      [[ "$phase" == health_check_failed &&
+         "$(read_tx_field_unique "${txdir%/}" action 2>/dev/null || true)" == rollback ]] || continue
+    fi
     found="${txdir%/}"
     count=$((count + 1))
   done
@@ -2606,7 +2682,21 @@ cmd_recover() {
 
   local found_tx=""
   local txdir
+  # A rollback that could not finish archiving has not changed installed
+  # content. Clear that pre-mutation attempt before its linked failed apply,
+  # otherwise traversal can repeatedly direct rollback while it is blocked.
   for txdir in "$FRAMEWORK_TRANSACTIONS_DIR"/*/; do
+    [[ -f "$txdir/state" ]] || continue
+    if [[ "$(read_tx_field_unique "$txdir" action 2>/dev/null || true)" == rollback &&
+          "$(read_tx_field_unique "$txdir" phase 2>/dev/null || true)" == backup_in_progress &&
+          "$(read_tx_field_unique "$txdir" completion 2>/dev/null || true)" == in_progress ]]; then
+      validate_transaction_record "$txdir" || return 1
+      found_tx="$txdir"
+      break
+    fi
+  done
+  for txdir in "$FRAMEWORK_TRANSACTIONS_DIR"/*/; do
+    [[ -z "$found_tx" ]] || break
     [[ -d "$txdir" ]] || continue
     local state_file="$txdir/state"
     [[ -f "$state_file" ]] || continue

@@ -36,6 +36,15 @@ transaction and blocks another apply. Use `ahr update-framework --recover` to
 inspect interrupted activation. For migration or health-check failures, review
 the log and normally use `ahr update-framework --rollback`.
 
+A completed rollback records restoration separately from host health. A nonzero
+post-rollback doctor result is retained as degraded health with its output and
+exit code, while an exact, validated restoration finalizes as `rolled_back` and
+resolves the linked failed apply. Restoration, provenance, transaction-integrity,
+and runtime smoke failures still prevent completion. For an older rollback
+stranded in `health_check_failed` with `restore_completed=true`, use the corrected
+published updater directly with `--recover`; do not edit live state. See
+[the supported continuation procedure](docs/FRAMEWORK_UPDATE.md#continuing-a-legacy-rollback-stranded-by-doctor).
+
 Framework updates create timestamped backups under
 `~/.local/state/artix-hypr-remix/framework-backups/` before activation.  Each
 backup contains the previous `bin/`, `migrations/`, `docs/`, `hooks/`,

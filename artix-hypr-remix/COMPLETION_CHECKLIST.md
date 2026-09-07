@@ -20,6 +20,8 @@ validation; it is not published or tagged yet.
 - [x] Cover migration delivery and forward-added managed-link rollback in the
   framework updater regression suite.
 - [x] Run the 16-stage offline quality gate for the candidate.
+- [x] Separate durable rollback completion from post-rollback doctor health,
+  preserving provenance checks, health evidence, and crash-safe linked resolution.
 - [ ] Run a real public-source apply → rollback → reapply validation after the
   release commit is reachable from `https://github.com/Geo-M69/artix-installer.git`.
 - [ ] Tag and publish `v0.2.0-beta2` only after that validation is recorded.

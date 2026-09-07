@@ -294,6 +294,18 @@ checkpoints make recovery and rollback finalization restart-safe even when a
 process cannot trap `SIGKILL`. Backup-to-transaction identity is immutable and
 cross-checked to prevent restoration from an unrelated backup.
 
+Rollback's terminal state represents durable restoration, validated provenance
+and transaction integrity, and passing restored-runtime smoke checks. Host-wide
+doctor health is separate evidence (`post_rollback_health=pass|degraded`,
+`doctor_exit`, and a transaction-local `doctor.log`); it cannot strand an exact
+completed rollback. The linked failed apply resolves only after the restoration
+checkpoint and finalization checks, with restart-safe terminal ordering. The
+corrected updater can also finalize the narrowly validated legacy
+`health_check_failed` rollback that still carries `restore_completed=true`;
+it never infers completion from missing archives or from a healthy doctor.
+See `docs/FRAMEWORK_UPDATE.md` for candidate-direct continuation and evidence
+limits. Apply's health gate and service policy are unchanged.
+
 ## Application Management Layer
 
 The application layer is intentionally split into three responsibilities:

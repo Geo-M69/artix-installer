@@ -103,6 +103,13 @@ echo "All checks passed."
 exit 0
 EOF
   chmod +x "$home_dir/.config/artix-hypr-remix/bin/ahr-doctor"
+  # Restored framework entrypoints must also pass the rollback smoke gate.
+  local command
+  for command in ahr-update-framework ahr-update-available ahr-restore-component namespace-install.sh; do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$home_dir/.config/artix-hypr-remix/bin/$command"
+    chmod +x "$home_dir/.config/artix-hypr-remix/bin/$command"
+  done
+  cp "$UPDATE_FRAMEWORK" "$home_dir/.config/artix-hypr-remix/bin/ahr-update-framework"
   cat > "$home_dir/.config/artix-hypr-remix/bin/migrate.sh" <<'EOF'
 #!/usr/bin/env bash
 FRAMEWORK_ROOT="${AHR_FRAMEWORK_ROOT:-$HOME/.config/artix-hypr-remix}"
@@ -3331,6 +3338,221 @@ tc66_absent_rb=0
 run_ahr "$tc66_absent_home" "$tc66_absent_fw/bin/ahr-update-framework" --rollback >/dev/null 2>&1 || tc66_absent_rb=$?
 (( tc66_absent_rb == 0 )) && pass "absent-alias legacy transition rolls back" || fail "absent-alias rollback failed (exit $tc66_absent_rb)"
 [[ ! -e "$tc66_absent_local/omarchy" && ! -L "$tc66_absent_local/omarchy" ]] && pass "rollback removes genuinely forward-added bare alias" || fail "rollback retained genuinely forward-added bare alias"
+
+echo ""
+echo "=== TC67: Rollback completion is independent of host health ==="
+
+tc67_repo="$(create_test_repo "$tmp_root/tc67_repo" "0.2.0")"
+tc67_setup() {
+  local home="$1" doctor_exit="${2:-1}"
+  setup_installed_framework "$home" "file://$tc67_repo"
+  cat > "$home/.config/artix-hypr-remix/bin/ahr-doctor" <<'DOCTOR'
+#!/usr/bin/env bash
+[[ "${1:-}" == --help ]] && exit 0
+echo 'Pre-existing host health evidence (stdout)'
+echo 'Pre-existing host health evidence (stderr)' >&2
+exit "$(cat "$HOME/doctor-exit")"
+DOCTOR
+  printf '%s\n' "$doctor_exit" > "$home/doctor-exit"
+  printf 'baseline applied\n' > "$home/.local/state/artix-hypr-remix/migrations/baseline.sh"
+  printf 'baseline skipped\n' > "$home/.local/state/artix-hypr-remix/migrations/skipped/skipped.sh"
+  mkdir -p "$home/.local/bin"
+  ln -s "$home/.config/artix-hypr-remix/bin/ahr-doctor" "$home/.local/bin/ahr-doctor"
+}
+
+tc67_fail_apply() {
+  local home="$1" result=0
+  AHR_TEST_FAIL_HEALTH_CHECK=1 tc62_run_direct "$home" --apply > "$home/apply.log" 2>&1 || result=$?
+  (( result != 0 )) && grep -q 'TEST FAULT:' "$home/apply.log" || { fail "rollback fixture did not reach apply health failure"; return 1; }
+}
+
+for tc67_doctor_exit in 0 1; do
+  tc67_home="$tmp_root/tc67_health_$tc67_doctor_exit"
+  tc67_setup "$tc67_home" "$tc67_doctor_exit"
+  tc67_fw="$tc67_home/.config/artix-hypr-remix"
+  tc67_before="$(tc61_snapshot "$tc67_fw")"
+  tc67_namespace="$(tc61_snapshot "$tc67_home/.local/bin")"
+  tc67_fail_apply "$tc67_home"
+  tc67_apply_state="$(tc64_state_for_action "$tc67_home" apply)"
+  tc67_apply_txid="$(transaction_exact_field "$tc67_apply_state" transaction_id)"
+  tc67_backup="$(transaction_exact_field "$tc67_apply_state" backup_path)"
+  tc67_exit=0
+  tc67_output="$(tc62_run_direct "$tc67_home" --rollback --quiet 2>&1)" || tc67_exit=$?
+  tc67_state="$(tc64_state_for_action "$tc67_home" rollback)"
+  tc67_txdir="$(dirname "$tc67_state")"
+  if (( tc67_exit == 0 )) && grep -qx 'phase=rolled_back' "$tc67_state" && grep -qx 'completion=rolled_back' "$tc67_state" && grep -qx 'restore_completed=true' "$tc67_state" && grep -qx 'completion=resolved_by_rollback' "$tc67_apply_state"; then pass "doctor exit $tc67_doctor_exit: exact rollback finalizes both transactions"; else fail "doctor exit $tc67_doctor_exit: finalization failed" "$tc67_output"; fi
+  if [[ "$(tc61_snapshot "$tc67_fw")" == "$tc67_before" && "$(tc61_snapshot "$tc67_home/.local/bin")" == "$tc67_namespace" ]] && cmp -s "$tc67_fw/framework.json" "$tc67_backup/framework.json" && cmp -s "$tc67_home/.local/state/artix-hypr-remix/migrations/baseline.sh" "$tc67_backup/migration-snapshot/applied/baseline.sh" && cmp -s "$tc67_home/.local/state/artix-hypr-remix/migrations/skipped/skipped.sh" "$tc67_backup/migration-snapshot/skipped/skipped.sh"; then pass "doctor exit $tc67_doctor_exit: targets metadata markers and namespace restored exactly"; else fail "doctor exit $tc67_doctor_exit: restoration differs"; fi
+  tc67_health=pass
+  (( tc67_doctor_exit == 0 )) || tc67_health=degraded
+  if grep -qx "doctor_exit=$tc67_doctor_exit" "$tc67_state" && grep -qx "post_rollback_health=$tc67_health" "$tc67_state" && grep -q '(stdout)' "$tc67_txdir/doctor.log" && grep -q '(stderr)' "$tc67_txdir/doctor.log" && grep -q "post_rollback_health=$tc67_health" "$tc67_home/.local/state/artix-hypr-remix/framework-update.log"; then pass "doctor exit $tc67_doctor_exit: health and both output streams persist"; else fail "doctor evidence lost"; fi
+  if (( tc67_doctor_exit == 1 )); then
+    grep -q 'WARNING:.*health is degraded' <<<"$tc67_output" && pass "degraded rollback health is visible even under quiet" || fail "quiet hid degraded health"
+  else
+    [[ -z "$tc67_output" ]] && pass "healthy quiet rollback stays quiet" || fail "healthy quiet rollback was noisy" "$tc67_output"
+  fi
+  grep -qx "transaction_id=$tc67_apply_txid" "$tc67_apply_state" && grep -qx "backup_path=$tc67_backup" "$tc67_apply_state" && pass "doctor exit $tc67_doctor_exit: apply provenance remains immutable" || fail "terminal transition lost apply provenance"
+  tc67_reapply=0
+  tc62_run_direct "$tc67_home" --apply >/dev/null 2>&1 || tc67_reapply=$?
+  (( tc67_reapply == 0 )) && pass "doctor exit $tc67_doctor_exit: normal reapply is no longer blocked" || fail "completed rollback stranded reapply"
+done
+
+# An archive failure is pre-mutation. Recovery must not replay an incomplete
+# archive set over untouched installed targets.
+tc67_archive_home="$tmp_root/tc67_archive_failure"
+tc67_setup "$tc67_archive_home" 0
+tc67_fail_apply "$tc67_archive_home"
+tc67_archive_apply="$(tc64_state_for_action "$tc67_archive_home" apply)"
+tc67_archive_before="$(tc61_snapshot "$tc67_archive_home/.config/artix-hypr-remix")"
+mkdir -p "$tc67_archive_home/shims"
+cat > "$tc67_archive_home/shims/cp" <<'EOF_CP_ARCHIVE'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  case "$arg" in */framework-transactions/*/archived/hooks) echo 'forced archive failure' >&2; exit 71 ;; esac
+done
+exec /usr/bin/cp "$@"
+EOF_CP_ARCHIVE
+chmod +x "$tc67_archive_home/shims/cp"
+tc67_archive_exit=0
+PATH="$tc67_archive_home/shims:$PATH" tc62_run_direct "$tc67_archive_home" --rollback > "$tc67_archive_home/rollback.log" 2>&1 || tc67_archive_exit=$?
+tc67_archive_state="$(tc64_state_for_action "$tc67_archive_home" rollback)"
+if (( tc67_archive_exit != 0 )) && grep -q 'forced archive failure' "$tc67_archive_home/rollback.log" && grep -qx 'phase=backup_in_progress' "$tc67_archive_state" && grep -qx 'completion=health_check_failed' "$tc67_archive_apply" && [[ "$(tc61_snapshot "$tc67_archive_home/.config/artix-hypr-remix")" == "$tc67_archive_before" ]]; then pass "archive failure stops rollback before mutation and leaves apply unresolved"; else fail "archive failure allowed rollback mutation"; fi
+# Recovery prioritizes this pre-mutation rollback over the linked failed apply,
+# leaving that apply available for a fresh exact rollback attempt.
+tc67_archive_recover=0; tc62_run_direct "$tc67_archive_home" --recover >/dev/null 2>&1 || tc67_archive_recover=$?
+if (( tc67_archive_recover == 0 )) && grep -qx 'completion=recovered' "$tc67_archive_state" && [[ "$(tc61_snapshot "$tc67_archive_home/.config/artix-hypr-remix")" == "$tc67_archive_before" ]] && grep -qx 'completion=health_check_failed' "$tc67_archive_apply"; then pass "archive failure recovery never replays incomplete archives or resolves apply"; else fail "archive failure recovery changed untouched state"; fi
+tc67_archive_retry=0; tc62_run_direct "$tc67_archive_home" --rollback >/dev/null 2>&1 || tc67_archive_retry=$?
+if (( tc67_archive_retry == 0 )) && grep -qx 'completion=resolved_by_rollback' "$tc67_archive_apply"; then pass "archive failure recovery permits a fresh exact rollback"; else fail "archive failure stranded rollback retry"; fi
+
+# A failed copy is a restoration failure even when doctor would be healthy.
+tc67_restore_home="$tmp_root/tc67_restore_failure"
+tc67_setup "$tc67_restore_home" 0
+tc67_fail_apply "$tc67_restore_home"
+tc67_restore_apply="$(tc64_state_for_action "$tc67_restore_home" apply)"
+mkdir -p "$tc67_restore_home/shims"
+cat > "$tc67_restore_home/shims/cp" <<'EOF_CP'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  case "$arg" in */framework-backups/*/hooks) echo 'forced restore copy failure' >&2; exit 71 ;; esac
+done
+exec /usr/bin/cp "$@"
+EOF_CP
+chmod +x "$tc67_restore_home/shims/cp"
+tc67_restore_exit=0
+PATH="$tc67_restore_home/shims:$PATH" tc62_run_direct "$tc67_restore_home" --rollback > "$tc67_restore_home/rollback.log" 2>&1 || tc67_restore_exit=$?
+tc67_restore_state="$(tc64_state_for_action "$tc67_restore_home" rollback)"
+if (( tc67_restore_exit != 0 )) && grep -q 'forced restore copy failure' "$tc67_restore_home/rollback.log" && grep -qx 'completion=failed' "$tc67_restore_state" && ! grep -qx 'restore_completed=true' "$tc67_restore_state" && grep -qx 'completion=health_check_failed' "$tc67_restore_apply" && [[ ! -f "$(dirname "$tc67_restore_state")/doctor.log" ]]; then pass "restore failure leaves rollback and apply unresolved without running doctor"; else fail "restore failure was treated as completed rollback"; fi
+tc67_restore_reapply=0; tc62_run_direct "$tc67_restore_home" --apply >/dev/null 2>&1 || tc67_restore_reapply=$?
+(( tc67_restore_reapply != 0 )) && pass "restore failure continues to block reapply" || fail "restore failure allowed reapply"
+
+# Failure to publish the checkpoint must not resolve the linked apply, even
+# though copying the restored bytes has finished.
+tc67_durable_home="$tmp_root/tc67_checkpoint_failure"
+tc67_setup "$tc67_durable_home" 0
+tc67_fail_apply "$tc67_durable_home"
+tc67_durable_apply="$(tc64_state_for_action "$tc67_durable_home" apply)"
+mkdir -p "$tc67_durable_home/shims"
+cat > "$tc67_durable_home/shims/mv" <<'EOF_MV_CHECKPOINT'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  if [[ "$arg" == */state.tmp.* && -f "$arg" ]] && grep -qx 'phase=rollback_restore_completed' "$arg"; then
+    echo 'forced checkpoint publication failure' >&2
+    exit 73
+  fi
+done
+exec /usr/bin/mv "$@"
+EOF_MV_CHECKPOINT
+chmod +x "$tc67_durable_home/shims/mv"
+tc67_durable_exit=0
+PATH="$tc67_durable_home/shims:$PATH" tc62_run_direct "$tc67_durable_home" --rollback > "$tc67_durable_home/rollback.log" 2>&1 || tc67_durable_exit=$?
+tc67_durable_state="$(tc64_state_for_action "$tc67_durable_home" rollback)"
+if (( tc67_durable_exit != 0 )) && grep -q 'forced checkpoint publication failure' "$tc67_durable_home/rollback.log" && ! grep -qx 'restore_completed=true' "$tc67_durable_state" && grep -qx 'completion=health_check_failed' "$tc67_durable_apply" && [[ ! -f "$(dirname "$tc67_durable_state")/doctor.log" ]]; then pass "checkpoint publication failure cannot resolve linked apply"; else fail "apply resolved without durable restore completion"; fi
+
+# Interrupt at the production checkpoint. The failed apply must still be
+# unresolved; malformed state and smoke failures must not permit its resolution.
+tc67_restart_home="$tmp_root/tc67_restart"
+tc67_setup "$tc67_restart_home" 1
+tc67_fail_apply "$tc67_restart_home"
+tc67_restart_apply="$(tc64_state_for_action "$tc67_restart_home" apply)"
+tc67_restart_log="$tc67_restart_home/rollback.log"
+tc64_launch_pause AHR_TEST_PAUSE_ROLLBACK_AFTER_RESTORE "$tc67_restart_home" "$tc67_restart_log" --rollback
+tc67_restart_pid="$TC64_PAUSE_PID"
+tc63_wait_marker 'TEST PAUSE: rollback restore complete, before finalization' "$tc67_restart_log" "$tc67_restart_pid" || fail "rollback checkpoint pause missing"
+tc67_restart_state="$(tc64_state_for_action "$tc67_restart_home" rollback)"
+if grep -qx 'restore_completed=true' "$tc67_restart_state" && grep -qx 'completion=in_progress' "$tc67_restart_state" && grep -qx 'completion=health_check_failed' "$tc67_restart_apply"; then pass "linked apply stays unresolved at durable restoration checkpoint"; else fail "linked apply resolved before durable restoration"; fi
+kill -KILL "$tc67_restart_pid" 2>/dev/null
+wait "$tc67_restart_pid" 2>/dev/null || true
+cp "$tc67_restart_state" "$tc67_restart_home/state.before"
+printf 'pid=duplicate\n' >> "$tc67_restart_state"
+tc67_bad_exit=0; tc62_run_direct "$tc67_restart_home" --recover >/dev/null 2>&1 || tc67_bad_exit=$?
+if (( tc67_bad_exit != 0 )) && grep -qx 'completion=health_check_failed' "$tc67_restart_apply"; then pass "malformed rollback record cannot resolve linked apply"; else fail "corrupt record resolved linked apply"; fi
+cp "$tc67_restart_home/state.before" "$tc67_restart_state"
+tc67_smoke_cmd="$tc67_restart_home/.config/artix-hypr-remix/bin/ahr-update-available"
+cp "$tc67_smoke_cmd" "$tc67_restart_home/smoke.before"
+printf '#!/usr/bin/env bash\nexit 72\n' > "$tc67_smoke_cmd"
+tc67_smoke_exit=0; tc62_run_direct "$tc67_restart_home" --recover >/dev/null 2>&1 || tc67_smoke_exit=$?
+if (( tc67_smoke_exit != 0 )) && grep -qx 'completion=health_check_failed' "$tc67_restart_apply" && grep -qx 'completion=in_progress' "$tc67_restart_state" && grep -q 'SMOKE FAIL:' "$(dirname "$tc67_restart_state")/rollback-smoke.log"; then pass "runtime smoke failure prevents terminal resolution"; else fail "smoke failure was ignored"; fi
+cp "$tc67_restart_home/smoke.before" "$tc67_smoke_cmd"
+
+# Kill the finalizer after the linked apply write but before the rollback write.
+# No production fault hook is needed: a fixture mv intercepts the atomic state
+# publication at exactly that boundary.
+mkdir -p "$tc67_restart_home/shims"
+cat > "$tc67_restart_home/shims/mv" <<'EOF_MV'
+#!/usr/bin/env bash
+args=("$@")
+last="${args[${#args[@]}-1]}"
+if [[ "$last" == */state && -f "$last" ]] && grep -qx 'action=apply' "$last" && grep -qx 'completion=health_check_failed' "$last"; then
+  /usr/bin/mv "$@" || exit $?
+  kill -KILL "$PPID"
+  exit 0
+fi
+exec /usr/bin/mv "$@"
+EOF_MV
+chmod +x "$tc67_restart_home/shims/mv"
+tc67_between_exit=0
+PATH="$tc67_restart_home/shims:$PATH" tc62_run_direct "$tc67_restart_home" --recover >/dev/null 2>&1 || tc67_between_exit=$?
+if (( tc67_between_exit != 0 )) && grep -qx 'completion=resolved_by_rollback' "$tc67_restart_apply" && grep -qx 'phase=rollback_restore_completed' "$tc67_restart_state" && grep -qx 'restore_completed=true' "$tc67_restart_state" && grep -qx 'post_rollback_health=degraded' "$tc67_restart_state"; then pass "interrupted terminal writes retain restoration and health checkpoint"; else fail "terminal write interruption lost durable checkpoint"; fi
+printf 'must survive finalize-only restart\n' > "$tc67_restart_home/.config/artix-hypr-remix/bin/restart-sentinel"
+printf '0\n' > "$tc67_restart_home/doctor-exit"
+tc67_evidence_before="$(sha256sum "$(dirname "$tc67_restart_state")/doctor.log")"
+tc67_resume=0; tc67_resume_output="$(tc62_run_direct "$tc67_restart_home" --recover 2>&1)" || tc67_resume=$?
+if (( tc67_resume == 0 )) && grep -qx 'completion=rolled_back' "$tc67_restart_state" && [[ -f "$tc67_restart_home/.config/artix-hypr-remix/bin/restart-sentinel" && "$(sha256sum "$(dirname "$tc67_restart_state")/doctor.log")" == "$tc67_evidence_before" ]] && grep -q 'health is degraded' <<<"$tc67_resume_output"; then pass "restart finalizes without restore replay or replacing historical health"; else fail "restart lost restoration or doctor evidence" "$tc67_resume_output"; fi
+
+# Reproduce the exact legacy health-failed rollback state using a fixture copy
+# of the old finalizer. Live state is never edited by these tests.
+tc67_legacy_updater="$tmp_root/tc67-legacy-updater"
+python3 - "$UPDATE_FRAMEWORK" "$tc67_legacy_updater" <<'PY_LEGACY'
+import sys
+from pathlib import Path
+s = Path(sys.argv[1]).read_text()
+start = s.index('finalize_rollback_restore_completed() {')
+end = s.index('# Return the one rollback transaction', start)
+s = s[:start] + '''finalize_rollback_restore_completed() {
+  local txdir="$1" doctor_exit=0
+  bash "$FRAMEWORK_ROOT/bin/ahr-doctor" || doctor_exit=$?
+  write_transaction_state "$txdir" "phase=health_check_failed" "completion=health_check_failed" "doctor_exit=$doctor_exit" "failure_reason=rollback_doctor_exit_$doctor_exit"
+  return 1
+}
+
+''' + s[end:]
+Path(sys.argv[2]).write_text(s)
+PY_LEGACY
+for tc67_legacy_mode in --recover --rollback; do
+  tc67_legacy_home="$tmp_root/tc67_legacy_${tc67_legacy_mode#--}"
+  tc67_setup "$tc67_legacy_home" 1
+  tc67_fail_apply "$tc67_legacy_home"
+  run_ahr "$tc67_legacy_home" "$tc67_legacy_updater" --rollback >/dev/null 2>&1 || true
+  tc67_legacy_state="$(tc64_state_for_action "$tc67_legacy_home" rollback)"
+  tc67_legacy_apply="$(tc64_state_for_action "$tc67_legacy_home" apply)"
+  cp "$tc67_legacy_state" "$tc67_legacy_home/state.before"
+  sed -i '/^restore_completed=/d' "$tc67_legacy_state"
+  tc67_legacy_bad=0; tc62_run_direct "$tc67_legacy_home" "$tc67_legacy_mode" >/dev/null 2>&1 || tc67_legacy_bad=$?
+  if (( tc67_legacy_bad != 0 )) && grep -qx 'completion=health_check_failed' "$tc67_legacy_apply"; then pass "legacy $tc67_legacy_mode refuses missing restoration checkpoint"; else fail "legacy failure without checkpoint was finalized"; fi
+  cp "$tc67_legacy_home/state.before" "$tc67_legacy_state"
+  printf 'preserve legacy restored tree\n' > "$tc67_legacy_home/.config/artix-hypr-remix/bin/legacy-sentinel"
+  tc67_legacy_exit=0; tc67_legacy_output="$(tc62_run_direct "$tc67_legacy_home" "$tc67_legacy_mode" 2>&1)" || tc67_legacy_exit=$?
+  if (( tc67_legacy_exit == 0 )) && grep -qx 'completion=rolled_back' "$tc67_legacy_state" && grep -qx 'completion=resolved_by_rollback' "$tc67_legacy_apply" && grep -qx 'post_rollback_health=degraded' "$tc67_legacy_state" && grep -qx 'failure_reason=rollback_doctor_exit_1' "$tc67_legacy_state" && grep -qx 'doctor_output_status=unavailable_legacy' "$tc67_legacy_state" && [[ -f "$tc67_legacy_home/.config/artix-hypr-remix/bin/legacy-sentinel" ]] && grep -q 'No archive restoration was replayed' <<<"$tc67_legacy_output"; then pass "legacy $tc67_legacy_mode finalizes exact linked rollback and preserves health evidence"; else fail "legacy rollback recovery failed" "$tc67_legacy_output"; fi
+done
 
 echo "========================================"
 echo "  Results: $PASS passed, $FAIL failed"
