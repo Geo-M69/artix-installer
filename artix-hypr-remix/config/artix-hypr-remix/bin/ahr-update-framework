@@ -56,6 +56,8 @@ source "${AHR_VERSION_LIB_PATH:-$LIB_DIR/ahr-version.sh}"
 source "${AHR_CACHE_LIB_PATH:-$LIB_DIR/ahr-cache.sh}"
 # shellcheck source=ahr-backup-helper.sh
 source "${AHR_BACKUP_HELPER_PATH:-$LIB_DIR/ahr-backup-helper.sh}"
+# shellcheck source=ahr-flatpak-catalog-lib.sh
+source "${AHR_FLATPAK_CATALOG_LIB_PATH:-$LIB_DIR/ahr-flatpak-catalog-lib.sh}"
 FRAMEWORK_JSON="$FRAMEWORK_ROOT/framework.json"
 STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/artix-hypr-remix"
 CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/artix-hypr-remix"
@@ -127,6 +129,7 @@ REQUIRED_STAGED_COMMANDS=(
   bin/ahr-update-framework
   bin/ahr-update
   bin/ahr-update-available
+  bin/ahr-flatpak
   bin/ahr-restore-component
   bin/namespace-install.sh
   bin/ahr-doctor
@@ -144,6 +147,8 @@ REQUIRED_STAGED_LIBRARIES=(
   bin/ahr-theme-lib.sh
   bin/ahr-toggle-lib.sh
   bin/ahr-font-lib.sh
+  bin/ahr-flatpak-catalog-lib.sh
+  bin/ahr-flatpak-runtime-lib.sh
 )
 
 lock_mode=""
@@ -787,17 +792,109 @@ restore_namespace_links() {
   local manifest="$1"
   local local_bin="${AHR_LOCAL_BIN:-$HOME/.local/bin}"
   [[ -f "$manifest" ]] || return 1
-  mkdir -p "$local_bin"
-  local name target
+  local name target link current_target i
+  local -a snapshot_names=()
+  local -a snapshot_targets=()
+  local -a removed_names=()
+  declare -A snapshot_name_set=()
+
+  # Parse and validate the complete snapshot before changing any link.  The
+  # manifest is data, never shell input, and a duplicate/malformed record must
+  # leave the namespace untouched.
   while IFS=$'\t' read -r name target; do
+    [[ -n "$name" && -n "$target" && "$name" != */* && "$name" != . && "$name" != .. ]] || return 1
+    [[ "$target" != *$'\t'* ]] || return 1
+    # Older snapshots predate the canonical namespace inventory and may
+    # legitimately contain an AHR/Omarchy-prefixed managed compatibility
+    # link.  Continue accepting that historical snapshot shape; only the
+    # reconciliation scan below is restricted to the current canonical
+    # inventory, so it cannot remove an arbitrary user-created link.
     [[ "$name" =~ ^(ahr|omarchy)-[a-zA-Z0-9_.-]+$|^ahr$|^omarchy$ ]] || return 1
     case "$target" in
-      "$FRAMEWORK_ROOT/bin/"*|"$local_bin/ahr-"*|"$local_bin/omarchy-"*) ;;
+      "$FRAMEWORK_ROOT/bin/"*|"$local_bin/ahr-"*|"$local_bin/omarchy-"*|"$local_bin/ahr"|"$local_bin/omarchy") ;;
       *) return 1 ;;
     esac
-    rm -f "$local_bin/$name"
-    ln -s "$target" "$local_bin/$name"
+    [[ -z "${snapshot_name_set[$name]+x}" ]] || return 1
+    snapshot_name_set["$name"]=1
+    snapshot_names+=("$name")
+    snapshot_targets+=("$target")
   done < "$manifest"
+
+  mkdir -p "$local_bin"
+
+  # A rollback snapshot is exact for AHR-owned namespace links.  Remove only
+  # canonical AHR names whose symlink target proves AHR ownership and which
+  # were introduced after the snapshot; unrelated names and targets survive.
+  while IFS= read -r -d '' link; do
+    name="$(basename "$link")"
+    [[ -z "${snapshot_name_set[$name]+x}" ]] || continue
+    ahr_namespace_name_is_managed "$name" || continue
+    current_target="$(readlink "$link" 2>/dev/null)" || continue
+    case "$current_target" in
+      "$FRAMEWORK_ROOT/bin/"*|"$local_bin/ahr-"*|"$local_bin/omarchy-"*|"$local_bin/ahr"|"$local_bin/omarchy")
+        removed_names+=("$name")
+        ;;
+    esac
+  done < <(find "$local_bin" -maxdepth 1 -type l -print0 2>/dev/null || true)
+
+  # Retain every touched link's prior target so a failed restore can put the
+  # namespace back exactly as it found it.
+  local -a prior_names=()
+  local -a prior_targets=()
+  for name in "${snapshot_names[@]}" "${removed_names[@]}"; do
+    link="$local_bin/$name"
+    prior_names+=("$name")
+    if [[ -L "$link" ]]; then
+      prior_targets+=("$(readlink "$link" 2>/dev/null || true)")
+    else
+      prior_targets+=("")
+    fi
+  done
+
+  restore_prior_namespace_links() {
+    local idx prior_name prior_target
+    for (( idx=${#prior_names[@]}-1; idx>=0; idx-- )); do
+      prior_name="${prior_names[$idx]}"
+      prior_target="${prior_targets[$idx]}"
+      rm -f "$local_bin/$prior_name" 2>/dev/null || true
+      [[ -z "$prior_target" ]] || ln -s "$prior_target" "$local_bin/$prior_name" 2>/dev/null || true
+    done
+  }
+
+  for (( i=0; i<${#snapshot_names[@]}; i++ )); do
+    name="${snapshot_names[$i]}"
+    target="${snapshot_targets[$i]}"
+    link="$local_bin/$name"
+    rm -f "$link" 2>/dev/null || {
+      restore_prior_namespace_links
+      return 1
+    }
+    if ! ln -s "$target" "$link"; then
+      restore_prior_namespace_links
+      return 1
+    fi
+  done
+
+  for name in "${removed_names[@]}"; do
+    if ! rm -f "$local_bin/$name"; then
+      restore_prior_namespace_links
+      return 1
+    fi
+  done
+
+  for (( i=0; i<${#snapshot_names[@]}; i++ )); do
+    link="$local_bin/${snapshot_names[$i]}"
+    if [[ ! -L "$link" || "$(readlink "$link" 2>/dev/null || true)" != "${snapshot_targets[$i]}" ]]; then
+      restore_prior_namespace_links
+      return 1
+    fi
+  done
+  for name in "${removed_names[@]}"; do
+    [[ ! -e "$local_bin/$name" && ! -L "$local_bin/$name" ]] || {
+      restore_prior_namespace_links
+      return 1
+    }
+  done
 }
 
 # ── Authoritative staged checkout ──────────────────────────────────
@@ -940,6 +1037,16 @@ validate_staged_framework() {
       _vf_err "Missing required directory: $target/"
     fi
   done
+
+  # The catalog is nested under the already-managed default/ target so an
+  # updater from before Phase 3a can deliver it on the first framework update.
+  # All schema knowledge remains in the catalog library.
+  local flatpak_catalog="$staged_dir/default/flatpak/catalog.json"
+  if [[ ! -f "$flatpak_catalog" ]]; then
+    _vf_err "Missing required Flatpak catalog: default/flatpak/catalog.json"
+  elif ! ahr_flatpak_catalog_validate "$flatpak_catalog"; then
+    _vf_err "Invalid Flatpak catalog: default/flatpak/catalog.json"
+  fi
 
   # ── Required executable commands ──
   local command_rel

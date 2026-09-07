@@ -38,21 +38,22 @@ make_fixture() {
     ahr-launch-browser ahr-launch-files ahr-default-browser ahr-default-terminal \
     ahr-default-editor ahr-repair ahr-system-lock ahr-toggle ahr-toggle-idle \
     ahr-restore-idle ahr-restore-nightlight ahr-launch-wallpaper-session \
-    ahr-capture-screenshot ahr-capture-picker ahr-theme ahr-status ahr-doctor \
+    ahr-capture-screenshot ahr-capture-picker ahr-theme ahr-flatpak ahr-status ahr-doctor \
     ahr-update ahr-update-available ahr-update-framework ahr-restore-component \
     ahr-migrate namespace-install.sh migrate.sh ahr-validate-managed-paths.sh; do
     printf '#!/usr/bin/env bash\nexit 0\n' > "$root/bin/$cmd"
     chmod +x "$root/bin/$cmd"
   done
   for cmd in ahr-lib.sh ahr-version.sh ahr-cache.sh ahr-backup-helper.sh \
-    ahr-managed-paths.sh ahr-theme-lib.sh ahr-toggle-lib.sh ahr-font-lib.sh; do
+    ahr-managed-paths.sh ahr-theme-lib.sh ahr-toggle-lib.sh ahr-font-lib.sh \
+    ahr-flatpak-catalog-lib.sh ahr-flatpak-runtime-lib.sh; do
     printf '#!/usr/bin/env bash\n# sourced test library\n' > "$root/bin/$cmd"
     chmod 0644 "$root/bin/$cmd"
   done
   for service in dbus elogind bluetoothd; do
     : > "$dir/runlevels/default/$service"
   done
-  for cmd in ahr ahr-update ahr-update-framework ahr-update-available ahr-restore-component ahr-doctor; do
+  for cmd in ahr ahr-flatpak ahr-update ahr-update-framework ahr-update-available ahr-restore-component ahr-doctor; do
     ln -s "$root/bin/$cmd" "$home/.local/bin/$cmd"
   done
 

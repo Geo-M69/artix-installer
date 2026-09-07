@@ -33,7 +33,7 @@ create_test_repo() {
     touch "$rd/artix-hypr-remix/config/artix-hypr-remix/$d/.gitkeep"
   done
   echo "{\"version\":\"$ver\",\"revision\":null,\"channel\":\"$channel\",\"update_source\":\"file://$rd\",\"updated_at\":null}" > "$rd/artix-hypr-remix/config/artix-hypr-remix/framework.json"
-  for f in ahr ahr-update ahr-update-framework ahr-update-available ahr-restore-component migrate.sh namespace-install.sh ahr-doctor; do
+  for f in ahr ahr-update ahr-update-framework ahr-update-available ahr-flatpak ahr-restore-component migrate.sh namespace-install.sh ahr-doctor; do
     echo '#!/usr/bin/env bash' > "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/$f"
   done
   # Copy real library files (not commands — those are dummy scripts for testing)
@@ -46,18 +46,25 @@ create_test_repo() {
   cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-theme-lib.sh" "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-theme-lib.sh"
   cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-toggle-lib.sh" "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-toggle-lib.sh"
   cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-font-lib.sh" "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-font-lib.sh"
+  cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-flatpak-catalog-lib.sh" "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-flatpak-catalog-lib.sh"
+  cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-flatpak-runtime-lib.sh" "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-flatpak-runtime-lib.sh"
+  mkdir -p "$rd/artix-hypr-remix/config/artix-hypr-remix/default/flatpak"
+  cp "$REPO_ROOT/config/artix-hypr-remix/default/flatpak/catalog.json" "$rd/artix-hypr-remix/config/artix-hypr-remix/default/flatpak/catalog.json"
   chmod 0644 \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-cache.sh" \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-backup-helper.sh" \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-managed-paths.sh" \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-theme-lib.sh" \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-toggle-lib.sh" \
-    "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-font-lib.sh"
+    "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-font-lib.sh" \
+    "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-flatpak-catalog-lib.sh" \
+    "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-flatpak-runtime-lib.sh"
   chmod +x \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr" \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-update" \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-update-framework" \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-update-available" \
+    "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-flatpak" \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-restore-component" \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/migrate.sh" \
     "$rd/artix-hypr-remix/config/artix-hypr-remix/bin/namespace-install.sh" \
@@ -70,6 +77,9 @@ create_test_repo() {
 setup_installed_framework() {
   local home_dir="$1" update_source="${2:-}" extra_migrations="${3:-0}"
   mkdir -p "$home_dir/.config/artix-hypr-remix"/{bin,migrations,docs,hooks,first-run.d,default}
+  mkdir -p "$home_dir/.config/artix-hypr-remix/default/flatpak"
+  cp "$REPO_ROOT/config/artix-hypr-remix/default/flatpak/catalog.json" \
+    "$home_dir/.config/artix-hypr-remix/default/flatpak/catalog.json"
   mkdir -p "$home_dir/.config/artix-hypr-remix/current/theme"
   printf 'fallback\n' > "$home_dir/.config/artix-hypr-remix/current/theme.name"
   printf 'background\n' > "$home_dir/.config/artix-hypr-remix/current/theme/background.txt"
@@ -84,6 +94,8 @@ setup_installed_framework() {
      "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-theme-lib.sh" \
      "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-toggle-lib.sh" \
      "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-font-lib.sh" \
+     "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-flatpak-catalog-lib.sh" \
+     "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-flatpak-runtime-lib.sh" \
      "$home_dir/.config/artix-hypr-remix/bin/"
   cat > "$home_dir/.config/artix-hypr-remix/bin/ahr-doctor" <<'EOF'
 #!/usr/bin/env bash
@@ -276,6 +288,13 @@ echo "=== TC4: Apply and rollback cycle ==="
 tc4_home="$tmp_root/tc4"
 tc4_repo="$(create_test_repo "$tmp_root/tc4_repo" "0.2.0")"
 setup_installed_framework "$tc4_home" "file://$tc4_repo"
+tc4_installed_catalog="$tc4_home/.config/artix-hypr-remix/default/flatpak/catalog.json"
+tc4_candidate_catalog="$tc4_repo/artix-hypr-remix/config/artix-hypr-remix/default/flatpak/catalog.json"
+jq '.applications[0].name = "Installed Zen"' "$tc4_installed_catalog" > "$tc4_installed_catalog.tmp"
+mv "$tc4_installed_catalog.tmp" "$tc4_installed_catalog"
+jq '.applications[0].name = "Candidate Zen"' "$tc4_candidate_catalog" > "$tc4_candidate_catalog.tmp"
+mv "$tc4_candidate_catalog.tmp" "$tc4_candidate_catalog"
+commit_test_repo "$tc4_repo" "candidate catalog"
 touch "$tc4_home/.config/artix-hypr-remix/bin/old-cmd" && chmod +x "$tc4_home/.config/artix-hypr-remix/bin/old-cmd"
 
 # Apply
@@ -293,6 +312,9 @@ tc4_nested="$(find "$tc4_home/.config/artix-hypr-remix/bin" -mindepth 2 -type d 
 
 [[ -f "$tc4_home/.config/artix-hypr-remix/bin/ahr" ]] && pass "new command present" || fail "new command missing"
 
+tc4_catalog_name="$(jq -r '.applications[0].name' "$tc4_installed_catalog")"
+[[ "$tc4_catalog_name" == "Candidate Zen" ]] && pass "catalog activated with managed default target" || fail "catalog was not activated"
+
 # Transaction was created and committed
 tc4_tx_count="$(find "$tc4_home/.local/state/artix-hypr-remix/framework-transactions" -name state 2>/dev/null | wc -l)"
 (( tc4_tx_count > 0 )) && pass "transaction record created" || fail "no transaction record"
@@ -309,6 +331,13 @@ tc4_manifest="$(find "$tc4_home/.local/state/artix-hypr-remix/framework-backups"
 [[ -f "$tc4_manifest" ]] && pass "backup manifest exists" || fail "no manifest"
 [[ -f "$tc4_manifest" ]] && grep -q 'completed=true' "$tc4_manifest" && pass "manifest has completed=true" || fail "manifest incomplete"
 
+# Simulate a command delivered by the candidate namespace after the backup
+# snapshot was taken.  Rollback must remove this provably AHR-owned link while
+# preserving an unrelated user link beside it.
+mkdir -p "$tc4_home/.local/bin"
+ln -s "$tc4_home/.config/artix-hypr-remix/bin/ahr-flatpak" "$tc4_home/.local/bin/ahr-flatpak"
+ln -s /usr/bin/true "$tc4_home/.local/bin/user-tool"
+
 # Rollback
 tc4_rb_exit=0
 run_ahr "$tc4_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc4_rb_exit=$?
@@ -319,8 +348,48 @@ tc4_ver_after="$(json_get "$tc4_home/.config/artix-hypr-remix/framework.json" ve
 
 [[ -f "$tc4_home/.config/artix-hypr-remix/bin/old-cmd" ]] && pass "old-cmd restored" || fail "old-cmd not restored"
 
+tc4_catalog_name_after="$(jq -r '.applications[0].name' "$tc4_installed_catalog")"
+[[ "$tc4_catalog_name_after" == "Installed Zen" ]] && pass "catalog restored by rollback" || fail "catalog was not restored by rollback"
+
 tc4_rb_stale="$(find "$tc4_home/.config/artix-hypr-remix" -maxdepth 1 \( -name '*.old.*' -o -name '*.new.*' \) 2>/dev/null | wc -l)"
 (( tc4_rb_stale == 0 )) && pass "no stale paths after rollback" || fail "$tc4_rb_stale stale after rollback"
+
+[[ ! -e "$tc4_home/.local/bin/ahr-flatpak" && ! -L "$tc4_home/.local/bin/ahr-flatpak" ]] && pass "rollback removes forward-added AHR namespace link" || fail "forward-added AHR namespace link remained"
+[[ "$(readlink "$tc4_home/.local/bin/user-tool" 2>/dev/null || true)" == "/usr/bin/true" ]] && pass "rollback preserves unrelated namespace link" || fail "rollback changed unrelated namespace link"
+
+echo ""
+echo "=== TC4b: Framework apply delivers Hyprland share-picker migration ==="
+
+tc4b_home="$tmp_root/tc4b"
+tc4b_repo="$(create_test_repo "$tmp_root/tc4b_repo" "0.2.0")"
+cp "$REPO_ROOT/config/artix-hypr-remix/bin/migrate.sh" "$tc4b_repo/artix-hypr-remix/config/artix-hypr-remix/bin/migrate.sh"
+cp "$REPO_ROOT/config/artix-hypr-remix/migrations/20260906-hyprland-share-picker.sh" \
+  "$tc4b_repo/artix-hypr-remix/config/artix-hypr-remix/migrations/"
+chmod +x \
+  "$tc4b_repo/artix-hypr-remix/config/artix-hypr-remix/bin/migrate.sh" \
+  "$tc4b_repo/artix-hypr-remix/config/artix-hypr-remix/migrations/20260906-hyprland-share-picker.sh"
+commit_test_repo "$tc4b_repo" "add share-picker migration"
+setup_installed_framework "$tc4b_home" "file://$tc4b_repo"
+tc4b_hypr="$tc4b_home/.config/hypr/hyprland.conf"
+mkdir -p "$(dirname "$tc4b_hypr")"
+printf '# User configuration\nbind = SUPER, Return, exec, foot\n' > "$tc4b_hypr"
+tc4b_before="$(sha256sum "$tc4b_hypr" | awk '{print $1}')"
+tc4b_exit=0
+run_ahr "$tc4b_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc4b_exit=$?
+(( tc4b_exit == 0 )) && pass "framework apply completes share-picker migration" || fail "framework apply failed while delivering share-picker migration (exit $tc4b_exit)"
+if grep -Fqx 'windowrule = match:class ^(hyprland-share-picker)$, float on' "$tc4b_hypr" && \
+   grep -Fqx 'windowrule = match:class ^(hyprland-share-picker)$, center on' "$tc4b_hypr" && \
+   grep -Fqx 'bind = SUPER, Return, exec, foot' "$tc4b_hypr"; then
+  pass "framework apply adds picker rules while preserving user Hyprland content"
+else
+  fail "framework apply did not deliver the expected picker rules"
+fi
+tc4b_backup=("$tc4b_hypr".bak.*)
+if [[ "${#tc4b_backup[@]}" == 1 ]] && [[ "$(sha256sum "${tc4b_backup[0]}" | awk '{print $1}')" == "$tc4b_before" ]]; then
+  pass "framework apply keeps a recoverable Hyprland backup"
+else
+  fail "framework apply did not retain an exact Hyprland backup"
+fi
 
 echo ""
 echo "=== TC5: Doctor failure propagates ==="
@@ -671,7 +740,7 @@ for d in bin migrations docs hooks first-run.d default; do
   touch "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/$d/.gitkeep"
 done
 echo '{"version":"0.2.0","revision":null,"channel":"stable","update_source":"file://'"$tc18_repo_dir"'","updated_at":null}' > "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/framework.json"
-for f in ahr ahr-update ahr-update-framework ahr-update-available ahr-restore-component namespace-install.sh ahr-doctor; do
+for f in ahr ahr-update ahr-update-framework ahr-update-available ahr-flatpak ahr-restore-component namespace-install.sh ahr-doctor; do
   echo '#!/usr/bin/env bash' > "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/bin/$f"
 done
 cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-lib.sh" "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-lib.sh"
@@ -683,7 +752,11 @@ cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-validate-managed-paths.sh" "$tc18
 cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-theme-lib.sh" "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-theme-lib.sh"
 cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-toggle-lib.sh" "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-toggle-lib.sh"
 cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-font-lib.sh" "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-font-lib.sh"
+cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-flatpak-catalog-lib.sh" "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-flatpak-catalog-lib.sh"
+cp "$REPO_ROOT/config/artix-hypr-remix/bin/ahr-flatpak-runtime-lib.sh" "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/bin/ahr-flatpak-runtime-lib.sh"
 cp "$REPO_ROOT/config/artix-hypr-remix/bin/migrate.sh" "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/bin/migrate.sh"
+mkdir -p "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/default/flatpak"
+cp "$REPO_ROOT/config/artix-hypr-remix/default/flatpak/catalog.json" "$tc18_repo_dir/artix-hypr-remix/config/artix-hypr-remix/default/flatpak/catalog.json"
 # Add a failing migration file in the migrations directory
 echo '#!/usr/bin/env bash
 echo "migration side effect" >> "$HOME/.config/artix-hypr-remix/migrations.log"
@@ -1548,6 +1621,21 @@ setup_installed_framework "$tc48_current_home" "file://$tc48_current_repo"
 tc48_current_exit=0
 run_ahr "$tc48_current_home" "$UPDATE_FRAMEWORK" --dry-run >/dev/null 2>&1 || tc48_current_exit=$?
 (( tc48_current_exit == 0 )) && pass "current staged tree passes with repository modes" || fail "current staged tree rejected (exit $tc48_current_exit)"
+
+tc48_invalid_catalog_home="$tmp_root/tc48_invalid_catalog"
+tc48_invalid_catalog_repo="$(create_test_repo "$tmp_root/tc48_invalid_catalog_repo" "0.2.0")"
+tc48_invalid_catalog="$tc48_invalid_catalog_repo/artix-hypr-remix/config/artix-hypr-remix/default/flatpak/catalog.json"
+jq '.schema_version = 2' "$tc48_invalid_catalog" > "$tc48_invalid_catalog.tmp"
+mv "$tc48_invalid_catalog.tmp" "$tc48_invalid_catalog"
+commit_test_repo "$tc48_invalid_catalog_repo" "invalidate Flatpak catalog"
+setup_installed_framework "$tc48_invalid_catalog_home" "file://$tc48_invalid_catalog_repo"
+tc48_invalid_catalog_dry=0
+run_ahr "$tc48_invalid_catalog_home" "$UPDATE_FRAMEWORK" --dry-run >/dev/null 2>&1 || tc48_invalid_catalog_dry=$?
+(( tc48_invalid_catalog_dry != 0 )) && pass "invalid staged catalog fails dry-run" || fail "invalid staged catalog accepted by dry-run"
+tc48_invalid_catalog_apply=0
+run_ahr "$tc48_invalid_catalog_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc48_invalid_catalog_apply=$?
+(( tc48_invalid_catalog_apply != 0 )) && pass "invalid staged catalog fails apply" || fail "invalid staged catalog accepted by apply"
+[[ ! -d "$tc48_invalid_catalog_home/.local/state/artix-hypr-remix/framework-backups" ]] && pass "invalid staged catalog fails before backup" || fail "invalid staged catalog created a backup"
 
 tc48_success_home="$tmp_root/tc48_success"
 tc48_success_repo="$(create_test_repo "$tmp_root/tc48_success_repo" "0.2.0")"

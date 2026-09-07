@@ -1,7 +1,7 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0-beta2",
   "revision": null,
-  "channel": "stable",
+  "channel": "beta",
   "update_source": "https://github.com/Geo-M69/artix-installer.git",
   "updated_at": null
 }

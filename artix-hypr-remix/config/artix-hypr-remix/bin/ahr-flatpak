@@ -1,0 +1,476 @@
+#!/usr/bin/env bash
+# CLI for the local AHR Flatpak catalog.
+set -euo pipefail
+
+AHR_SCRIPT_REAL="$(readlink -f "${BASH_SOURCE[0]}")"
+AHR_SCRIPT_DIR="$(dirname "$AHR_SCRIPT_REAL")"
+FRAMEWORK_ROOT="${AHR_FRAMEWORK_ROOT:-$(cd "$AHR_SCRIPT_DIR/.." && pwd)}"
+CATALOG_PATH="${AHR_FLATPAK_CATALOG_PATH:-$FRAMEWORK_ROOT/default/flatpak/catalog.json}"
+CATALOG_LIB_PATH="${AHR_FLATPAK_CATALOG_LIB_PATH:-$AHR_SCRIPT_DIR/ahr-flatpak-catalog-lib.sh}"
+RUNTIME_LIB_PATH="${AHR_FLATPAK_RUNTIME_LIB_PATH:-$AHR_SCRIPT_DIR/ahr-flatpak-runtime-lib.sh}"
+
+if [[ ! -r "$CATALOG_LIB_PATH" ]]; then
+  printf 'Flatpak catalog library not found: %s\n' "$CATALOG_LIB_PATH" >&2
+  exit 1
+fi
+source "$CATALOG_LIB_PATH"
+if [[ ! -r "$RUNTIME_LIB_PATH" ]]; then
+  printf 'Flatpak runtime library not found: %s\n' "$RUNTIME_LIB_PATH" >&2
+  exit 1
+fi
+source "$RUNTIME_LIB_PATH"
+
+usage() {
+  cat <<'EOF'
+Usage: ahr flatpak <command> [args]
+
+Catalog commands:
+  list [--category CAT] [--format menu]
+                               List catalog applications in catalog order
+  search <query>               Search slug, name, Flatpak ID, or category
+  info <slug|name|flatpak-id>  Show one catalog application
+  status [selector]            Show local system-installation state
+  status [--category CAT] [--installed] [--format menu]
+                               Filtered local system-installation state
+  validate                     Validate the local catalog schema and data
+  install <selector>           Install one catalog application from Flathub
+  launch <selector>            Launch one installed catalog application
+  remove <selector>            Remove one catalog application; preserve data
+  update [selector]            Update installed catalog applications
+  help                         Show this help
+
+`status` only inspects local system-installation state (via the Flatpak
+runtime library, honoring AHR_FLATPAK_COMMAND); it does not contact Flathub.
+EOF
+}
+
+print_catalog_table() {
+  local rows="$1"
+  local row slug name flatpak_id category profile support proprietary unofficial desktop_entry
+
+  printf '%-18s %-24s %-36s %-17s %-10s %-13s\n' \
+    'SLUG' 'NAME' 'FLATPAK ID' 'CATEGORY' 'PROFILE' 'SUPPORT'
+  while IFS= read -r row || [[ -n "$row" ]]; do
+    [[ -n "$row" ]] || continue
+    IFS=$'\t' read -r slug name flatpak_id category profile support proprietary unofficial desktop_entry <<< "$row"
+    printf '%-18s %-24s %-36s %-17s %-10s %-13s\n' \
+      "$slug" "$name" "$flatpak_id" "$category" "$profile" "$support"
+  done <<< "$rows"
+}
+
+print_info() {
+  local row="$1"
+  local slug name flatpak_id category profile support proprietary unofficial desktop_entry
+  IFS=$'\t' read -r slug name flatpak_id category profile support proprietary unofficial desktop_entry <<< "$row"
+
+  printf 'Name: %s\n' "$name"
+  printf 'Slug: %s\n' "$slug"
+  printf 'Flatpak ID: %s\n' "$flatpak_id"
+  printf 'Category: %s\n' "$category"
+  printf 'Profile: %s\n' "$profile"
+  printf 'Support: %s\n' "$support"
+  printf 'Proprietary: %s\n' "$proprietary"
+  printf 'Unofficial: %s\n' "$unofficial"
+  printf 'Desktop entry: %s\n' "$desktop_entry"
+}
+
+print_status_table() {
+  local rows="$1"
+  local row slug name flatpak_id category profile support proprietary unofficial desktop_entry state
+
+  printf '%-18s %-24s %-36s %-16s\n' 'SLUG' 'NAME' 'FLATPAK ID' 'SYSTEM STATE'
+  while IFS= read -r row || [[ -n "$row" ]]; do
+    [[ -n "$row" ]] || continue
+    IFS=$'\t' read -r slug name flatpak_id category profile support proprietary unofficial desktop_entry state <<< "$row"
+    printf '%-18s %-24s %-36s %-16s\n' "$slug" "$name" "$flatpak_id" "$state"
+  done <<< "$rows"
+}
+
+# Emit a headerless TSV row suitable for menu consumption:
+# slug<TAB>name<TAB>support<TAB>proprietary<TAB>unofficial
+print_menu_rows() {
+  local rows="$1"
+  local row slug name flatpak_id category profile support proprietary unofficial desktop_entry
+
+  while IFS= read -r row || [[ -n "$row" ]]; do
+    [[ -n "$row" ]] || continue
+    IFS=$'\t' read -r slug name flatpak_id category profile support proprietary unofficial desktop_entry <<< "$row"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$slug" "$name" "$support" "$proprietary" "$unofficial"
+  done <<< "$rows"
+}
+
+# Same TSV as print_menu_rows, but consumes the 10-column status rows produced
+# by the catalog library.
+print_menu_rows_from_status() {
+  local rows="$1"
+  local row slug name flatpak_id category profile support proprietary unofficial desktop_entry state
+
+  while IFS= read -r row || [[ -n "$row" ]]; do
+    [[ -n "$row" ]] || continue
+    IFS=$'\t' read -r slug name flatpak_id category profile support proprietary unofficial desktop_entry state <<< "$row"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$slug" "$name" "$support" "$proprietary" "$unofficial"
+  done <<< "$rows"
+}
+
+# Keep only status rows whose final state column is "installed".
+filter_installed_status_rows() {
+  local rows="$1"
+  local row state filtered=""
+
+  while IFS= read -r row || [[ -n "$row" ]]; do
+    [[ -n "$row" ]] || continue
+    state="${row##*$'\t'}"
+    if [[ "$state" == "installed" ]]; then
+      filtered+="$row"$'\n'
+    fi
+  done <<< "$rows"
+  printf '%s' "$filtered"
+}
+
+# Annotate nine-column catalog rows with a tenth local system-installation
+# state column. Catalog data comes from the catalog library; every Flatpak
+# execution goes through runtime-library primitives so AHR_FLATPAK_COMMAND is
+# honored and scope/execution logic is never duplicated here. Only local system
+# state is queried; this never contacts a remote or Flathub.
+append_system_install_state() {
+  local rows="$1"
+  local row slug name flatpak_id category profile support proprietary unofficial desktop_entry state
+
+  while IFS= read -r row || [[ -n "$row" ]]; do
+    [[ -n "$row" ]] || continue
+    IFS=$'\t' read -r slug name flatpak_id category profile support proprietary unofficial desktop_entry <<< "$row"
+
+    if ! ahr_flatpak_require_command; then
+      state="unavailable"
+    elif ahr_flatpak_system_ref_installed "$flatpak_id"; then
+      state="installed"
+    else
+      state="not-installed"
+    fi
+
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$slug" "$name" "$flatpak_id" "$category" "$profile" "$support" \
+      "$proprietary" "$unofficial" "$desktop_entry" "$state"
+  done <<< "$rows"
+}
+
+cmd_list() {
+  local category="" format="" rows
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --category)
+        if (( $# < 2 )) || [[ -z "${2:-}" ]]; then
+          printf 'Usage: ahr flatpak list [--category CAT] [--format menu]\n' >&2
+          return 1
+        fi
+        category="$2"
+        shift 2
+        ;;
+      --format)
+        if (( $# < 2 )) || [[ -z "${2:-}" ]]; then
+          printf 'Usage: ahr flatpak list [--category CAT] [--format menu]\n' >&2
+          return 1
+        fi
+        format="$2"
+        shift 2
+        ;;
+      *)
+        printf 'Usage: ahr flatpak list [--category CAT] [--format menu]\n' >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -n "$category" ]]; then
+    rows="$(ahr_flatpak_catalog_rows_by_category "$CATALOG_PATH" "$category")" || return 1
+  else
+    rows="$(ahr_flatpak_catalog_rows "$CATALOG_PATH")" || return 1
+  fi
+
+  if [[ "$format" == "menu" ]]; then
+    print_menu_rows "$rows"
+  elif [[ -n "$format" ]]; then
+    printf 'Unknown list format: %s\n' "$format" >&2
+    return 1
+  else
+    print_catalog_table "$rows"
+  fi
+}
+
+cmd_search() {
+  (( $# == 1 )) || { printf 'Usage: ahr flatpak search <query>\n' >&2; return 1; }
+  local rows
+  rows="$(ahr_flatpak_catalog_search_rows "$CATALOG_PATH" "$1")" || return 1
+  if [[ -z "$rows" ]]; then
+    printf 'No catalog applications match: %s\n' "$1"
+    return 0
+  fi
+  print_catalog_table "$rows"
+}
+
+cmd_info() {
+  (( $# == 1 )) || { printf 'Usage: ahr flatpak info <slug|name|flatpak-id>\n' >&2; return 1; }
+  local row
+  row="$(ahr_flatpak_catalog_lookup_row "$CATALOG_PATH" "$1")" || return 1
+  print_info "$row"
+}
+
+cmd_status() {
+  local category="" format="" installed_only=false selector="" rows
+
+  if (( $# > 0 )) && [[ "$1" == --* ]]; then
+    while (( $# > 0 )); do
+      case "$1" in
+        --category)
+          if (( $# < 2 )) || [[ -z "${2:-}" ]]; then
+            printf 'Usage: ahr flatpak status [selector] [--category CAT] [--installed] [--format menu]\n' >&2
+            return 1
+          fi
+          category="$2"
+          shift 2
+          ;;
+        --format)
+          if (( $# < 2 )) || [[ -z "${2:-}" ]]; then
+            printf 'Usage: ahr flatpak status [selector] [--category CAT] [--installed] [--format menu]\n' >&2
+            return 1
+          fi
+          format="$2"
+          shift 2
+          ;;
+        --installed)
+          installed_only=true
+          shift
+          ;;
+        *)
+          printf 'Usage: ahr flatpak status [selector] [--category CAT] [--installed] [--format menu]\n' >&2
+          return 1
+          ;;
+      esac
+    done
+  elif (( $# == 1 )); then
+    selector="$1"
+  elif (( $# > 1 )); then
+    printf 'Usage: ahr flatpak status [selector] [--category CAT] [--installed] [--format menu]\n' >&2
+    return 1
+  fi
+
+  if [[ -n "$selector" && ( -n "$category" || -n "$format" || "$installed_only" == true ) ]]; then
+    printf 'Usage: ahr flatpak status [selector] [--category CAT] [--installed] [--format menu]\n' >&2
+    return 1
+  fi
+
+  if [[ -n "$selector" ]]; then
+    rows="$(ahr_flatpak_catalog_lookup_row "$CATALOG_PATH" "$selector")" || return 1
+  elif [[ -n "$category" ]]; then
+    rows="$(ahr_flatpak_catalog_rows_by_category "$CATALOG_PATH" "$category")" || return 1
+  else
+    rows="$(ahr_flatpak_catalog_rows "$CATALOG_PATH")" || return 1
+  fi
+  rows="$(append_system_install_state "$rows")"
+
+  if [[ "$installed_only" == true ]]; then
+    rows="$(filter_installed_status_rows "$rows")"
+  fi
+
+  if [[ "$format" == "menu" ]]; then
+    print_menu_rows_from_status "$rows"
+  elif [[ -n "$format" ]]; then
+    printf 'Unknown status format: %s\n' "$format" >&2
+    return 1
+  else
+    print_status_table "$rows"
+  fi
+}
+
+cmd_validate() {
+  (( $# == 0 )) || { printf 'Usage: ahr flatpak validate\n' >&2; return 1; }
+  ahr_flatpak_catalog_validate "$CATALOG_PATH"
+  printf 'Flatpak catalog is valid: %s\n' "$CATALOG_PATH"
+}
+
+cmd_install() {
+  (( $# == 1 )) || { printf 'Usage: ahr flatpak install <selector>\n' >&2; return 1; }
+  local row slug name flatpak_id category profile support proprietary unofficial desktop_entry
+
+  row="$(ahr_flatpak_catalog_lookup_row "$CATALOG_PATH" "$1")" || return 1
+  IFS=$'\t' read -r slug name flatpak_id category profile support proprietary unofficial desktop_entry <<< "$row"
+
+  printf 'Flatpak install plan:\n'
+  printf '  Application: %s\n' "$name"
+  printf '  Flatpak ID: %s\n' "$flatpak_id"
+  printf '  Remote: %s\n' "$AHR_FLATPAK_REMOTE"
+  printf '  Scope: system\n'
+
+  if ! ahr_flatpak_require_command; then
+    printf 'ERROR: flatpak is required to install catalog applications.\n' >&2
+    return 1
+  fi
+
+  if ahr_flatpak_system_ref_installed "$flatpak_id"; then
+    printf '%s (%s) is already installed for system scope; no changes made.\n' "$name" "$flatpak_id"
+    return 0
+  fi
+
+  if ! ahr_flatpak_system_flathub_configured; then
+    printf 'Adding Flathub remote (system scope).\n'
+    if ! ahr_flatpak_system_add_flathub; then
+      printf 'ERROR: Flathub is unavailable and could not be configured for system scope.\n' >&2
+      return 1
+    fi
+  fi
+
+  printf 'Installing %s (%s).\n' "$name" "$flatpak_id"
+  if ! ahr_flatpak_system_install "$flatpak_id"; then
+    printf 'ERROR: Flatpak installation failed for %s (%s).\n' "$name" "$flatpak_id" >&2
+    return 1
+  fi
+  printf '%s installed.\n' "$name"
+}
+
+cmd_launch() {
+  (( $# == 1 )) || { printf 'Usage: ahr flatpak launch <selector>\n' >&2; return 1; }
+  local row slug name flatpak_id category profile support proprietary unofficial desktop_entry desktop_path
+
+  row="$(ahr_flatpak_catalog_lookup_row "$CATALOG_PATH" "$1")" || return 1
+  IFS=$'\t' read -r slug name flatpak_id category profile support proprietary unofficial desktop_entry <<< "$row"
+
+  printf 'Flatpak launch plan:\n'
+  printf '  Application: %s\n' "$name"
+  printf '  Flatpak ID: %s\n' "$flatpak_id"
+  printf '  Scope: system\n'
+  printf '  Desktop entry: %s\n' "$desktop_entry"
+
+  if ! ahr_flatpak_require_command; then
+    printf 'ERROR: flatpak is required to launch catalog applications.\n' >&2
+    return 1
+  fi
+  if ! ahr_flatpak_system_ref_installed "$flatpak_id"; then
+    printf 'ERROR: %s (%s) is not installed for system scope. Run '\''ahr flatpak install %s'\'' first.\n' \
+      "$name" "$flatpak_id" "$slug" >&2
+    return 1
+  fi
+  if ! desktop_path="$(ahr_flatpak_system_desktop_entry_path "$desktop_entry")"; then
+    printf 'ERROR: expected desktop entry is unavailable: %s/%s\n' \
+      "$AHR_FLATPAK_SYSTEM_APPLICATIONS_DIR" "$desktop_entry" >&2
+    return 1
+  fi
+
+  printf 'Launching %s using %s.\n' "$name" "$desktop_path"
+  if ! ahr_flatpak_system_run "$flatpak_id"; then
+    printf 'ERROR: Flatpak launch failed for %s (%s).\n' "$name" "$flatpak_id" >&2
+    return 1
+  fi
+}
+
+cmd_remove() {
+  (( $# == 1 )) || { printf 'Usage: ahr flatpak remove <selector>\n' >&2; return 1; }
+  local row slug name flatpak_id category profile support proprietary unofficial desktop_entry app_data_dir
+
+  row="$(ahr_flatpak_catalog_lookup_row "$CATALOG_PATH" "$1")" || return 1
+  IFS=$'\t' read -r slug name flatpak_id category profile support proprietary unofficial desktop_entry <<< "$row"
+  # This path is constructed only after catalog validation and exact lookup.
+  app_data_dir="$HOME/.var/app/$flatpak_id"
+
+  printf 'Flatpak removal plan:\n'
+  printf '  Application: %s\n' "$name"
+  printf '  Flatpak ID: %s\n' "$flatpak_id"
+  printf '  Scope: system\n'
+  printf '  Application data: PRESERVED at %s\n' "$app_data_dir"
+
+  if ! ahr_flatpak_require_command; then
+    printf 'ERROR: flatpak is required to remove catalog applications.\n' >&2
+    return 1
+  fi
+  if ! ahr_flatpak_system_ref_installed "$flatpak_id"; then
+    printf '%s (%s) is not installed for system scope; no changes made.\n' \
+      "$name" "$flatpak_id"
+    return 0
+  fi
+
+  printf 'Removing %s (%s).\n' "$name" "$flatpak_id"
+  if ! ahr_flatpak_system_uninstall "$flatpak_id"; then
+    printf 'ERROR: Flatpak removal failed for %s (%s).\n' "$name" "$flatpak_id" >&2
+    return 1
+  fi
+  printf '%s removed. Application data preserved at %s.\n' "$name" "$app_data_dir"
+}
+
+cmd_update() {
+  (( $# <= 1 )) || { printf 'Usage: ahr flatpak update [selector]\n' >&2; return 1; }
+  local selector="${1:-}"
+  local rows row slug name flatpak_id category profile support proprietary unofficial desktop_entry
+  local -a update_ids=()
+  local -a update_names=()
+  local index plan_targets
+
+  if [[ -n "$selector" ]]; then
+    rows="$(ahr_flatpak_catalog_lookup_row "$CATALOG_PATH" "$selector")" || return 1
+  else
+    rows="$(ahr_flatpak_catalog_rows "$CATALOG_PATH")" || return 1
+  fi
+
+  if ! ahr_flatpak_require_command; then
+    printf 'ERROR: flatpak is required to update catalog applications.\n' >&2
+    return 1
+  fi
+
+  while IFS= read -r row || [[ -n "$row" ]]; do
+    [[ -n "$row" ]] || continue
+    IFS=$'\t' read -r slug name flatpak_id category profile support proprietary unofficial desktop_entry <<< "$row"
+    if ahr_flatpak_system_ref_installed "$flatpak_id"; then
+      update_ids+=("$flatpak_id")
+      update_names+=("$name")
+    elif [[ -n "$selector" ]]; then
+      printf 'ERROR: %s (%s) is not installed for system scope; it cannot be updated.\n' \
+        "$name" "$flatpak_id" >&2
+      return 1
+    fi
+  done <<< "$rows"
+
+  printf 'Flatpak catalog update plan:\n'
+  printf '  Scope: system\n'
+  if (( ${#update_ids[@]} == 0 )); then
+    printf '  Applications: none installed from the catalog\n'
+    printf 'No installed catalog applications to update; no changes made.\n'
+    return 0
+  fi
+  printf '  Applications (%d):\n' "${#update_ids[@]}"
+  plan_targets=""
+  for index in "${!update_ids[@]}"; do
+    [[ -z "$plan_targets" ]] || plan_targets+=", "
+    plan_targets+="${update_names[$index]} (${update_ids[$index]})"
+    printf '    - %s (%s)\n' "${update_names[$index]}" "${update_ids[$index]}"
+  done
+
+  if ! ahr_flatpak_system_update "${update_ids[@]}"; then
+    printf 'ERROR: Flatpak update failed for the catalog update plan: %s\n' "$plan_targets" >&2
+    return 1
+  fi
+  printf 'Catalog Flatpak update completed.\n'
+}
+
+dispatch() {
+  local subcommand="${1:-help}"
+  shift || true
+
+  case "$subcommand" in
+    list) cmd_list "$@" ;;
+    search) cmd_search "$@" ;;
+    info) cmd_info "$@" ;;
+    status) cmd_status "$@" ;;
+    validate) cmd_validate "$@" ;;
+    install) cmd_install "$@" ;;
+    launch) cmd_launch "$@" ;;
+    remove) cmd_remove "$@" ;;
+    update) cmd_update "$@" ;;
+    help|-h|--help) usage ;;
+    *)
+      printf 'Unknown Flatpak command: %s\n\n' "$subcommand" >&2
+      usage >&2
+      return 1
+      ;;
+  esac
+}
+
+dispatch "$@"

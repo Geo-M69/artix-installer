@@ -922,7 +922,7 @@ run_aur_phase() {
 }
 
 run_flatpak_phase() {
-	local profile_root="$SCRIPT_DIR/flatpaks"
+	local catalog_path="$CONFIG_DIR/artix-hypr-remix/default/flatpak/catalog.json"
 
 	if [[ "$SKIP_FLATPAK" == true || "$FLATPAK_PROFILE" == "none" ]]; then
 		info "[Phase 6/8] Skipping Flatpak profile install"
@@ -930,7 +930,7 @@ run_flatpak_phase() {
 	fi
 
 	info "[Phase 6/8] Installing Flatpak profile '$FLATPAK_PROFILE'"
-	install_flatpak_profile "$profile_root" "$FLATPAK_PROFILE" "$DRY_RUN"
+	install_flatpak_profile "$catalog_path" "$FLATPAK_PROFILE" "$DRY_RUN"
 }
 
 resolve_target_user() {

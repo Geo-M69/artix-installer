@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "applications": [
+    {
+      "slug": "zen-browser",
+      "name": "Zen Browser",
+      "flatpak_id": "app.zen_browser.zen",
+      "category": "system-utilities",
+      "profile": "default",
+      "support": "default",
+      "proprietary": false,
+      "unofficial": false,
+      "desktop_entry": "app.zen_browser.zen.desktop"
+    },
+    {
+      "slug": "flatseal",
+      "name": "Flatseal",
+      "flatpak_id": "com.github.tchx84.Flatseal",
+      "category": "system-utilities",
+      "profile": "default",
+      "support": "default",
+      "proprietary": false,
+      "unofficial": false,
+      "desktop_entry": "com.github.tchx84.Flatseal.desktop"
+    },
+    {
+      "slug": "warehouse",
+      "name": "Warehouse",
+      "flatpak_id": "io.github.flattool.Warehouse",
+      "category": "system-utilities",
+      "profile": "default",
+      "support": "default",
+      "proprietary": false,
+      "unofficial": false,
+      "desktop_entry": "io.github.flattool.Warehouse.desktop"
+    },
+    {
+      "slug": "gear-lever",
+      "name": "Gear Lever",
+      "flatpak_id": "it.mijorus.gearlever",
+      "category": "system-utilities",
+      "profile": "default",
+      "support": "default",
+      "proprietary": false,
+      "unofficial": false,
+      "desktop_entry": "it.mijorus.gearlever.desktop"
+    },
+    {
+      "slug": "obs-studio",
+      "name": "OBS Studio",
+      "flatpak_id": "com.obsproject.Studio",
+      "category": "media",
+      "profile": "optional",
+      "support": "optional",
+      "proprietary": false,
+      "unofficial": false,
+      "desktop_entry": "com.obsproject.Studio.desktop"
+    },
+    {
+      "slug": "discord",
+      "name": "Discord",
+      "flatpak_id": "com.discordapp.Discord",
+      "category": "communication",
+      "profile": "optional",
+      "support": "optional",
+      "proprietary": true,
+      "unofficial": false,
+      "desktop_entry": "com.discordapp.Discord.desktop"
+    },
+    {
+      "slug": "vesktop",
+      "name": "Vesktop",
+      "flatpak_id": "dev.vencord.Vesktop",
+      "category": "communication",
+      "profile": "optional",
+      "support": "optional",
+      "proprietary": false,
+      "unofficial": true,
+      "desktop_entry": "dev.vencord.Vesktop.desktop"
+    },
+    {
+      "slug": "obsidian",
+      "name": "Obsidian",
+      "flatpak_id": "md.obsidian.Obsidian",
+      "category": "office-writing",
+      "profile": "optional",
+      "support": "optional",
+      "proprietary": true,
+      "unofficial": false,
+      "desktop_entry": "md.obsidian.Obsidian.desktop"
+    },
+    {
+      "slug": "spotify",
+      "name": "Spotify",
+      "flatpak_id": "com.spotify.Client",
+      "category": "media",
+      "profile": "optional",
+      "support": "optional",
+      "proprietary": true,
+      "unofficial": true,
+      "desktop_entry": "com.spotify.Client.desktop"
+    },
+    {
+      "slug": "signal",
+      "name": "Signal",
+      "flatpak_id": "org.signal.Signal",
+      "category": "communication",
+      "profile": "optional",
+      "support": "optional",
+      "proprietary": false,
+      "unofficial": true,
+      "desktop_entry": "org.signal.Signal.desktop"
+    },
+    {
+      "slug": "onlyoffice",
+      "name": "OnlyOffice",
+      "flatpak_id": "org.onlyoffice.desktopeditors",
+      "category": "office-writing",
+      "profile": "optional",
+      "support": "optional",
+      "proprietary": false,
+      "unofficial": false,
+      "desktop_entry": "org.onlyoffice.desktopeditors.desktop"
+    },
+    {
+      "slug": "easyeffects",
+      "name": "EasyEffects",
+      "flatpak_id": "com.github.wwmm.easyeffects",
+      "category": "media",
+      "profile": "optional",
+      "support": "optional",
+      "proprietary": false,
+      "unofficial": false,
+      "desktop_entry": "com.github.wwmm.easyeffects.desktop"
+    },
+    {
+      "slug": "mission-center",
+      "name": "Mission Center",
+      "flatpak_id": "io.missioncenter.MissionCenter",
+      "category": "system-utilities",
+      "profile": "optional",
+      "support": "optional",
+      "proprietary": false,
+      "unofficial": false,
+      "desktop_entry": "io.missioncenter.MissionCenter.desktop"
+    }
+  ]
+}

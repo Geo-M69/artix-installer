@@ -40,6 +40,7 @@ Commands:
   default-browser     Inspect or set default browser
   default-terminal    Inspect or set default terminal
   default-editor      Inspect or set default editor
+  flatpak             Flatpak catalog command group
   status              Print install state, log paths, and framework summary
   list-backups        List config backups created by installer phase 4
   update              System + AUR update helper
@@ -94,6 +95,7 @@ dispatch() {
     default-browser) exec_ahr_command ahr-default-browser "$@" ;;
     default-terminal) exec_ahr_command ahr-default-terminal "$@" ;;
     default-editor) exec_ahr_command ahr-default-editor "$@" ;;
+    flatpak) exec_ahr_command ahr-flatpak "$@" ;;
     update) exec_ahr_command ahr-update "$@" ;;
     update-available) exec_ahr_command ahr-update-available "$@" ;;
     update-framework) exec_ahr_command ahr-update-framework "$@" ;;
@@ -140,6 +142,7 @@ dispatch() {
         "ahr-default-browser" \
         "ahr-default-terminal" \
         "ahr-default-editor" \
+        "ahr-flatpak" \
         "ahr-update" \
         "ahr-update-available" \
         "ahr-update-framework" \

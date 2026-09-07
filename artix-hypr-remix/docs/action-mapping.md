@@ -108,7 +108,7 @@
 |---|---|---|---|---|
 | Pacman Package(s) | ✅ Direct (simpler) | `sudo pacman -S --needed $packages` | `sudo`, `pacman` | User provides package names |
 | AUR Package(s) | ✅ Direct (simpler) | `paru -S --needed $packages` or `yay -S --needed` | AUR helper | User provides package names |
-| Flatpak App | ✅ Direct (simpler) | `flatpak install flathub $app_id` | `flatpak` | User provides app ID |
+| Flatpak Apps (Catalog) | ✅ Catalog-driven | `ahr flatpak install <slug>` via category menu; `Advanced: Install by Flatpak ID…` falls back to `flatpak install --system flathub $app_id` | `ahr`, `flatpak` | Catalog validation for normal path; advanced path warns it bypasses validation |
 | Docker Stack (OpenRC) | ⚠️ OpenRC adaptation | `sudo pacman -S docker docker-openrc && sudo rc-update add docker default && sudo rc-service docker start` | `sudo`, `pacman` | Requires `confirm_yes` |
 | Printing Stack (OpenRC) | ⚠️ OpenRC adaptation | `sudo pacman -S cups avahi cups-openrc avahi-openrc && sudo rc-update add cupsd default && sudo rc-update add avahi-daemon default` | `sudo`, `pacman` | Requires `confirm_yes` |
 
@@ -117,7 +117,7 @@
 | Omarchy Label | AHR Equivalent | Command | Guard | Safety |
 |---|---|---|---|---|
 | Pacman Package(s) | ✅ Direct (simpler) | `sudo pacman -Rns $packages` | `sudo`, `pacman` | User provides package names |
-| Flatpak App | ✅ Direct (simpler) | `flatpak uninstall $app_id` | `flatpak` | User provides app ID |
+| Flatpak Apps (Catalog) | ✅ Catalog-driven | `ahr flatpak remove <slug>` via category menu showing only system-installed entries; `Advanced: Remove by Flatpak ID…` falls back to `flatpak uninstall --system $app_id` | `ahr`, `flatpak` | System scope; application data preserved; advanced path warns it bypasses validation |
 | Docker Stack (OpenRC) | ⚠️ OpenRC adaptation | `sudo rc-service docker stop && sudo rc-update del docker default && sudo pacman -Rns docker docker-openrc` | `sudo` | Requires `confirm_yes` |
 | Printing Stack (OpenRC) | ⚠️ OpenRC adaptation | `sudo rc-service cupsd stop && sudo rc-service avahi-daemon stop && sudo rc-update del cupsd default && sudo rc-update del avahi-daemon default && sudo pacman -Rns cups avahi cups-openrc avahi-openrc` | `sudo` | Requires `confirm_yes` |
 

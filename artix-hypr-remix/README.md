@@ -56,7 +56,7 @@ Current installer milestone:
 4. Enable safe OpenRC services from `services/openrc-default.txt`.
 5. Deploy `config/` into the target user's `~/.config` using copy + timestamp backups, then initialize XDG user directories.
 6. Configure startup mode for Hyprland (`tty` default or optional `greetd`).
-7. Install AUR packages and Flatpak app profiles (`flatpaks/default.txt` by default).
+7. Install AUR packages and catalog-derived Flatpak app profiles (`default` by default).
 8. Prepare first-run/post-install framework, initialize migration state, and offer reboot prompt.
 9. Optionally apply a guarded Git/GPG/SSH baseline for the target user (disabled by default).
 
@@ -244,6 +244,13 @@ Targeted validation helpers:
     ./scripts/check-openrc-portability.sh
     ./scripts/check-first-run-idempotency.sh
     ./scripts/check-docker-profile.sh
+    ./scripts/test-flatpak-catalog.sh
+    ./scripts/test-flatpak-cli.sh
+    ./scripts/test-flatpak-operations.sh
+    ./scripts/test-flatpak-lifecycle.sh
+    ./scripts/test-flatpak-drift.sh
+    ./scripts/test-flatpak-menu.sh
+    ./scripts/test-update-available-flatpak.sh
     ./scripts/milestone2-validate.sh --user <username>
     ./scripts/milestone2-validate.sh --user <username> --expect-printing on --host-id host-a --gpu-profile intel --startup-modes "tty,greetd"
 
@@ -280,7 +287,9 @@ Emergency recovery (if keybinds do not load):
 Notes:
 - `packages/90-*.txt` is the core AUR bucket consumed by phase 6 (fail-fast on install failure).
 - `packages/9[1-9]-*.txt` is the optional AUR bucket consumed by phase 6 (warn-and-continue on install failure).
-- `flatpaks/default.txt` and `flatpaks/optional.txt` are consumed by phase 6.
+- `config/artix-hypr-remix/default/flatpak/catalog.json` is the canonical
+  Flatpak profile source consumed by phase 6; `flatpaks/default.txt` and
+  `flatpaks/optional.txt` remain temporary migration/regression fixtures.
 - Docker optional profile package manifest is `profiles/docker/packages.txt`.
 - Printing optional profile package manifest is `packages/profile-printing.txt`.
 - Printing optional profile OpenRC service manifest is `services/openrc-printing.txt`.
@@ -305,7 +314,8 @@ Notes:
 - Installer output is logged to `/var/log/artix-hypr-remix-install.log` by default (override with `AHR_INSTALL_LOG_FILE`, fallback under `/tmp` when needed).
 - Package installation phases refresh and upgrade package databases in a full `pacman -Syu` transaction before package-specific installs (avoids `-Sy` partial upgrade risk).
 - Phase 6 bootstraps `paru` if missing, repairs AUR cache/state directory ownership, and installs AUR packages as the target non-root user.
-- Phase 6 installs Flatpak refs from `flatpaks/default.txt` by default (`--flatpak-profile optional|all|none` and `--skip-flatpak` are available).
+- Phase 6 installs the catalog's `default` Flatpak refs by default
+  (`--flatpak-profile optional|all|none` and `--skip-flatpak` are available).
 - Flatpak refs are installed with system scope and Flathub remote bootstrap (`flathub`) when missing.
 - Phase 7 creates first-run state at `~/.local/state/artix-hypr-remix/first-run.mode`, installs scoped installer sudoers files, and initializes migration state under `~/.local/state/artix-hypr-remix/migrations`.
 - Phase 8 is optional and only applies when `--dev-baseline on` is set; it writes guarded managed blocks for `~/.ssh/config`, `~/.gnupg/gpg.conf`, and `~/.gnupg/gpg-agent.conf` with one-time backups (`*.ahr-dev-baseline.bak`) and preserves existing explicit git settings.
@@ -337,6 +347,20 @@ Upgrade workflow:
     ahr update --migrations-only
     ahr update --dry-run
 
+Catalog-scoped Flatpak lifecycle:
+
+    ahr flatpak list [--category CAT] [--format menu]
+    ahr flatpak status [--category CAT] [--installed] [--format menu]
+    ahr flatpak install <selector>
+    ahr flatpak launch <selector>
+    ahr flatpak remove <selector>
+    ahr flatpak update [selector]
+
+Flatseal and Warehouse (installed via the default profile) complement this
+workflow for permissions and installation-level management; they do not
+replace catalog validation or its system-scope lifecycle contract. See
+[docs/FLATSEAL_WAREHOUSE.md](docs/FLATSEAL_WAREHOUSE.md).
+
 Update status helper:
 
     ahr update-available
@@ -345,6 +369,11 @@ Update status helper:
 `ahr update-available` exit codes:
 - `0` when updates or pending/skipped migrations are present
 - `1` when everything is up to date
+
+`--json` reports `flatpak_state` as `current` when the Flatpak update query
+succeeded, `query-failed` when the query failed (the Flatpak state is unknown
+and the human output says so instead of claiming everything is up to date), or
+`unavailable` when the `flatpak` command is absent.
 
 Command namespace:
 

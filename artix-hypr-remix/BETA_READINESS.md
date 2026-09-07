@@ -24,8 +24,9 @@ The beta target is a script-installed Artix OpenRC Hyprland desktop with:
 - Real hardware validation is still limited; Intel/AMD/NVIDIA paths need more host logs before support claims can be strong.
 - `greetd` support exists, but raised-bar readiness requires fresh greeter and
   autologin validation bundles.
-- Laptop suspend/resume and browser/Flatpak screen sharing need explicit
-  live-session validation.
+- Fresh validation bundles and real first-login visual proof are still needed
+  for the raised beta bar. Flatpak portal screen sharing was live-validated
+  with OBS on the NVIDIA laptop; see `docs/PHASE3_OBS_PORTAL_VALIDATION.md`.
 - `ahr repair --config` is detect-only and does not rewrite user config.
 - Rich remote theme preview remains deferred; local theme install/update/remove
   and background/gallery flows exist but need live-session validation.

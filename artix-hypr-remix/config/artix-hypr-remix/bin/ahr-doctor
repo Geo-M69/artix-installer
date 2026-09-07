@@ -437,7 +437,7 @@ if [[ -d "$ns_bin_dir" ]]; then
   ns_ok=0
   ns_warn=0
   ns_total=0
-  for ns_cmd in ahr ahr-update ahr-update-framework ahr-update-available ahr-restore-component ahr-doctor; do
+  for ns_cmd in ahr ahr-flatpak ahr-update ahr-update-framework ahr-update-available ahr-restore-component ahr-doctor; do
     ns_total=$((ns_total + 1))
     ns_path="$ns_bin_dir/$ns_cmd"
     if [[ -L "$ns_path" ]]; then
@@ -492,6 +492,7 @@ framework_cmd_check ahr-launch-wallpaper-session
 framework_cmd_check ahr-capture-screenshot
 framework_cmd_check ahr-capture-picker
 framework_cmd_check ahr-theme
+framework_cmd_check ahr-flatpak
 framework_cmd_check ahr-status
 framework_cmd_check ahr-doctor
 framework_cmd_check ahr-update
@@ -509,6 +510,8 @@ framework_library_check ahr-managed-paths.sh
 framework_library_check ahr-theme-lib.sh
 framework_library_check ahr-toggle-lib.sh
 framework_library_check ahr-font-lib.sh
+framework_library_check ahr-flatpak-catalog-lib.sh
+framework_library_check ahr-flatpak-runtime-lib.sh
 framework_cmd_check ahr-migrate
 
 printf '\n'

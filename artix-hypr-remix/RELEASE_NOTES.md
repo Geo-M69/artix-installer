@@ -1,8 +1,47 @@
-# Artix Hypr Remix — Beta Release Notes
+# Artix Hypr Remix — Release Notes
 
-**Target version:** `v0.1.0-beta1`  
-**Release date:** 2026-06-06  
+## v0.2.0-beta2 — Phase 3 framework release candidate
+
+**Status:** Pending commit, publication, and public-source framework-delivery
+validation. This is not a published release.
+**Framework metadata:** `0.2.0-beta2`, `beta` channel, with the existing public
+source `https://github.com/Geo-M69/artix-installer.git`.
 **Base system:** Artix Linux with OpenRC
+
+### Included in this candidate
+
+- Phase 3a–3e: the versioned Flatpak catalog, read-only catalog CLI,
+  catalog-managed install/launch/remove/update, category-driven Install/Remove
+  menus, offline catalog-entry validation, lifecycle/drift/menu regressions,
+  and normalized Flatpak diagnostics.
+- Framework delivery of the catalog, libraries, `ahr flatpak` command, menu
+  integration, and the Hyprland OBS share-picker placement rules.
+- A narrow, idempotent share-picker migration for existing user-edited
+  `hyprland.conf` files. It appends only missing rules and leaves an exact
+  `hyprland.conf.bak.*` recovery copy.
+- Exact framework-rollback namespace restoration: AHR-managed links introduced
+  after the selected snapshot are removed, while unrelated user links are
+  preserved.
+
+### Required public-source validation
+
+After the release commit is reachable from the configured public source, run
+the normal updater flow on the target host:
+
+```bash
+ahr update-framework --dry-run
+ahr update-framework --apply
+ahr update-framework --rollback
+ahr update-framework --apply
+```
+
+Record the installed metadata and confirm the Phase 3 catalog/CLI/menu,
+share-picker migration, and namespace state after both applies. The release
+must not be tagged or announced as validated until this flow passes.
+
+---
+
+## v0.1.0-beta1 — Released 2026-06-06
 
 ---
 

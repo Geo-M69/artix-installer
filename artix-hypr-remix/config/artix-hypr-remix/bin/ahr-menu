@@ -932,6 +932,282 @@ show_setup_menu() {
   done
 }
 
+# ── Flatpak catalog menu helpers ────────────────────────────────
+# These are presentation/dispatch helpers only: they call the catalog CLI and
+# never parse JSON, source the catalog/runtime libraries, or duplicate Flatpak
+# lifecycle logic.
+
+flatpak_category_display_name() {
+  case "$1" in
+    communication) printf 'Communication' ;;
+    office-writing) printf 'Office & Writing' ;;
+    media) printf 'Media' ;;
+    creative) printf 'Creative' ;;
+    development) printf 'Development' ;;
+    gaming) printf 'Gaming' ;;
+    system-utilities) printf 'System Utilities' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+flatpak_category_schema_value() {
+  case "$1" in
+    'Communication') printf 'communication' ;;
+    'Office & Writing') printf 'office-writing' ;;
+    'Media') printf 'media' ;;
+    'Creative') printf 'creative' ;;
+    'Development') printf 'development' ;;
+    'Gaming') printf 'gaming' ;;
+    'System Utilities') printf 'system-utilities' ;;
+    *) return 1 ;;
+  esac
+}
+
+flatpak_format_menu_entry() {
+  local slug="$1" name="$2" support="$3" proprietary="$4" unofficial="$5"
+  local flags=""
+
+  [[ "$proprietary" == "true" ]] && flags+=" [Proprietary]"
+  [[ "$unofficial" == "true" ]] && flags+=" [Unofficial]"
+
+  printf '%s (%s)%s [slug: %s]' "$name" "$support" "$flags" "$slug"
+}
+
+flatpak_extract_slug() {
+  local entry="$1"
+
+  if [[ "$entry" =~ \[slug:\ ([^]]+)\]$ ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+  else
+    return 1
+  fi
+}
+
+# Shared diagnostic for catalog CLI query failures in Flatpak menus. The caller
+# must not present catalog choices after this returns: a broken or missing
+# catalog is not the same as an empty category, and the raw-ID advanced path is
+# never an automatic fallback.
+flatpak_menu_catalog_query_failed() {
+  printf 'ERROR: Flatpak catalog query failed; catalog choices are unavailable.\n' >&2
+  printf '       Run `ahr flatpak validate` to diagnose the catalog, then reopen this menu.\n' >&2
+  ahr_notify "artix-hypr-remix" "Flatpak catalog query failed — run ahr flatpak validate to diagnose"
+}
+
+# Build a category-selection menu from the catalog CLI, omitting empty
+# categories. Ordered category list is a presentation decision and is kept here
+# so the CLI/library remain focused on data. A failed catalog query returns
+# non-zero without emitting choices so callers never present catalog options
+# derived from a broken or unreadable catalog.
+flatpak_build_category_menu() {
+  local ahr_cmd="$1" mode="$2"
+  local cat count
+
+  if [[ "$mode" == "install" ]]; then
+    printf '%s\n' 'All Catalog Apps'
+  else
+    printf '%s\n' 'All Installed Catalog Apps'
+  fi
+  for cat in communication office-writing media creative development gaming system-utilities; do
+    if [[ "$mode" == "install" ]]; then
+      count="$("$ahr_cmd" flatpak list --category "$cat" --format menu | wc -l)" || return 1
+    else
+      count="$("$ahr_cmd" flatpak status --category "$cat" --installed --format menu | wc -l)" || return 1
+    fi
+    if (( count > 0 )); then
+      printf '%s\n' "$(flatpak_category_display_name "$cat")"
+    fi
+  done
+  return 0
+}
+
+show_flatpak_app_install_submenu() {
+  local ahr_cmd="$1" category="$2"
+  local prompt rows row slug name support proprietary unofficial
+  local -a entries=()
+  local -a slugs=()
+  local choice
+
+  if [[ -n "$category" ]]; then
+    prompt="Install: $(flatpak_category_display_name "$category")"
+    if ! rows="$("$ahr_cmd" flatpak list --category "$category" --format menu)"; then
+      flatpak_menu_catalog_query_failed
+      return 0
+    fi
+  else
+    prompt="Install: All Catalog Apps"
+    if ! rows="$("$ahr_cmd" flatpak list --format menu)"; then
+      flatpak_menu_catalog_query_failed
+      return 0
+    fi
+  fi
+
+  while IFS= read -r row || [[ -n "$row" ]]; do
+    [[ -n "$row" ]] || continue
+    IFS=$'\t' read -r slug name support proprietary unofficial <<< "$row"
+    entries+=("$(flatpak_format_menu_entry "$slug" "$name" "$support" "$proprietary" "$unofficial")")
+    slugs+=("$slug")
+  done <<< "$rows"
+
+  if (( ${#entries[@]} == 0 )); then
+    ahr_notify "artix-hypr-remix" "No catalog applications available"
+    return 0
+  fi
+
+  entries+=("Back")
+
+  choice="$(menu_select "$prompt" "${entries[@]}")"
+
+  case "$choice" in
+    "Back"|"") return 0 ;;
+    *)
+      if ! slug="$(flatpak_extract_slug "$choice")"; then
+        ahr_notify "artix-hypr-remix" "Could not determine selected Flatpak app"
+        return 0
+      fi
+      if confirm_yes "Install $slug from Flathub at system scope?"; then
+        run_terminal_command "$ahr_cmd" flatpak install "$slug"
+      fi
+      ;;
+  esac
+}
+
+show_flatpak_install_menu() {
+  local ahr_cmd choice category_menu
+  local -a category_options=()
+  local cat label
+
+  ahr_cmd="$(resolve_command_path ahr)" || ahr_fail "Command not found: ahr"
+
+  while true; do
+    if ! category_menu="$(flatpak_build_category_menu "$ahr_cmd" install)"; then
+      flatpak_menu_catalog_query_failed
+      return 0
+    fi
+    mapfile -t category_options <<< "$category_menu"
+    category_options+=("Advanced: Install by Flatpak ID…")
+    category_options+=("Back")
+
+    choice="$(menu_select "Install: Flatpak Apps (Catalog)" "${category_options[@]}")"
+
+    case "$choice" in
+      "All Catalog Apps")
+        show_flatpak_app_install_submenu "$ahr_cmd" ""
+        ;;
+      'Communication'|'Office & Writing'|'Media'|'Creative'|'Development'|'Gaming'|'System Utilities')
+        cat="$(flatpak_category_schema_value "$choice")"
+        show_flatpak_app_install_submenu "$ahr_cmd" "$cat"
+        ;;
+      "Advanced: Install by Flatpak ID…")
+        run_terminal_script "set -e; echo 'WARNING: This bypasses AHR catalog validation.'; echo; if ! command -v flatpak >/dev/null 2>&1; then echo 'flatpak is not installed.'; exit 1; fi; read -r -p 'Flatpak application ID (for flathub): ' app_id; [[ -n \"\$app_id\" ]] || exit 0; flatpak install --system flathub \"\$app_id\""
+        ;;
+      "Back"|"") return 0 ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+show_flatpak_app_remove_submenu() {
+  local ahr_cmd="$1" category="$2"
+  local prompt rows row slug name support proprietary unofficial
+  local -a entries=()
+  local -a slugs=()
+  local -a names=()
+  local choice
+
+  if [[ -n "$category" ]]; then
+    prompt="Remove: $(flatpak_category_display_name "$category")"
+    if ! rows="$("$ahr_cmd" flatpak status --category "$category" --installed --format menu)"; then
+      flatpak_menu_catalog_query_failed
+      return 0
+    fi
+  else
+    prompt="Remove: All Installed Catalog Apps"
+    if ! rows="$("$ahr_cmd" flatpak status --installed --format menu)"; then
+      flatpak_menu_catalog_query_failed
+      return 0
+    fi
+  fi
+
+  while IFS= read -r row || [[ -n "$row" ]]; do
+    [[ -n "$row" ]] || continue
+    IFS=$'\t' read -r slug name support proprietary unofficial <<< "$row"
+    entries+=("$(flatpak_format_menu_entry "$slug" "$name" "$support" "$proprietary" "$unofficial")")
+    slugs+=("$slug")
+    names+=("$name")
+  done <<< "$rows"
+
+  if (( ${#entries[@]} == 0 )); then
+    ahr_notify "artix-hypr-remix" "No installed catalog Flatpak apps in this category"
+    return 0
+  fi
+
+  entries+=("Back")
+
+  choice="$(menu_select "$prompt" "${entries[@]}")"
+
+  case "$choice" in
+    "Back"|"") return 0 ;;
+    *)
+      if ! slug="$(flatpak_extract_slug "$choice")"; then
+        ahr_notify "artix-hypr-remix" "Could not determine selected Flatpak app"
+        return 0
+      fi
+
+      name=""
+      local index
+      for index in "${!slugs[@]}"; do
+        if [[ "${slugs[$index]}" == "$slug" ]]; then
+          name="${names[$index]}"
+          break
+        fi
+      done
+
+      if confirm_yes "Remove $name ($slug) at system scope? Application data will be preserved."; then
+        run_terminal_command "$ahr_cmd" flatpak remove "$slug"
+      fi
+      ;;
+  esac
+}
+
+show_flatpak_remove_menu() {
+  local ahr_cmd choice category_menu
+  local -a category_options=()
+  local cat label
+
+  ahr_cmd="$(resolve_command_path ahr)" || ahr_fail "Command not found: ahr"
+
+  if ! menu_require flatpak flatpak; then
+    return 0
+  fi
+
+  while true; do
+    if ! category_menu="$(flatpak_build_category_menu "$ahr_cmd" remove)"; then
+      flatpak_menu_catalog_query_failed
+      return 0
+    fi
+    mapfile -t category_options <<< "$category_menu"
+    category_options+=("Advanced: Remove by Flatpak ID…")
+    category_options+=("Back")
+
+    choice="$(menu_select "Remove: Flatpak Apps (Catalog)" "${category_options[@]}")"
+
+    case "$choice" in
+      'All Installed Catalog Apps')
+        show_flatpak_app_remove_submenu "$ahr_cmd" ""
+        ;;
+      'Communication'|'Office & Writing'|'Media'|'Creative'|'Development'|'Gaming'|'System Utilities')
+        cat="$(flatpak_category_schema_value "$choice")"
+        show_flatpak_app_remove_submenu "$ahr_cmd" "$cat"
+        ;;
+      "Advanced: Remove by Flatpak ID…")
+        run_terminal_script "set -e; echo 'WARNING: This bypasses AHR catalog validation.'; echo; if ! command -v flatpak >/dev/null 2>&1; then echo 'flatpak is not installed.'; exit 1; fi; read -r -p 'Flatpak application ID to remove: ' app_id; [[ -n \"\$app_id\" ]] || exit 0; flatpak uninstall --system \"\$app_id\""
+        ;;
+      "Back"|"") return 0 ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
 show_install_menu() {
   local choice
 
@@ -939,7 +1215,7 @@ show_install_menu() {
     choice="$(menu_select "Install" \
       "󰣇 Pacman Package(s)" \
       "󰣇 AUR Package(s)" \
-      "󰏓 Flatpak App" \
+      "󰏓 Flatpak Apps (Catalog)" \
       "󰡨 Docker Stack (OpenRC)" \
       "󰐫 Printing Stack (OpenRC)" \
       "Back")"
@@ -952,7 +1228,7 @@ show_install_menu() {
         run_terminal_script "set -e; echo 'This installs AUR packages with paru or yay.'; echo 'Review PKGBUILDs when prompted by your helper.'; echo; read -r -p 'Packages to install via AUR helper (space-separated): ' packages; [[ -n \"\$packages\" ]] || exit 0; if command -v paru >/dev/null 2>&1; then paru -S --needed \$packages; elif command -v yay >/dev/null 2>&1; then yay -S --needed \$packages; else echo 'No AUR helper found (paru/yay).'; exit 1; fi"
         ;;
       *"Flatpak"*)
-        run_terminal_script "set -e; echo 'This installs a Flatpak app from Flathub.'; echo; if ! command -v flatpak >/dev/null 2>&1; then echo 'flatpak is not installed.'; exit 1; fi; read -r -p 'Flatpak application id (for flathub): ' app_id; [[ -n \"\$app_id\" ]] || exit 0; flatpak install flathub \"\$app_id\""
+        show_flatpak_install_menu
         ;;
       *"Docker"*)
         if ! confirm_yes "Install Docker packages and enable/start OpenRC docker?"; then
@@ -978,7 +1254,7 @@ show_remove_menu() {
   while true; do
     choice="$(menu_select "Remove" \
       "󰣇 Pacman Package(s)" \
-      "󰏓 Flatpak App" \
+      "󰏓 Flatpak Apps (Catalog)" \
       "󰡨 Docker Stack (OpenRC)" \
       "󰐫 Printing Stack (OpenRC)" \
       "Back")"
@@ -988,7 +1264,7 @@ show_remove_menu() {
         run_terminal_script "set -e; echo 'This removes repo packages with sudo pacman -Rns, including unneeded dependencies.'; echo 'Review the pacman transaction carefully before confirming.'; echo; read -r -p 'Packages to remove via pacman (space-separated): ' packages; [[ -n \"\$packages\" ]] || exit 0; sudo pacman -Rns \$packages"
         ;;
       *"Flatpak"*)
-        run_terminal_script "set -e; echo 'This removes one installed Flatpak app.'; echo; if ! command -v flatpak >/dev/null 2>&1; then echo 'flatpak is not installed.'; exit 1; fi; read -r -p 'Flatpak application id to remove: ' app_id; [[ -n \"\$app_id\" ]] || exit 0; flatpak uninstall \"\$app_id\""
+        show_flatpak_remove_menu
         ;;
       *"Docker"*)
         if ! confirm_yes "Stop/disable Docker OpenRC service and remove Docker packages?"; then

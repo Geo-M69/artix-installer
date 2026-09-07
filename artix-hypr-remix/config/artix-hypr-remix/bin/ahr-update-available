@@ -38,6 +38,8 @@ Categories:
   system            System (pacman) package updates
   aur               AUR helper package updates
   flatpak           Flatpak application updates
+                    --json flatpak_state: current (query succeeded),
+                    query-failed (query failed), or unavailable (no command)
   theme             Theme updates (unsupported in Phase 1)
   migrations        Pending framework migrations
   skipped_migrations Migrations skipped on previous run
@@ -78,9 +80,19 @@ elif ahr_has_cmd yay; then
 fi
 
 # flatpak updates
+# A successful `remote-ls --updates` query is reported as "current" with the
+# update count; a failed query is reported as "query-failed" so it is never
+# indistinguishable from a genuinely current state. A missing command remains
+# "unavailable". Failed queries contribute no count to the pending total.
 if ahr_has_cmd flatpak; then
-  flatpak_state="current"
-  flatpak_count=$(flatpak remote-ls --updates 2>/dev/null | wc -l || true)
+  if flatpak_updates="$(flatpak remote-ls --updates 2>/dev/null)"; then
+    flatpak_state="current"
+    if [[ -n "$flatpak_updates" ]]; then
+      flatpak_count="$(printf '%s\n' "$flatpak_updates" | wc -l)"
+    fi
+  else
+    flatpak_state="query-failed"
+  fi
 fi
 
 # pending or skipped migrations
@@ -263,6 +275,7 @@ else
     [[ "$system_count" -gt 0 ]] && echo "  system packages: $system_count"
     [[ "$aur_count" -gt 0 ]] && echo "  AUR packages: $aur_count"
     [[ "$flatpak_state" == "current" && "$flatpak_count" -gt 0 ]] && echo "  Flatpak apps: $flatpak_count"
+    [[ "$flatpak_state" == "query-failed" ]] && echo "  flatpak: update query failed (run 'flatpak remote-ls --updates' to diagnose)"
     [[ "$migration_pending_count" -gt 0 ]] && echo "  pending migrations: $migration_pending_count"
     [[ "$migration_skipped_count" -gt 0 ]] && echo "  skipped migrations: $migration_skipped_count"
     if [[ "$framework_state" == "pending" ]]; then
@@ -270,9 +283,14 @@ else
     elif [[ "$framework_state" == "unavailable" ]]; then
       echo "  framework version: check failed"
     fi
+else
+  if [[ "$flatpak_state" == "query-failed" ]]; then
+    echo "No package updates pending, but the Flatpak update query failed."
+    echo "  flatpak: state unknown (run 'flatpak remote-ls --updates' to diagnose)"
   else
     echo "No updates pending."
   fi
+fi
 fi
 
 if (( total > 0 )); then

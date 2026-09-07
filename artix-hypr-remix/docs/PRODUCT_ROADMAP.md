@@ -326,6 +326,130 @@ discoverable, reversible Flatpak experience.
 - Add applications only one category at a time; do not import Omarchy's
   preinstall list wholesale.
 
+### Phase 3a Implementation Status
+
+**Foundation implemented.** The versioned schema-v1 catalog lives at
+`config/artix-hypr-remix/default/flatpak/catalog.json` and is the canonical
+source for the existing `default`, `optional`, `all`, and `none` installer
+profiles. The 13 pre-existing IDs and their ordering are unchanged. The legacy
+text profiles remain temporary regression fixtures.
+
+Catalog parsing and validation are isolated in
+`config/artix-hypr-remix/bin/ahr-flatpak-catalog-lib.sh`; invalid schema,
+required fields, enums, duplicate identities, or unsafe IDs fail before any
+Flatpak operation. The catalog is delivered through the existing transactional
+`default/` framework target. Search, menus, application operations, and remote
+metadata were deferred to later Phase 3 slices.
+
+### Phase 3b Implementation Status
+
+**Read-only CLI implemented.** `ahr flatpak list`, `search`, `info`,
+`status`, and `validate` use the local schema-v1 catalog through its library.
+The first four catalog-reading commands work offline; `status` performs only a
+local system-scope `flatpak info` check and does not query Flathub. Mutation
+commands were deferred to subsequent slices; menus, remote metadata, and schema
+expansion remain future work.
+
+### Phase 3c Implementation Status
+
+**Catalog-managed install and launch implemented.** `ahr flatpak install` and
+`ahr flatpak launch` resolve exact catalog selectors through the existing
+library. Installation uses the same system-scoped, idempotent Flathub
+primitives as installer phase 6 and prints a concise plan before mutation.
+Launch requires both a system-installed catalog application and its expected
+desktop entry before running it with system scope. Raw-ID catalog bypass,
+purge, menus, and remote metadata remain out of scope; remove and update are
+implemented by Phase 3d.
+
+### Phase 3d Implementation Status
+
+**Catalog-managed remove and update implemented.** `ahr flatpak remove`
+uninstalls only a resolved system-scope catalog entry and always preserves
+application data. `ahr flatpak update <selector>` updates one installed catalog
+entry; the selector-free form updates only installed catalog entries in catalog
+order. The broader `ahr update --flatpak` orchestration remains unchanged.
+
+**Category-driven Install/Remove menus implemented.** `ahr flatpak list
+[--category CAT] [--format menu]` and `ahr flatpak status [--category CAT]
+[--installed] [--format menu]` provide the read-only TSV interface used by the
+`Install > Flatpak Apps (Catalog)` and `Remove > Flatpak Apps (Catalog)` menus.
+Menus are presentation/dispatch only: they call the catalog CLI, show
+non-empty categories, display support/proprietary/unofficial labels, and pass
+resolved slugs to `ahr flatpak install <slug>` / `ahr flatpak remove <slug>`.
+`Advanced: Install/Remove by Flatpak ID…` entries keep the interactive raw
+Flatpak paths clearly labeled as bypassing catalog validation; they use system
+scope and never pass `--delete-data`. A failed catalog CLI query (invalid or
+missing catalog) surfaces an actionable diagnostic pointing at
+`ahr flatpak validate` instead of presenting misleading catalog choices; the
+menu returns cleanly to the parent menu and never falls back automatically to
+the advanced raw-ID path.
+
+Purge, user-scope Flatpaks, remote metadata, and schema expansion remain future
+work.
+
+**Flatseal/Warehouse complement documented.** How Flatseal and Warehouse
+complement, but do not replace, the catalog and its policy layer is documented
+in `docs/FLATSEAL_WAREHOUSE.md`. This was a documentation-only change; no
+command, schema, menu, or behavior changed.
+
+### Phase 3e And Framework Delivery Status
+
+**Phase 3e complete in the `0.2.0-beta2` release candidate.** The category
+driven catalog menus, offline catalog-entry validation, drift/lifecycle/menu
+regression suites, and diagnostic hardening are included without expanding the
+catalog schema, user-scope behavior, purge semantics, or remote metadata.
+
+The candidate also closes the framework-delivery gaps found during the real
+delivery rehearsal: the catalog, libraries, `ahr flatpak` CLI, and menu are in
+framework-owned targets; an idempotent migration delivers the two
+`hyprland-share-picker` placement rules to existing user configurations with a
+backup; and rollback reconciles AHR-managed namespace links exactly to its
+snapshot without touching unrelated user links. The `beta` channel continues
+to use the configured public repository source. Public-source
+apply→rollback→reapply validation remains required before release publication.
+
+### Catalog entry validation status
+
+**Catalog-entry validation implemented.** `scripts/validate-flatpak-catalog-entries.sh`
+pins the 13 catalog IDs and their order against the recorded live-validated
+availability assumptions, enforces the `<flatpak-id>.desktop` desktop-entry
+convention, and runs offline in the quality gate; an opt-in `--live-flathub`
+pass re-checks ID availability against the configured Flathub remote strictly
+read-only. The Phase 3b CLI suite additionally proves that read-only commands
+never invoke Flatpak and that `status` degrades cleanly when Flatpak is absent;
+missing-remote bootstrap and failure boundaries remain covered by the Phase 3c
+suite. Live results are recorded separately from synthetic evidence in
+`docs/ARCHITECTURE_CONTEXT.md`. Schemas, commands, and runtime behavior were
+not changed.
+
+### Out-of-band drift regression status
+
+**Drift regression slice implemented.** `scripts/test-flatpak-drift.sh` pins
+the catalog-visible results of out-of-band Flatpak state changes documented in
+`docs/FLATSEAL_WAREHOUSE.md`: user-scope installs stay non-authoritative for
+every catalog command (which never queries user scope), non-catalog system
+installs are excluded from catalog-wide update, and installed applications
+missing their expected desktop-entry export are surfaced consistently across
+`status`, `launch`, and `install`. The slice is offline, stubbed, part of the
+quality gate, and changes no command, schema, or runtime behavior; detecting
+and repairing drift beyond these read-only diagnostics (for example export
+repair or live remote metadata) remains future work.
+
+### Flatpak diagnostic normalization status
+
+**Operator-facing diagnostics normalized.** `ahr flatpak` now reports the same
+underlying system-scope installation state with one consistent wording across
+commands: launch, remove, and update share the
+`Name (ID) is not installed for system scope` phrase; install and remove share
+the scope-qualified `is <state> for system scope; no changes made.` no-op
+skeleton (install's idempotent skip now states the scope explicitly); and
+catalog update failures name their concrete `Name (ID)` targets in catalog
+order, matching how install and removal failures already identified the
+application. Wording only: no command contract, schema, scope, state
+vocabulary, status degradation, or lifecycle behavior changed. The drift suite
+pins the consistency, and the operations/lifecycle suites pin the exact new
+strings.
+
 ### Exit gate
 
 - A user can discover, inspect, install, launch, update, and remove a catalog

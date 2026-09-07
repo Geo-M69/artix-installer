@@ -6,6 +6,24 @@ This checklist tracks the remaining work needed to reach the target:
 
 Current estimate: about 95% complete overall, with the project in Milestone 7 post-beta hardening. Milestones 0, 1, 3, and the bulk of 4 are addressed for beta. Core Milestone 2 services validated on VM (2026-06-05). Deferred Milestone 4 items are explicitly documented as post-beta. Milestone 7 distribution decision documented, feedback infrastructure in place, usability pass complete.
 
+## Phase 3 Framework Release Candidate
+
+Status: `0.2.0-beta2` is prepared for public-source framework-delivery
+validation; it is not published or tagged yet.
+
+- [x] Deliver the Phase 3 catalog, libraries, `ahr flatpak` CLI, and menu
+  integration through framework-managed targets.
+- [x] Deliver the OBS share-picker rules to existing user Hyprland
+  configurations through an idempotent, backup-producing migration.
+- [x] Restore the AHR-managed namespace exactly during rollback without
+  removing unrelated user links.
+- [x] Cover migration delivery and forward-added managed-link rollback in the
+  framework updater regression suite.
+- [x] Run the 16-stage offline quality gate for the candidate.
+- [ ] Run a real public-source apply → rollback → reapply validation after the
+  release commit is reachable from `https://github.com/Geo-M69/artix-installer.git`.
+- [ ] Tag and publish `v0.2.0-beta2` only after that validation is recorded.
+
 ## Milestone 0 - Target And Support Contract
 
 Status: mostly complete; support-matrix updates remain ongoing after each real-host validation run.
@@ -119,7 +137,8 @@ Status: core desktop is present; polish and validation remain.
 - [x] Decide whether screenshot command should always use the repo wrapper instead of inline Hyprland command.
 - [ ] Validate lock/idle behavior after suspend/resume on laptop hardware.
 - [x] Validate default browser and terminal helpers with installed package set (smoke test covers framework commands).
-- [x] Validate portal behavior with Flatpak apps (portal checks pass in smoke test).
+- [x] Validate portal behavior with a Flatpak app end to end.
+  - **OBS/Hyprland investigation (2026-09-06):** direct and current-repository AHR launch paths both selected `eDP-1`, streamed, and rendered a preview without reproducing the intermittent OBS termination. The picker-placement rule gap was fixed and regression-covered. The post-fix run produced a valid 10.5-second H.264/AAC recording, OBS exited 0, and all portal daemons survived. A backtrace is required if the upstream-looking assertion/termination recurs; see `docs/PHASE3_OBS_PORTAL_VALIDATION.md`.
 - [x] Validate clipboard history with text and image content (cliphist + wl-paste validated in smoke test).
 
 ## Milestone 4 - Omarchy-Like User Experience
@@ -162,6 +181,8 @@ Manual UX validation: PASS (menu, keybindings, theme, update, discoverability, c
 - [ ] Explicitly mark transcode workflow as optional polish or implement a minimal safe command (deferred — post-beta).
 - [ ] Explicitly mark LocalSend/share workflow as optional polish or unsupported for beta (deferred — post-beta).
 - [x] Keep broad install/remove menus intentionally narrow until package operations are tested.
+- [x] Add category-driven Flatpak Install/Remove menus backed by `ahr flatpak list/status --category … --format menu` and preserve the raw-ID advanced path.
+- [x] Add focused Flatpak menu regression test suite and wire it into the quality gate.
 - [x] Keep web app installer unsupported for beta unless it becomes a release goal.
 - [x] Add user-facing expected-result text for first login.
 - [ ] Replace first-login expected-result text with real screenshots for the raised beta bar.
@@ -249,7 +270,7 @@ Status: in progress (2026-06-06 kickoff). Distribution decision made; feedback c
 - [ ] Replace expected-result placeholders with real first-login screenshots: desktop, app launcher, control menu, theme/background state, and one capture result.
 - [ ] Run graphical Walker/menu smoke: open every top-level menu in a live Hyprland session and archive representative screenshots.
 - [ ] Validate suspend/resume on laptop hardware: lock/unlock, idle restore, audio, network, and Waybar indicators.
-- [ ] Validate browser or Flatpak portal screen sharing.
+- [x] Validate Flatpak portal screen sharing with OBS on laptop hardware.
 - [ ] Validate default apps/MIME behavior for URL, directory, text, PDF, image, video, and archive files.
 - [ ] Resolve or explicitly defer remaining Milestone 4 required-parity items; deferred items must appear in known issues or release notes.
 - [ ] Update support matrix from validation results.
@@ -267,7 +288,7 @@ Status: in progress (2026-06-06 kickoff). Distribution decision made; feedback c
 - [x] `greetd` support validated — greeter mode tested on VM, autologin confirmed working through daily use on host. Fresh-install log bundles still pending.
 - [ ] Fresh `greetd` autologin bundle is missing.
 - [ ] Real first-login visual proof is missing; placeholders no longer satisfy the raised beta bar.
-- [ ] Suspend/resume and portal screen sharing are not yet validated on real hardware.
+- [ ] Suspend/resume is not yet validated on real hardware.
 - [ ] Some Omarchy required-parity workflows remain partial or intentionally narrower.
 
 ## Definition Of Done
