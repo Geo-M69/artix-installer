@@ -2487,6 +2487,10 @@ if (( tc58_normal_exit == 0 )) && [[ "$(json_get "$tc58_normal_home/.config/arti
 tc58_home="$tmp_root/tc58"
 tc58_repo="$(create_test_repo "$tmp_root/tc58_repo" "0.2.0")"
 setup_installed_framework "$tc58_home" "file://$tc58_repo"
+# Model the real failed-apply transition: the installed framework has an old
+# public revision, then activation records a distinct candidate commit.
+tc58_previous_revision="1111111111111111111111111111111111111111"
+sed -i "s/\"revision\":null/\"revision\":\"$tc58_previous_revision\"/" "$tc58_home/.config/artix-hypr-remix/framework.json"
 tc58_staged="$tc58_repo/artix-hypr-remix/config/artix-hypr-remix"
 cat > "$tc58_staged/bin/namespace-install.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -2528,6 +2532,11 @@ tc58_manifest_txid="$(awk -F= '$1 == "transaction_id" { print substr($0, 16); ex
 tc58_manifest_backup_id="$(awk -F= '$1 == "backup_id" { print substr($0, 11); exit }' "$tc58_manifest")"
 if [[ "$tc58_txid" == "$(basename "$tc58_txdir")" && "$tc58_backup_id" == "$(basename "$tc58_backup")" && "$tc58_txid" == "$tc58_manifest_txid" && "$tc58_backup_id" == "$tc58_manifest_backup_id" ]]; then pass "injected failure preserves exact transaction and backup provenance"; else fail "injected failure changed transaction or backup provenance"; fi
 
+tc58_apply_commit="$(awk -F= '$1 == "staging_commit" { print substr($0, 16); exit }' "$tc58_state")"
+tc58_manifest_commit="$(awk -F= '$1 == "staging_commit" { print substr($0, 16); exit }' "$tc58_manifest")"
+tc58_archived_revision="$(json_get "$tc58_backup/framework.json" revision)"
+if [[ "$tc58_apply_commit" != "$tc58_previous_revision" && "$tc58_apply_commit" == "$tc58_manifest_commit" && "$tc58_archived_revision" == "$tc58_previous_revision" ]]; then pass "failed apply retains distinct candidate and previous-revision provenance"; else fail "failed apply provenance roles were not recorded distinctly"; fi
+
 [[ "$(json_get "$tc58_home/.config/artix-hypr-remix/framework.json" version)" == "0.2.0" ]] && pass "activation completed before injected failure" || fail "activation did not complete before injected failure"
 [[ -f "$tc58_home/.config/artix-hypr-remix/namespace-before-health.marker" ]] && pass "namespace completed before injected failure" || fail "namespace did not complete before injected failure"
 [[ -f "$tc58_home/.config/artix-hypr-remix/migration-before-health.marker" ]] && pass "migration completed before injected failure" || fail "migration did not complete before injected failure"
@@ -2553,9 +2562,25 @@ rm -rf "$tc58_unrelated/docs"
 tc58_recover_exit=0
 tc58_recover_output="$(AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --recover 2>&1)" || tc58_recover_exit=$?
 if (( tc58_recover_exit != 0 )) && grep -q 'Recovery does not erase this failure. Run: ahr update-framework --rollback' <<<"$tc58_recover_output" && cmp -s "$tc58_state.before-recover" "$tc58_state"; then pass "existing recovery path preserves and directs injected health failure"; else fail "recovery path did not preserve injected health failure"; fi
+
+# Provenance is fail-closed before rollback creates a transaction or mutates a
+# target. Candidate commit and archived previous revision are intentionally
+# different; tampering either role must still reject rollback.
+cp "$tc58_manifest" "$tc58_manifest.before-provenance-tamper"
+sed -i 's/^staging_commit=.*/staging_commit=2222222222222222222222222222222222222222/' "$tc58_manifest"
+tc58_manifest_tamper_exit=0; tc58_manifest_tamper_output="$(AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --rollback 2>&1)" || tc58_manifest_tamper_exit=$?
+if (( tc58_manifest_tamper_exit != 0 )) && grep -q 'does not match manifest staging commit' <<<"$tc58_manifest_tamper_output" && [[ "$(json_get "$tc58_home/.config/artix-hypr-remix/framework.json" revision)" == "$tc58_apply_commit" ]] && grep -qx 'completion=health_check_failed' "$tc58_state"; then pass "tampered candidate provenance is rejected before rollback mutation"; else fail "tampered candidate provenance was not rejected safely" "$tc58_manifest_tamper_output"; fi
+mv -f "$tc58_manifest.before-provenance-tamper" "$tc58_manifest"
+
+cp "$tc58_backup/framework.json" "$tc58_backup/framework.json.before-provenance-tamper"
+sed -i 's/"revision":"[^"]*"/"revision":"3333333333333333333333333333333333333333"/' "$tc58_backup/framework.json"
+tc58_archive_tamper_exit=0; tc58_archive_tamper_output="$(AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --rollback 2>&1)" || tc58_archive_tamper_exit=$?
+if (( tc58_archive_tamper_exit != 0 )) && grep -q 'Archived framework revision .* does not match manifest previous revision' <<<"$tc58_archive_tamper_output" && [[ "$(json_get "$tc58_home/.config/artix-hypr-remix/framework.json" revision)" == "$tc58_apply_commit" ]] && grep -qx 'completion=health_check_failed' "$tc58_state"; then pass "tampered archived previous revision is rejected before rollback mutation"; else fail "tampered archived previous revision was not rejected safely" "$tc58_archive_tamper_output"; fi
+mv -f "$tc58_backup/framework.json.before-provenance-tamper" "$tc58_backup/framework.json"
+
 tc58_rollback_exit=0
 AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --rollback >/dev/null 2>&1 || tc58_rollback_exit=$?
-if (( tc58_rollback_exit == 0 )) && [[ "$(json_get "$tc58_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" ]]; then pass "exact recorded backup resolves injected health failure over unrelated backup"; else fail "rollback did not use the injected transaction's exact backup"; fi
+if (( tc58_rollback_exit == 0 )) && [[ "$(json_get "$tc58_home/.config/artix-hypr-remix/framework.json" version)" == "0.1.0" && "$(json_get "$tc58_home/.config/artix-hypr-remix/framework.json" revision)" == "$tc58_previous_revision" ]]; then pass "exact recorded backup resolves injected health failure over unrelated backup"; else fail "rollback did not use the injected transaction's exact backup"; fi
 tc58_followup_exit=0
 AHR_TEST_FAIL_HEALTH_CHECK= run_ahr "$tc58_home" "$UPDATE_FRAMEWORK" --apply >/dev/null 2>&1 || tc58_followup_exit=$?
 (( tc58_followup_exit == 0 )) && pass "later unset invocation does not inherit health fault" || fail "later unset invocation inherited health fault"

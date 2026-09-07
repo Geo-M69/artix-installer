@@ -512,6 +512,18 @@ read_tx_field_unique() {
   ' "$state_file"
 }
 
+# Read one provenance field from a backup manifest.  Rollback treats this as
+# transaction data, so selecting the first of duplicate keys would weaken the
+# pre-mutation trust boundary.
+read_manifest_field_unique() {
+  local manifest="$1" key="$2"
+  [[ -f "$manifest" ]] || return 1
+  awk -v key="$key" '
+    index($0, key "=") == 1 { count++; value=substr($0, length(key) + 2) }
+    END { if (count == 1) print value; else exit 1 }
+  ' "$manifest"
+}
+
 # Mark a transaction as completed (or abandoned).
 finalize_transaction() {
   local txdir="$1" status="$2" phase="$3"
@@ -2142,11 +2154,11 @@ cmd_rollback() {
   ahr_parse_primary_manifest "$manifest" "$(basename "$latest_backup")" true || die "Invalid backup manifest association metadata"
 
   local mf_version
-  mf_version="$(grep -F 'manifest_version=' "$manifest" | head -n1 | cut -d= -f2-)"
+  mf_version="$(read_manifest_field_unique "$manifest" "manifest_version")" || die "Backup manifest has ambiguous manifest_version"
   [[ "$mf_version" == "1" ]] || die "Unsupported manifest version: $mf_version"
 
   local mf_completed
-  mf_completed="$(grep -F 'completed=' "$manifest" | head -n1 | cut -d= -f2-)"
+  mf_completed="$(read_manifest_field_unique "$manifest" "completed")" || die "Backup manifest has ambiguous completed state"
   [[ "$mf_completed" == "true" ]] || die "Backup manifest incomplete"
 
   # Verify all required targets exist in backup
@@ -2164,11 +2176,12 @@ cmd_rollback() {
   [[ -d "$latest_backup/migration-snapshot/skipped" ]] || die "Backup missing skipped migration snapshot"
 
   # Read backup metadata
-  local prev_version prev_revision prev_channel prev_source
-  prev_version="$(grep -F 'previous_version=' "$manifest" | head -n1 | cut -d= -f2-)"
-  prev_revision="$(grep -F 'previous_revision=' "$manifest" | head -n1 | cut -d= -f2-)"
-  prev_channel="$(grep -F 'channel=' "$manifest" | head -n1 | cut -d= -f2-)"
-  prev_source="$(grep -F 'update_source=' "$manifest" | head -n1 | cut -d= -f2-)"
+  local prev_version prev_revision prev_channel prev_source manifest_commit
+  prev_version="$(read_manifest_field_unique "$manifest" "previous_version")" || die "Backup manifest has ambiguous previous_version"
+  prev_revision="$(read_manifest_field_unique "$manifest" "previous_revision")" || die "Backup manifest has ambiguous previous_revision"
+  prev_channel="$(read_manifest_field_unique "$manifest" "channel")" || die "Backup manifest has ambiguous channel"
+  prev_source="$(read_manifest_field_unique "$manifest" "update_source")" || die "Backup manifest has ambiguous update_source"
+  manifest_commit="$(read_manifest_field_unique "$manifest" "staging_commit")" || die "Backup manifest has ambiguous staging_commit"
 
   local current_version
   current_version="$(read_json_value "$FRAMEWORK_JSON" "version")" || current_version="unknown"
@@ -2205,10 +2218,10 @@ cmd_rollback() {
 
   # If a failed apply exists, validate the tie
   if [[ -n "$failed_apply_tx" ]]; then
-    local apply_backup apply_prev apply_commit apply_txid
+    local apply_backup apply_prev apply_commit apply_txid archived_revision active_revision
     apply_backup="$(read_tx_field_unique "$failed_apply_tx" "backup_dir")" || die "Failed-apply transaction has ambiguous backup_dir"
-    apply_prev="$(grep -F 'previous_version=' "$failed_apply_tx/state" | head -n1 | cut -d= -f2-)"
-    apply_commit="$(grep -F 'staging_commit=' "$failed_apply_tx/state" | head -n1 | cut -d= -f2-)"
+    apply_prev="$(read_tx_field_unique "$failed_apply_tx" "previous_version")" || die "Failed-apply transaction has ambiguous previous_version"
+    apply_commit="$(read_tx_field_unique "$failed_apply_tx" "staging_commit")" || die "Failed-apply transaction has ambiguous staging_commit"
     apply_txid="$(basename "$failed_apply_tx")"
 
     if [[ "$apply_backup" != "$latest_backup" ]]; then
@@ -2219,9 +2232,11 @@ cmd_rollback() {
     if [[ "$apply_prev" != "$prev_version" ]]; then
       die "Failed-apply previous version ($apply_prev) does not match manifest ($prev_version)"
     fi
-    if [[ -n "$prev_revision" && "$prev_revision" != "null" && "$apply_commit" != "$prev_revision" ]]; then
-      die "Failed-apply commit ($apply_commit) does not match manifest revision ($prev_revision)"
-    fi
+    [[ "$apply_commit" == "$manifest_commit" ]] || die "Failed-apply staging commit ($apply_commit) does not match manifest staging commit ($manifest_commit)"
+    archived_revision="$(read_json_value "$latest_backup/framework.json" "revision")" || die "Unable to read archived framework revision"
+    [[ "$archived_revision" == "$prev_revision" ]] || die "Archived framework revision ($archived_revision) does not match manifest previous revision ($prev_revision)"
+    active_revision="$(read_json_value "$FRAMEWORK_JSON" "revision")" || die "Unable to read active framework revision"
+    [[ "$active_revision" == "$apply_commit" ]] || die "Active framework revision ($active_revision) does not match failed-apply staging commit ($apply_commit)"
     log "Rollback is resolving failed apply transaction: $(basename "$failed_apply_tx")"
   fi
 
